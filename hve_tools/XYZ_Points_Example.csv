@@ -1,0 +1,14 @@
+Point Number ,X ,Y,Z ,Description
+1,4,10,0,Skid1
+2,4,30,0,Skid1
+3,-4,10,0,Skid2
+4,-4,30,0,Skid2
+5,-4,50,0,Skid2
+6,6,0,0,Skip1
+7,6,10,0,Skip1
+8,6,40,0,Skip2
+9,6,50,0,Skip2
+10,-6,0,0,Centerline
+11,-6,50,0,Centerline
+12,4,50,0,Skid1
+13,4,100,0,Skid1

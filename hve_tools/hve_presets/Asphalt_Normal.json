@@ -1,0 +1,19 @@
+{
+    "poName": "Asphalt, Normal",
+    "poForceConst": 5000.0,
+    "poForceLinear": 50000.0,
+    "poForceQuad": 1000.0,
+    "poForceCubic": 1000.0,
+    "poRateDamping": 0.5,
+    "poFriction": 1.0,
+    "poForceUnload": 100000.0,
+    "poBekkerConst": 0.0,
+    "poKphi": 0.0,
+    "poKc": 0.0,
+    "poPcntMoisture": 0.0,
+    "poPcntClay": 0.019999999552965164,
+    "poSurfaceType": "EdTypeRoad",
+    "poWaterDepth": 0.0,
+    "poStaticWater": 0.0,
+    "polabel": "Untitled"
+}
