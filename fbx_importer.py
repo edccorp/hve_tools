@@ -651,16 +651,22 @@ def import_fbx(context, fbx_file_path):
         include_keywords = ["Wheel"]
         
         # Loop through imported objects
-        for obj in imported_objects:        
+        for obj in imported_objects:
+            try:
+                name = obj.name
+            except ReferenceError:
+                # Object was removed (e.g. by copy_animated_rotation); skip it
+                continue
+
             # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-            if any(kw in obj.name for kw in include_keywords) and not any(kw in obj.name for kw in exclude_keywords):
+            if any(kw in name for kw in include_keywords) and not any(kw in name for kw in exclude_keywords):
                 obj.select_set(True)  # Select the object
                 # Run the function
-                copy_animated_rotation(obj)  
+                copy_animated_rotation(obj)
 
-        # Rename all selected objects by adding "_FBX" to the end of their names 
-            if not obj.name.endswith(": FBX"):
-                obj.name += ": FBX"
+                # Rename the object by adding "_FBX" to the end of its name
+                if not name.endswith(": FBX"):
+                    obj.name = f"{name}: FBX"
 
         # Create the event collection
         event_collection_name = f"HVE: {filename}"
