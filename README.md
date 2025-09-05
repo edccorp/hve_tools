@@ -76,6 +76,20 @@ import fbx_importer
 fbx_importer.import_file("/path/to/model.fbx")
 ```
 
+### Naming scheme for rotation sources
+
+`copy_animated_rotation` looks for helper objects whose names indicate which
+Euler axis they drive. The default mapping is:
+
+- **X axis** – names containing "Camber" or "Cam"
+- **Y axis** – names containing "Rotation" or "Pitch"
+- **Z axis** – names containing "Steering" or "Yaw"
+
+Names are matched case-insensitively. You can customize the expected keywords
+by editing `ROTATION_AXIS_KEYWORDS` in `fbx_importer.py` or by passing your own
+mapping when calling `copy_animated_rotation`. Any missing axes are skipped
+during import, so the helper objects are optional.
+
 ## Contribution Guidelines
 Contributions are welcome! To propose changes:
 1. Fork the repository and create a feature branch.

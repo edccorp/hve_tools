@@ -12,6 +12,18 @@ bl_info = {
 }
 
 
+# Default mapping used to identify which helper objects provide rotation
+# data for each Euler axis.  Each axis maps to a list of keywords and any
+# object whose name contains one of these keywords (case-insensitive) will be
+# used as the source for that axis.  Adjust this mapping or pass a custom one
+# to :func:`copy_animated_rotation` to support alternative naming schemes.
+ROTATION_AXIS_KEYWORDS = {
+    "X": ["Camber", "Cam"],     # X-axis rotation
+    "Y": ["Rotation", "Pitch"],  # Y-axis rotation
+    "Z": ["Steering", "Yaw"],   # Z-axis rotation
+}
+
+
 def normalize_root_name(name: str) -> str:
     """Return the base vehicle identifier without numeric suffixes or colon paths."""
     name = re.sub(r"\.\d+$", "", name)
@@ -81,10 +93,27 @@ def adjust_animation(obj):
         obj.keyframe_insert(data_path="location", frame=-1)
         obj.keyframe_insert(data_path="rotation_euler", frame=-1)
        
-def copy_animated_rotation(parent):
+def copy_animated_rotation(parent, axis_keywords=None):
+    """Copy rotation animation from axis-specific helper objects to ``parent``.
+
+    Parameters
+    ----------
+    parent : bpy.types.Object
+        Target empty to receive the rotation animation.
+    axis_keywords : dict, optional
+        Mapping of axis name ("X", "Y", "Z") to lists of name fragments.
+        Objects whose names contain any of these fragments (case-insensitive)
+        are used as rotation sources for the corresponding axis. If ``None``,
+        :data:`ROTATION_AXIS_KEYWORDS` is used.
+
+    Missing axes are skipped.
+    """
+
     if not parent or parent.type != 'EMPTY':
         print("❌ Error: Please select an empty object as the target parent.")
         return
+
+    axis_keywords = axis_keywords or ROTATION_AXIS_KEYWORDS
 
     # Get selected objects and filter by conditions
     selected_objects = [
@@ -100,37 +129,28 @@ def copy_animated_rotation(parent):
     for obj in selected_objects:
         obj.parent = parent  # Set the selected objects' parent
 
-        
     #print(f"✅ Parented {len(selected_objects)} objects to '{parent.name}': {[obj.name for obj in selected_objects]}")
-
 
     # Get selected objects (excluding the parent) and only keep objects that contain the parent's name
     selected_objects = [
         obj for obj in bpy.context.selected_objects
         if obj != parent and parent.name in obj.name
     ]
- 
-    # Define keyword mappings
-    x_keyword = "Camber"      # X rotation
-    y_keyword = "Rotation"    # Y rotation
-    z_keyword = "Steering"    # Z rotation
 
-    # Initialize rotation source objects
-    x_source = y_source = z_source = None
+    # Initialize rotation source objects dictionary
+    sources = {axis: None for axis in axis_keywords}
 
-    # Assign source objects based on their names
+    # Assign source objects based on their names (case-insensitive partial match)
     for obj in selected_objects:
-        if x_keyword in obj.name:
-            x_source = obj
-        elif y_keyword in obj.name:
-            y_source = obj
-        elif z_keyword in obj.name:
-            z_source = obj
+        name = obj.name.lower()
+        for axis, keywords in axis_keywords.items():
+            if any(k.lower() in name for k in keywords):
+                sources[axis] = obj
+                break
 
-    # Ensure all required sources are found
-    if not x_source or not y_source or not z_source:
-        print(f"❌ Error: Could not find all rotation sources. Expected names should contain '{x_keyword}', '{y_keyword}', and '{z_keyword}'.")
-        return
+    missing = [axis for axis, src in sources.items() if src is None]
+    if missing:
+        print(f"⚠️ Warning: Missing rotation sources for axis: {', '.join(missing)}")
 
     # Ensure the parent has animation data
     if not parent.animation_data or not parent.animation_data.action:
@@ -141,47 +161,45 @@ def copy_animated_rotation(parent):
     parent_action = parent.animation_data.action
 
     # Copy rotation keyframes from sources to the parent empty
-    for source, axis_index, axis_name in zip(
-        [z_source, y_source, x_source],  # Order: Z → Y → X
-        [2, 1, 0],  # Blender Euler indices: X = 0, Y = 1, Z = 2
-        ["Z", "Y", "X"]
-    ):
-        # Get animation data for the current source
-        if source.animation_data and source.animation_data.action:
-            source_action = source.animation_data.action  # ✅ Now correctly fetching action per source
-            for fcurve in source_action.fcurves:
-                # Check if the curve corresponds to rotation
-                if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == axis_index:
-                    # Try to find an existing F-Curve for the parent
-                    parent_fcurve = None
-                    for existing_fcurve in parent_action.fcurves:
-                        if existing_fcurve.data_path == "rotation_euler" and existing_fcurve.array_index == axis_index:
-                            parent_fcurve = existing_fcurve
-                            break
-                    
-                    # If no existing F-Curve, create one
-                    if not parent_fcurve:
-                        parent_fcurve = parent_action.fcurves.new(
-                            data_path="rotation_euler",
-                            index=axis_index,
-                            action_group="Rotation"
-                        )
+    for axis_name, axis_index in zip(["Z", "Y", "X"], [2, 1, 0]):
+        source = sources.get(axis_name)
+        if not source or not (source.animation_data and source.animation_data.action):
+            continue
 
-                    # Clear existing keyframes in the parent F-Curve
-                    parent_fcurve.keyframe_points.clear()
+        source_action = source.animation_data.action
+        for fcurve in source_action.fcurves:
+            # Check if the curve corresponds to rotation
+            if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == axis_index:
+                # Try to find an existing F-Curve for the parent
+                parent_fcurve = None
+                for existing_fcurve in parent_action.fcurves:
+                    if existing_fcurve.data_path == "rotation_euler" and existing_fcurve.array_index == axis_index:
+                        parent_fcurve = existing_fcurve
+                        break
 
-                    # Copy keyframe points from the source to the parent
-                    for keyframe in fcurve.keyframe_points:
-                        parent_fcurve.keyframe_points.insert(
-                            keyframe.co.x, keyframe.co.y, options={'FAST'}
-                        )
+                # If no existing F-Curve, create one
+                if not parent_fcurve:
+                    parent_fcurve = parent_action.fcurves.new(
+                        data_path="rotation_euler",
+                        index=axis_index,
+                        action_group="Rotation",
+                    )
 
-                    #print(f"✅ Replaced {axis_name} rotation from '{source.name}' → '{parent.name}'")
+                # Clear existing keyframes in the parent F-Curve
+                parent_fcurve.keyframe_points.clear()
+
+                # Copy keyframe points from the source to the parent
+                for keyframe in fcurve.keyframe_points:
+                    parent_fcurve.keyframe_points.insert(
+                        keyframe.co.x, keyframe.co.y, options={'FAST'}
+                    )
+
+                #print(f"✅ Replaced {axis_name} rotation from '{source.name}' → '{parent.name}'")
 
     #print(f"🎯 Finished replacing animated rotations for '{parent.name}'")
-    
+
     # 🚀 DELETE the source objects after copying animation
-    for source in [x_source, y_source, z_source]:
+    for source in sources.values():
         if source:
             bpy.data.objects.remove(source, do_unlink=True)
 
