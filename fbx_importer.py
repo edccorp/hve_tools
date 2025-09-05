@@ -332,16 +332,22 @@ def bake_shape_keys_threaded(obj_list):
 def join_mesh_objects_per_vehicle(vehicle_names):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
     for vehicle_name in vehicle_names:
-        # Collect all mesh objects for this vehicle. If a "Body Mesh" collection
-        # exists, use only objects within that collection; otherwise consider all
-        # scene objects. Objects are associated with a vehicle via their
-        # normalized root name.
-        body_mesh_collection = bpy.data.collections.get("Body Mesh")
-        candidates = (
-            body_mesh_collection.objects
-            if body_mesh_collection
-            else bpy.context.scene.objects
-        )
+        # Collect all mesh objects for this vehicle. Search for collections that
+        # begin with "Body Mesh: {vehicle_name}:". If found, use objects from
+        # those collections. Otherwise fall back to scanning the entire scene.
+        collection_prefix = f"Body Mesh: {vehicle_name}:"
+        body_mesh_collections = [
+            col for col in bpy.data.collections if col.name.startswith(collection_prefix)
+        ]
+
+        if body_mesh_collections:
+            candidates = [
+                obj
+                for col in body_mesh_collections
+                for obj in col.objects
+            ]
+        else:
+            candidates = bpy.context.scene.objects
 
         mesh_objects = [
             obj
@@ -359,6 +365,9 @@ def join_mesh_objects_per_vehicle(vehicle_names):
                     f"⚠️ Not enough Mesh objects to join for {vehicle_name}. Skipping."
                 )
             continue
+
+        # Bake shape keys for these objects before joining
+        bake_shape_keys_threaded(mesh_objects)
 
         # Deselect all objects to prevent unwanted merging
         bpy.ops.object.select_all(action="DESELECT")
