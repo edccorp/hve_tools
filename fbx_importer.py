@@ -393,30 +393,65 @@ def join_mesh_objects_per_vehicle(vehicle_names):
         print(f"✅ Joined {len(mesh_objects)} Mesh objects for {vehicle_name}.")
 
 
-def materials_are_equal(mat1, mat2):
-    """Compare two materials based on RGB color value, excluding materials with diffuse textures."""
+def materials_are_equal(mat1, mat2, tol=1e-4):
+    """Compare two materials including color, roughness, specular and diffuse textures."""
     if mat1.name == mat2.name:
         return False  # Skip if it's the same material
-    
-    # Skip materials with an Image Texture node connected to the Base Color
-    def has_diffuse_texture(mat):
+
+    def get_diffuse_texture(mat):
         if mat.node_tree:
             for node in mat.node_tree.nodes:
                 if node.type == 'TEX_IMAGE':
-                    for output in node.outputs:
-                        for link in output.links:
-                            if link.to_socket.name == "Base Color":
-                                return True
+                    for output in getattr(node, 'outputs', []):
+                        for link in getattr(output, 'links', []):
+                            if getattr(link.to_socket, 'name', '') == "Base Color":
+                                return node
+        return None
+
+    tex1 = get_diffuse_texture(mat1)
+    tex2 = get_diffuse_texture(mat2)
+
+    if bool(tex1) != bool(tex2):
+        return False
+    if tex1 and tex2:
+        image1 = getattr(tex1, 'image', None)
+        image2 = getattr(tex2, 'image', None)
+        path1 = getattr(image1, 'filepath', None) if image1 else None
+        path2 = getattr(image2, 'filepath', None) if image2 else None
+        if path1 != path2:
+            return False
+    else:
+        if hasattr(mat1, 'diffuse_color') and hasattr(mat2, 'diffuse_color'):
+            for i in range(3):
+                if not math.isclose(mat1.diffuse_color[i], mat2.diffuse_color[i], abs_tol=tol):
+                    return False
+        else:
+            return False
+
+    def principled_params(mat):
+        if mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == 'BSDF_PRINCIPLED':
+                    rough = node.inputs.get('Roughness')
+                    spec = node.inputs.get('Specular')
+                    rough_val = getattr(rough, 'default_value', None)
+                    spec_val = getattr(spec, 'default_value', None)
+                    return rough_val, spec_val
+        return None, None
+
+    r1, s1 = principled_params(mat1)
+    r2, s2 = principled_params(mat2)
+
+    if (r1 is None) != (r2 is None):
+        return False
+    if r1 is not None and not math.isclose(r1, r2, abs_tol=tol):
+        return False
+    if (s1 is None) != (s2 is None):
+        return False
+    if s1 is not None and not math.isclose(s1, s2, abs_tol=tol):
         return False
 
-    if has_diffuse_texture(mat1) or has_diffuse_texture(mat2):
-        return False  # Skip merging if either has a diffuse texture
-
-    if hasattr(mat1, 'diffuse_color') and hasattr(mat2, 'diffuse_color'):
-        if mat1.diffuse_color[:3] == mat2.diffuse_color[:3]:  # Compare only RGB, ignore Alpha
-            return True
-    
-    return False
+    return True
 
 def find_duplicate_materials_for_vehicle(vehicle_name):
     """Find duplicate materials within a single vehicle's objects."""
