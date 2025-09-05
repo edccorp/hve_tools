@@ -681,10 +681,13 @@ def import_fbx(context, fbx_file_path):
                 adjust_animation(obj)      
                 
                 
-        # List of keywords to exclude from selection
-        exclude_keywords = ["Steering", "Camber", "Rotation", "objects", "geometry"]  # Modify as needed     
-        include_keywords = ["Wheel"]
-        
+        # Derive keywords used for rotation helpers so they aren't processed as wheels
+        exclude_keywords = [
+            kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
+        ]
+        exclude_keywords += ["objects", "geometry"]
+        include_keywords = ["wheel"]
+
         # Loop through imported objects
         for obj in imported_objects:
             try:
@@ -693,8 +696,12 @@ def import_fbx(context, fbx_file_path):
                 # Object was removed (e.g. by copy_animated_rotation); skip it
                 continue
 
+            name_lower = name.lower()
+
             # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-            if any(kw in name for kw in include_keywords) and not any(kw in name for kw in exclude_keywords):
+            if any(kw in name_lower for kw in include_keywords) and not any(
+                kw in name_lower for kw in exclude_keywords
+            ):
                 obj.select_set(True)  # Select the object
                 # Run the function
                 copy_animated_rotation(obj)
