@@ -11,6 +11,29 @@ bl_info = {
     "blender": (3, 1, 0),
 }
 
+
+def normalize_root_name(name: str) -> str:
+    """Return the base vehicle identifier without numeric suffixes or colon paths."""
+    name = re.sub(r"\.\d+$", "", name)
+    return name.split(":")[0]
+
+
+def get_root_vehicle_names(imported_objects):
+    """Collect unique top-level empty names representing vehicles."""
+    vehicle_names = []
+    for obj in imported_objects:
+        if obj.type == "EMPTY" and obj.parent is None:
+            root = normalize_root_name(obj.name)
+            if root not in vehicle_names:
+                vehicle_names.append(root)
+    return vehicle_names
+
+
+def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
+    """Check whether an object's name belongs to a specific vehicle."""
+    pattern = rf"(^|:)\s*{re.escape(vehicle_name)}($|:)"
+    return re.search(pattern, obj_name) is not None
+
 def offset_selected_animation(obj, frame_offset=-1):
     """Offsets animation keyframes for all selected objects by the given frame amount."""
 
@@ -291,7 +314,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
         # Collect all mesh objects for this vehicle
         mesh_objects = [
             obj for obj in bpy.context.scene.objects
-            if "Mesh" in obj.name and vehicle_name in obj.name and obj.type == 'MESH'
+            if "Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name) and obj.type == 'MESH'
         ]
 
         if len(mesh_objects) < 2:
@@ -344,7 +367,7 @@ def find_duplicate_materials_for_vehicle(vehicle_name):
     """Find duplicate materials within a single vehicle's objects."""
     materials = []
     for obj in bpy.data.objects:
-        if obj.type == 'MESH' and vehicle_name in obj.name:
+        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, vehicle_name):
             materials.extend([slot.material for slot in obj.material_slots if slot.material and slot.material.name.startswith("meshMaterial")])
 
     unique_materials = []
@@ -363,7 +386,7 @@ def find_duplicate_materials_for_vehicle(vehicle_name):
 def replace_materials_for_vehicle(vehicle_name, material_map):
     """Replace duplicate materials within a single vehicle's objects."""
     for obj in bpy.data.objects:
-        if obj.type == 'MESH' and vehicle_name in obj.name:
+        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, vehicle_name):
             for slot in obj.material_slots:
                 if slot.material in material_map:
                     slot.material = material_map[slot.material]
@@ -426,25 +449,8 @@ def import_fbx(context, fbx_file_path):
         else:
             print(f"⏳ Timeline unchanged: Existing frame end ({current_max_frame}) is greater than or equal to imported max ({max_frame})")
 
-          # Function to remove numeric suffixes like ".001", ".002", etc.
-        def remove_suffix(name):
-            return re.sub(r'\.\d+$', '', name)  # Removes .### from the end of a name
-
-        # Loop through imported objects
-        for obj in imported_objects:
-            cleaned_name = remove_suffix(obj.name)  # Remove suffix
-      
-        # List of keywords to exclude from selection
-        exclude_keywords = ["Steering", "Camber", "Rotation", "objects", "geometry","Wheel","shapenode"]  # Modify as needed     
-        include_keywords = [""]
-        # Initialize vehicle_names as an empty list to store selected object names
-        vehicle_names = []
-        
-        # Loop through imported objects
-        for obj in imported_objects:        
-            # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-            if any(kw in obj.name for kw in include_keywords) and not any(kw in obj.name for kw in exclude_keywords):
-                vehicle_names.append(obj.name)
+        # Determine root vehicle names from imported objects
+        vehicle_names = get_root_vehicle_names(imported_objects)
 
                 
                 
@@ -689,7 +695,7 @@ def import_fbx(context, fbx_file_path):
 
             # Move objects to the collection
             for obj in bpy.context.selected_objects:
-                if clean_vehicle_name in obj.name:
+                if belongs_to_vehicle(obj.name, clean_vehicle_name):
                     # Remove object from other collections (if necessary)
                     for coll in obj.users_collection:
                         coll.objects.unlink(obj)
@@ -708,14 +714,14 @@ def import_fbx(context, fbx_file_path):
             # Loop through imported objects
             for obj in bpy.context.selected_objects:
                 # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-                if ("Wheel" in obj.name and vehicle_name in obj.name):
+                if ("Wheel" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(wheels_collection_name, vehicle_name,obj)   
-                if ("Mesh" in obj.name and vehicle_name in obj.name):
+                    assign_objects_to_subcollection(wheels_collection_name, vehicle_name,obj)
+                if ("Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(mesh_collection_name, vehicle_name,obj)   
+                    assign_objects_to_subcollection(mesh_collection_name, vehicle_name,obj)
             
             target_name = vehicle_name + ": FBX"  # Original name pattern
             new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
