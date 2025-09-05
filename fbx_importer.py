@@ -204,8 +204,13 @@ def copy_animated_rotation(parent, axis_keywords=None):
             bpy.data.objects.remove(source, do_unlink=True)
 
 def remove_from_all_collections(obj):
-    """ Remove an object from all Blender collections before reassigning it. """
-    for collection in obj.users_collection:
+    """Remove an object from all Blender collections before reassigning it.
+
+    Iterates over a copy of ``obj.users_collection`` to avoid mutating the
+    collection while unlinking, ensuring the object is removed from every
+    collection that currently uses it.
+    """
+    for collection in list(obj.users_collection):
         collection.objects.unlink(obj)
 
 def assign_objects_to_subcollection(collection_name, parent_collection, objects):
