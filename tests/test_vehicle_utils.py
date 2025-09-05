@@ -42,13 +42,18 @@ def test_get_root_vehicle_names_dedup():
 def test_belongs_to_vehicle_match():
     assert belongs_to_vehicle('Mesh: Heil: Body', 'Heil')
     assert belongs_to_vehicle('Heil', 'Heil')
-    assert belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil')
     assert belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil_Rear')
     assert not belongs_to_vehicle('Mesh: Other: Body', 'Heil')
 
+
+def test_belongs_to_vehicle_distinct_prefixes():
+    assert not belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil')
+    assert not belongs_to_vehicle('Mesh: Heil: Body', 'Heil_Rear')
+
 def test_belongs_to_vehicle_numeric_suffix():
     assert belongs_to_vehicle('Mesh: Heil.001: Body', 'Heil')
-    assert belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
+    assert belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil_Rear')
+    assert not belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
     assert not belongs_to_vehicle('Mesh: Other.001: Body', 'Heil')
 
 
@@ -63,9 +68,9 @@ def test_join_mesh_objects_per_vehicle_with_colon_segments():
             self.selected = val
 
     objs = [
-        Obj('Mesh:0 Honda'),
-        Obj('Mesh:1 Honda'),
-        Obj('Mesh:0 Toyota'),
+        Obj('Mesh: Honda:0'),
+        Obj('Mesh: Honda:1'),
+        Obj('Mesh: Toyota:0'),
     ]
 
     joined = []
@@ -113,7 +118,7 @@ def test_join_mesh_objects_per_vehicle_with_colon_segments():
     join_mesh_objects_per_vehicle(['Honda'])
 
     assert len(joined) == 1
-    assert {o.name for o in joined[0]} == {'Mesh:0 Honda', 'Mesh:1 Honda'}
+    assert {o.name for o in joined[0]} == {'Mesh: Honda:0', 'Mesh: Honda:1'}
 
 
 if __name__ == "__main__":

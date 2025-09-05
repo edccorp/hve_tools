@@ -2,11 +2,12 @@ import ast
 import math
 import pathlib
 import types
+import re
 
 module_path = pathlib.Path(__file__).resolve().parents[1] / "fbx_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
-ns = {"math": math}
+ns = {"math": math, "re": re}
 for node in module_ast.body:
     if isinstance(node, ast.FunctionDef) and node.name in {
         "materials_are_equal",
