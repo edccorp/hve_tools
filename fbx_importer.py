@@ -44,10 +44,12 @@ def get_root_vehicle_names(imported_objects):
 def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
     """Check whether an object's name belongs to a specific vehicle.
 
-    Matches segments like "Heil" or "Heil.001" between colon delimiters.
+    The object's name is split on colon delimiters and any segment containing
+    ``vehicle_name`` is considered a match. This is more permissive than an
+    exact segment comparison so, for example, "Mesh: Heil_Rear: Body" will be
+    associated with the vehicle name ``"Heil"``.
     """
-    pattern = rf"(^|:)\s*{re.escape(vehicle_name)}(?:\.\d+)?($|:)"
-    return re.search(pattern, obj_name) is not None
+    return any(vehicle_name in segment for segment in obj_name.split(':'))
 
 def offset_selected_animation(obj, frame_offset=-1):
     """Offsets animation keyframes for all selected objects by the given frame amount."""

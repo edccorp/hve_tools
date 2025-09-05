@@ -36,12 +36,14 @@ def test_get_root_vehicle_names_dedup():
 def test_belongs_to_vehicle_match():
     assert belongs_to_vehicle('Mesh: Heil: Body', 'Heil')
     assert belongs_to_vehicle('Heil', 'Heil')
-    assert not belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil')
+    assert belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil')
     assert belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil_Rear')
+    assert not belongs_to_vehicle('Mesh: Other: Body', 'Heil')
 
 def test_belongs_to_vehicle_numeric_suffix():
     assert belongs_to_vehicle('Mesh: Heil.001: Body', 'Heil')
-    assert not belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
+    assert belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
+    assert not belongs_to_vehicle('Mesh: Other.001: Body', 'Heil')
 
 
 if __name__ == "__main__":
