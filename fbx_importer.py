@@ -332,18 +332,35 @@ def bake_shape_keys_threaded(obj_list):
 def join_mesh_objects_per_vehicle(vehicle_names):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
     for vehicle_name in vehicle_names:
-        # Collect all mesh objects for this vehicle
+        # Collect all mesh objects for this vehicle. If a "Body Mesh" collection
+        # exists, use only objects within that collection; otherwise consider all
+        # scene objects. This avoids relying on object name conventions.
+        body_mesh_collection = bpy.data.collections.get("Body Mesh")
+        candidates = (
+            body_mesh_collection.objects
+            if body_mesh_collection
+            else bpy.context.scene.objects
+        )
+
         mesh_objects = [
-            obj for obj in bpy.context.scene.objects
-            if "Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name) and obj.type == 'MESH'
+            obj
+            for obj in candidates
+            if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
         ]
 
-        if len(mesh_objects) < 2:
-            print(f"⚠️ Not enough Mesh objects to join for {vehicle_name}. Skipping.")
+        if len(mesh_objects) <= 1:
+            if mesh_objects:
+                print(
+                    f"ℹ️ Only one Mesh object found for {vehicle_name}; no join required."
+                )
+            else:
+                print(
+                    f"⚠️ Not enough Mesh objects to join for {vehicle_name}. Skipping."
+                )
             continue
 
         # Deselect all objects to prevent unwanted merging
-        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.object.select_all(action="DESELECT")
 
         # Set the first valid object as active
         active_obj = mesh_objects[0]
@@ -353,9 +370,9 @@ def join_mesh_objects_per_vehicle(vehicle_names):
 
         # Join the objects
         bpy.ops.object.join()
-        
+
         # Deselect after join to avoid cross-vehicle merging
-        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.object.select_all(action="DESELECT")
         print(f"✅ Joined {len(mesh_objects)} Mesh objects for {vehicle_name}.")
 
 
