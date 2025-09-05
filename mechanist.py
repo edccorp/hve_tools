@@ -53,8 +53,15 @@ class HVEMechanist():
         cls.initialized = False
 
 
-def on_file_load(dummy):
-    """Handler executed after a new file is loaded."""
+def on_file_load(scene, context):
+    """Handler executed after a new file is loaded.
+
+    Blender's ``load_post`` handler passes the current ``scene`` and
+    ``context`` when invoking callbacks.  Accepting these parameters keeps the
+    handler compatible with Blender's expectations while allowing the function
+    to ignore them when not needed.
+    """
+
     if debug_mode():
         log("file loaded", prefix='>>>')
      
