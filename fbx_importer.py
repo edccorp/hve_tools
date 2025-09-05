@@ -334,7 +334,8 @@ def join_mesh_objects_per_vehicle(vehicle_names):
     for vehicle_name in vehicle_names:
         # Collect all mesh objects for this vehicle. If a "Body Mesh" collection
         # exists, use only objects within that collection; otherwise consider all
-        # scene objects. This avoids relying on object name conventions.
+        # scene objects. Objects are associated with a vehicle via their
+        # normalized root name.
         body_mesh_collection = bpy.data.collections.get("Body Mesh")
         candidates = (
             body_mesh_collection.objects
@@ -345,7 +346,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
         mesh_objects = [
             obj
             for obj in candidates
-            if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
+            if obj.type == "MESH" and normalize_root_name(obj.name) == vehicle_name
         ]
 
         if len(mesh_objects) <= 1:
