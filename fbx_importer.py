@@ -42,14 +42,19 @@ def get_root_vehicle_names(imported_objects):
 
 
 def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
-    """Check whether an object's name belongs to a specific vehicle.
+    """Return ``True`` if ``obj_name`` belongs to ``vehicle_name``.
 
-    The object's name is split on colon delimiters and any segment containing
-    ``vehicle_name`` is considered a match. This is more permissive than an
-    exact segment comparison so, for example, "Mesh: Heil_Rear: Body" will be
-    associated with the vehicle name ``"Heil"``.
+    The name is split on colon (``":"``) delimiters and each segment is
+    *normalized* by stripping Blender's numeric suffixes (e.g., ``.001``). A
+    match occurs only when a normalized segment exactly equals
+    ``vehicle_name``.
     """
-    return any(vehicle_name in segment for segment in obj_name.split(':'))
+
+    for segment in obj_name.split(":"):
+        normalized = re.sub(r"\.\d+$", "", segment).strip()
+        if normalized == vehicle_name:
+            return True
+    return False
 
 def offset_selected_animation(obj, frame_offset=-1):
     """Offsets animation keyframes for all selected objects by the given frame amount."""

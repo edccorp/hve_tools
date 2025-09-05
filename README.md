@@ -90,6 +90,17 @@ by editing `ROTATION_AXIS_KEYWORDS` in `fbx_importer.py` or by passing your own
 mapping when calling `copy_animated_rotation`. Any missing axes are skipped
 during import, so the helper objects are optional.
 
+## Migration Notes
+
+### `belongs_to_vehicle` name matching
+
+The helper function `belongs_to_vehicle` now matches vehicle names more
+strictly. Instead of treating any colon-delimited segment containing the target
+vehicle name as a match, each segment must *exactly* equal the vehicle name once
+numeric suffixes like `.001` are removed. For example, `"Heil_Rear"` will no
+longer match the vehicle `"Heil"`. Users who relied on the previous permissive
+behavior may need to adjust object naming conventions accordingly.
+
 ## Contribution Guidelines
 Contributions are welcome! To propose changes:
 1. Fork the repository and create a feature branch.
