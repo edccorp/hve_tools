@@ -729,9 +729,8 @@ def import_fbx(context, fbx_file_path):
         # Join Mesh objects separately for each vehicle
         join_mesh_objects_per_vehicle(vehicle_names)    
 
-        #Replace duplicate materials
+        # Replace duplicate materials
         merge_duplicate_materials_per_vehicle(vehicle_names)
-        merge_duplicate_materials_per_vehicle(vehicle_names)       
  
        # Restore the original frame rate settings
         context.scene.render.fps = original_fps
