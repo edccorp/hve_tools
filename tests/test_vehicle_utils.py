@@ -8,13 +8,19 @@ source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {'re': re}
 for node in module_ast.body:
-    if isinstance(node, ast.FunctionDef) and node.name in {"normalize_root_name", "get_root_vehicle_names", "belongs_to_vehicle"}:
+    if isinstance(node, ast.FunctionDef) and node.name in {
+        "normalize_root_name",
+        "get_root_vehicle_names",
+        "belongs_to_vehicle",
+        "join_mesh_objects_per_vehicle",
+    }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
 
 normalize_root_name = ns["normalize_root_name"]
 get_root_vehicle_names = ns["get_root_vehicle_names"]
 belongs_to_vehicle = ns["belongs_to_vehicle"]
+join_mesh_objects_per_vehicle = ns["join_mesh_objects_per_vehicle"]
 
 
 class Obj:
@@ -44,6 +50,70 @@ def test_belongs_to_vehicle_numeric_suffix():
     assert belongs_to_vehicle('Mesh: Heil.001: Body', 'Heil')
     assert belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
     assert not belongs_to_vehicle('Mesh: Other.001: Body', 'Heil')
+
+
+def test_join_mesh_objects_per_vehicle_with_colon_segments():
+    class Obj:
+        def __init__(self, name, type='MESH'):
+            self.name = name
+            self.type = type
+            self.selected = False
+
+        def select_set(self, val):
+            self.selected = val
+
+    objs = [
+        Obj('Mesh:0 Honda'),
+        Obj('Mesh:1 Honda'),
+        Obj('Mesh:0 Toyota'),
+    ]
+
+    joined = []
+
+    class OpsObject:
+        @staticmethod
+        def select_all(action):
+            if action == 'DESELECT':
+                for o in objs:
+                    o.selected = False
+
+        @staticmethod
+        def join():
+            joined.append([o for o in objs if o.selected])
+
+    bpy_stub = type(
+        'bpy',
+        (),
+        {
+            'data': type('data', (), {'collections': []})(),
+            'context': type(
+                'context',
+                (),
+                {
+                    'scene': type('scene', (), {'objects': objs})(),
+                    'view_layer': type(
+                        'view_layer',
+                        (),
+                        {'objects': type('objects', (), {'active': None})()},
+                    )(),
+                },
+            )(),
+            'ops': type('ops', (), {'object': OpsObject})(),
+        },
+    )()
+
+    ns.update(
+        {
+            'bpy': bpy_stub,
+            'bake_shape_keys_threaded': lambda _objs: None,
+            'belongs_to_vehicle': belongs_to_vehicle,
+        }
+    )
+
+    join_mesh_objects_per_vehicle(['Honda'])
+
+    assert len(joined) == 1
+    assert {o.name for o in joined[0]} == {'Mesh:0 Honda', 'Mesh:1 Honda'}
 
 
 if __name__ == "__main__":
