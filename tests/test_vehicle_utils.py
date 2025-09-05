@@ -26,9 +26,10 @@ class Obj:
 
 def test_get_root_vehicle_names_dedup():
     root1 = Obj('Heil')
-    root2 = Obj('Heil_Rear')
-    child = Obj('Mesh: Heil: Body', type='MESH', parent=root1)
-    objects = [root1, root2, child]
+    root2 = Obj('Heil.001')
+    root3 = Obj('Heil_Rear')
+    child = Obj('Mesh: Heil.001: Body', type='MESH', parent=root2)
+    objects = [root1, root2, root3, child]
     assert get_root_vehicle_names(objects) == ['Heil', 'Heil_Rear']
 
 
@@ -38,8 +39,13 @@ def test_belongs_to_vehicle_match():
     assert not belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil')
     assert belongs_to_vehicle('Mesh: Heil_Rear: Body', 'Heil_Rear')
 
+def test_belongs_to_vehicle_numeric_suffix():
+    assert belongs_to_vehicle('Mesh: Heil.001: Body', 'Heil')
+    assert not belongs_to_vehicle('Mesh: Heil_Rear.001: Body', 'Heil')
+
 
 if __name__ == "__main__":
     test_get_root_vehicle_names_dedup()
     test_belongs_to_vehicle_match()
+    test_belongs_to_vehicle_numeric_suffix()
     print("ok")
