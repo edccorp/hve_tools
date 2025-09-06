@@ -358,14 +358,14 @@ def join_mesh_objects_per_vehicle(vehicle_names):
                 for col in body_mesh_collections
                 for obj in col.objects
             ]
+            mesh_objects = [obj for obj in candidates if obj.type == "MESH"]
         else:
             candidates = bpy.context.scene.objects
-
-        mesh_objects = [
-            obj
-            for obj in candidates
-            if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
-        ]
+            mesh_objects = [
+                obj
+                for obj in candidates
+                if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
+            ]
 
         if len(mesh_objects) <= 1:
             if mesh_objects:
