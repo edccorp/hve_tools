@@ -10,11 +10,19 @@ bl_info = {
     "blender": (3, 1, 0),
 }
 def remove_from_all_collections(obj):
-    """ Remove an object from all Blender collections before reassigning it. """
-    if obj and obj.name in bpy.data.objects:
-        for collection in bpy.data.collections:
-            if obj.name in collection.objects:
-                collection.objects.unlink(obj)
+    """Remove an object from all Blender collections before reassigning it."""
+    if not obj or obj.name not in bpy.data.objects:
+        return
+
+    # Unlink from all user collections
+    for collection in list(obj.users_collection):
+        collection.objects.unlink(obj)
+
+    # Also unlink from the scene's master collection, which isn't included in
+    # ``obj.users_collection`` or ``bpy.data.collections``.
+    active_root = bpy.context.scene.collection
+    if obj.name in active_root.objects:
+        active_root.objects.unlink(obj)
 
 def assign_objects_to_subcollection(collection_name, parent_collection, objects):
     """
@@ -878,9 +886,13 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
     
     # Function to remove an object from all collections before reassigning
     def remove_from_all_collections(obj):
-        """ Remove an object from all Blender collections before reassigning it. """
-        for collection in obj.users_collection:
+        """Remove an object from all Blender collections before reassigning it."""
+        for collection in list(obj.users_collection):
             collection.objects.unlink(obj)
+
+        active_root = bpy.context.scene.collection
+        if obj.name in active_root.objects:
+            active_root.objects.unlink(obj)
 
     # Get all vehicle data (not just kinematic)
     vehicle_data = vehicles[vehicle_name]  # Now includes everything
