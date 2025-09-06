@@ -825,11 +825,11 @@ def import_fbx(context, fbx_file_path):
                 if ("Wheel" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(wheels_collection_name, vehicle_name,obj)
+                    assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
                 if ("Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(mesh_collection_name, vehicle_name,obj)
+                    assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
             
             target_name = vehicle_name + ": FBX"  # Original name pattern
             new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
