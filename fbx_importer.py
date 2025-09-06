@@ -220,6 +220,13 @@ def remove_from_all_collections(obj):
     for collection in list(obj.users_collection):
         collection.objects.unlink(obj)
 
+    # The scene's master collection is not included in ``obj.users_collection``,
+    # so explicitly unlink from it as well to ensure the object is fully
+    # detached before relinking.
+    active_root = bpy.context.scene.collection
+    if obj.name in active_root.objects:
+        active_root.objects.unlink(obj)
+
 def assign_objects_to_subcollection(collection_name, parent_collection, objects):
     """
     Create a subcollection under the given parent collection and assign objects to it.
@@ -825,11 +832,11 @@ def import_fbx(context, fbx_file_path):
                 if ("Wheel" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(wheels_collection_name, vehicle_name,obj)
+                    assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
                 if ("Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
                     obj.select_set(True)  # Select the object
                     # Run the function
-                    assign_objects_to_subcollection(mesh_collection_name, vehicle_name,obj)
+                    assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
             
             target_name = vehicle_name + ": FBX"  # Original name pattern
             new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
