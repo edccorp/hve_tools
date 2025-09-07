@@ -645,10 +645,6 @@ def import_fbx(context, fbx_file_path):
         else:
             print(f"⏳ Timeline unchanged: Existing frame end ({current_max_frame}) is greater than or equal to imported max ({max_frame})")
 
-        # Determine root vehicle names from imported objects
-        vehicle_names = get_root_vehicle_names(imported_objects)
-
-                
                 
         # Define name replacements in sequential order
         name_replacements = {
@@ -868,6 +864,9 @@ def import_fbx(context, fbx_file_path):
                 # Rename the object by adding "_FBX" to the end of its name
                 if not name.endswith(": FBX"):
                     obj.name = f"{name}: FBX"
+
+        # Determine root vehicle names after any renaming or cleanup
+        vehicle_names = get_root_vehicle_names(imported_objects)
 
         # Create the event collection
         event_collection_name = f"HVE: {filename}"
