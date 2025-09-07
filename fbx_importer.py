@@ -42,17 +42,23 @@ def get_root_vehicle_names(imported_objects):
 
 
 def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
-    """Return ``True`` if ``obj_name`` belongs to ``vehicle_name``.
+    """Return ``True`` if ``obj_name`` appears to belong to ``vehicle_name``.
 
-    The name is split on colon (``":"``) delimiters and each segment is
-    *normalized* by stripping Blender's numeric suffixes (e.g., ``.001``). A
-    match occurs only when a normalized segment exactly equals
-    ``vehicle_name``.
+    Object names in imported FBX files often include the vehicle identifier as
+    a separate word within colon-delimited segments (e.g., ``"Mesh:0 Honda"``
+    or ``"Wheel: Axle 1: Left Honda objects"``).  The original implementation
+    required a segment to exactly match ``vehicle_name`` which failed for cases
+    where the vehicle name was preceded by numbers or additional words.
+
+    This revised version splits each colon-delimited segment into whitespace
+    separated parts and checks whether any part, after stripping Blender's
+    numeric suffixes, matches ``vehicle_name`` (case-insensitive).
     """
 
+    vehicle_name = vehicle_name.lower()
     for segment in obj_name.split(":"):
-        normalized = re.sub(r"\.\d+$", "", segment).strip()
-        if normalized == vehicle_name:
+        normalized = re.sub(r"\.\d+$", "", segment).lower().strip()
+        if vehicle_name in normalized.split():
             return True
     return False
 
