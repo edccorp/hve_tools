@@ -44,22 +44,36 @@ def get_root_vehicle_names(imported_objects):
 def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
     """Return ``True`` if ``obj_name`` appears to belong to ``vehicle_name``.
 
-    Object names in imported FBX files often include the vehicle identifier as
-    a separate word within colon-delimited segments (e.g., ``"Mesh:0 Honda"``
-    or ``"Wheel: Axle 1: Left Honda objects"``).  The original implementation
-    required a segment to exactly match ``vehicle_name`` which failed for cases
-    where the vehicle name was preceded by numbers or additional words.
+    Both names are normalized by replacing underscores with spaces and splitting
+    into lowercase tokens using ``re.split('[\\W_]+')``. The vehicle tokens are
+    then matched against consecutive tokens from each colon-delimited segment of
+    ``obj_name``.  Trailing numeric tokens or generic "object(s)" tokens are
+    ignored to allow names like ``"Mesh: Heil.001"``.
 
-    This revised version splits each colon-delimited segment into whitespace
-    separated parts and checks whether any part, after stripping Blender's
-    numeric suffixes, matches ``vehicle_name`` (case-insensitive).
+    Examples
+    --------
+    >>> belongs_to_vehicle('Wheel: Heil Rear: Body', 'Heil_Rear')
+    True
+    >>> belongs_to_vehicle('Wheel: Heil Rear: Body', 'Heil')
+    False
     """
 
-    vehicle_name = vehicle_name.lower()
+    vehicle_tokens = [
+        t
+        for t in re.split(r"[\W_]+", vehicle_name.replace("_", " ").lower())
+        if t
+    ]
+    obj_name = obj_name.replace("_", " ")
+
     for segment in obj_name.split(":"):
-        normalized = re.sub(r"\.\d+$", "", segment).lower().strip()
-        if vehicle_name in normalized.split():
-            return True
+        # Strip Blender numeric suffixes like ".001" before tokenizing
+        segment = re.sub(r"\.\d+$", "", segment).lower()
+        tokens = [t for t in re.split(r"[\W_]+", segment) if t]
+        for i in range(len(tokens) - len(vehicle_tokens) + 1):
+            if tokens[i : i + len(vehicle_tokens)] == vehicle_tokens:
+                trailing = tokens[i + len(vehicle_tokens) :]
+                if all(t.isdigit() or t in {"object", "objects"} for t in trailing):
+                    return True
     return False
 
 def offset_selected_animation(obj, frame_offset=-1):
