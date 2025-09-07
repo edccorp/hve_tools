@@ -125,7 +125,7 @@ def adjust_animation(obj):
         obj.keyframe_insert(data_path="location", frame=-1)
         obj.keyframe_insert(data_path="rotation_euler", frame=-1)
        
-def copy_animated_rotation(parent, axis_keywords=None):
+def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
 
     Parameters
@@ -137,6 +137,8 @@ def copy_animated_rotation(parent, axis_keywords=None):
         Objects whose names contain any of these fragments (case-insensitive)
         are used as rotation sources for the corresponding axis. If ``None``,
         :data:`ROTATION_AXIS_KEYWORDS` is used.
+    debug : bool, optional
+        When ``True``, log details about source selection. Defaults to ``False``.
 
     Missing axes are skipped.
     """
@@ -148,6 +150,8 @@ def copy_animated_rotation(parent, axis_keywords=None):
     axis_keywords = axis_keywords or ROTATION_AXIS_KEYWORDS
 
     norm_parent = normalize_name(parent.name)
+    if debug:
+        print(f"🛠 Normalized parent name: '{norm_parent}'")
 
     # Get selected objects and filter by conditions
     selected_objects = [
@@ -174,6 +178,8 @@ def copy_animated_rotation(parent, axis_keywords=None):
         for obj in bpy.context.selected_objects
         if obj != parent and norm_parent in normalize_name(obj.name)
     ]
+    if debug:
+        print(f"🛠 Candidate helper objects: {[obj.name for obj in selected_objects]}")
 
     # Initialize rotation source objects dictionary
     sources = {axis: None for axis in axis_keywords}
@@ -187,8 +193,21 @@ def copy_animated_rotation(parent, axis_keywords=None):
                 break
 
     missing = [axis for axis, src in sources.items() if src is None]
+    if debug:
+        print("🛠 Axis mapping:")
+        for axis, src in sources.items():
+            if src:
+                print(f"   {axis} → {src.name}")
+            else:
+                print(f"   {axis} → <missing>")
+        if missing:
+            print(f"   Missing axes: {', '.join(missing)}")
+
     if missing:
         print(f"⚠️ Warning: Missing rotation sources for axis: {', '.join(missing)}")
+
+    if debug and all(src is None for src in sources.values()):
+        print(f"⚠️ No rotation sources found for '{parent.name}'")
 
     # Ensure the parent has animation data
     if not parent.animation_data or not parent.animation_data.action:
@@ -816,7 +835,7 @@ def import_fbx(context, fbx_file_path):
             ):
                 obj.select_set(True)  # Select the object
                 # Run the function
-                copy_animated_rotation(obj)
+                copy_animated_rotation(obj, debug=True)
 
                 # Rename the object by adding "_FBX" to the end of its name
                 if not name.endswith(": FBX"):
