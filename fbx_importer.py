@@ -42,17 +42,23 @@ def get_root_vehicle_names(imported_objects):
 
 
 def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
-    """Return ``True`` if ``obj_name`` belongs to ``vehicle_name``.
+    """Return ``True`` if ``obj_name`` appears to belong to ``vehicle_name``.
 
-    The name is split on colon (``":"``) delimiters and each segment is
-    *normalized* by stripping Blender's numeric suffixes (e.g., ``.001``). A
-    match occurs only when a normalized segment exactly equals
-    ``vehicle_name``.
+    Object names in imported FBX files often include the vehicle identifier as
+    a separate word within colon-delimited segments (e.g., ``"Mesh:0 Honda"``
+    or ``"Wheel: Axle 1: Left Honda objects"``).  The original implementation
+    required a segment to exactly match ``vehicle_name`` which failed for cases
+    where the vehicle name was preceded by numbers or additional words.
+
+    This revised version splits each colon-delimited segment into whitespace
+    separated parts and checks whether any part, after stripping Blender's
+    numeric suffixes, matches ``vehicle_name`` (case-insensitive).
     """
 
+    vehicle_name = vehicle_name.lower()
     for segment in obj_name.split(":"):
-        normalized = re.sub(r"\.\d+$", "", segment).strip()
-        if normalized == vehicle_name:
+        normalized = re.sub(r"\.\d+$", "", segment).lower().strip()
+        if vehicle_name in normalized.split():
             return True
     return False
 
@@ -341,6 +347,14 @@ def bake_shape_keys_threaded(obj_list):
         thread.join()  # Wait for all threads to complete
 
 
+def _gather_meshes(collection):
+    """Recursively collect mesh objects from ``collection`` and its children."""
+    meshes = [obj for obj in collection.objects if obj.type == "MESH"]
+    for child in collection.children:
+        meshes.extend(_gather_meshes(child))
+    return meshes
+
+
 def join_mesh_objects_per_vehicle(vehicle_names):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
     for vehicle_name in vehicle_names:
@@ -352,20 +366,27 @@ def join_mesh_objects_per_vehicle(vehicle_names):
             col for col in bpy.data.collections if col.name.startswith(collection_prefix)
         ]
 
-        if body_mesh_collections:
-            candidates = [
-                obj
-                for col in body_mesh_collections
-                for obj in col.objects
-            ]
-        else:
-            candidates = bpy.context.scene.objects
+        mesh_objects = []
+        for col in body_mesh_collections:
+            mesh_objects.extend(_gather_meshes(col))
 
-        mesh_objects = [
-            obj
-            for obj in candidates
-            if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
-        ]
+        if not mesh_objects:
+            candidates = bpy.context.scene.objects
+            mesh_objects = [
+                obj
+                for obj in candidates
+                if (
+                    obj.type == "MESH"
+                    and belongs_to_vehicle(obj.name, vehicle_name)
+                    and not (
+                        re.search(r"wheel", obj.name, re.IGNORECASE)
+                        or any(
+                            "Wheels" in col.name
+                            for col in getattr(obj, "users_collection", [])
+                        )
+                    )
+                )
+            ]
 
         if len(mesh_objects) <= 1:
             if mesh_objects:
