@@ -141,7 +141,7 @@ def test_copy_animated_rotation_discovers_helpers_with_normalized_names():
     parent = Obj('Wheel_FL')
     parent.animation_data = Anim()
 
-    helper = Obj('Wheel FL Camber Objects')
+    helper = Obj('Wheel: Wheel_FL: Camber Objects')
     helper.animation_data = Anim()
 
     removed = []
@@ -163,6 +163,44 @@ def test_copy_animated_rotation_discovers_helpers_with_normalized_names():
     copy_animated_rotation(parent)
 
     assert removed == [helper]
+
+
+def test_copy_animated_rotation_filters_by_vehicle_id():
+    class Anim:
+        def __init__(self):
+            self.action = type('action', (), {'fcurves': []})()
+
+    parent = Obj('Wheel: Heil_Rear')
+    parent.animation_data = Anim()
+
+    rotation = Obj('Wheel: Heil_Rear: Rotation Objects')
+    rotation.animation_data = Anim()
+    camber = Obj('Wheel: Heil_Rear: Camber Objects')
+    camber.animation_data = Anim()
+    steering = Obj('Wheel: Heil_Rear: Steering Objects')
+    steering.animation_data = Anim()
+    other = Obj('Wheel: Other: Rotation Objects')
+    other.animation_data = Anim()
+
+    removed = []
+
+    class Objects:
+        def remove(self, obj, do_unlink=True):
+            removed.append(obj)
+
+    bpy_stub = type(
+        'bpy',
+        (),
+        {
+            'context': type('context', (), {'selected_objects': [parent, rotation, camber, steering, other]})(),
+            'data': type('data', (), {'objects': Objects()})(),
+        },
+    )()
+
+    ns.update({'bpy': bpy_stub})
+    copy_animated_rotation(parent)
+
+    assert set(removed) == {rotation, camber, steering}
 
 
 if __name__ == "__main__":
