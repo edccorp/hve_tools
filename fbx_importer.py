@@ -615,18 +615,13 @@ def import_fbx(context, fbx_file_path):
     # Ensure the file exists
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
-
         pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
-
-
         bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
 
         # Determine which objects were added by the import
         post_import_objects = list(bpy.context.scene.objects)
-
         imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
-
         imported_names = [obj.name for obj in imported_objects]
 
         # Initialize max frame variable
@@ -889,6 +884,9 @@ def import_fbx(context, fbx_file_path):
             bpy.context.view_layer.active_layer_collection = layer_collection
 
 
+        # Track which FBX collection each object ends up in
+        object_collections = {}
+
         # Move all selected objects to a new collection
         for vehicle_name in vehicle_names:
             # Remove any trailing '.###' from vehicle_name (e.g., 'Car.001' -> 'Car')
@@ -913,6 +911,7 @@ def import_fbx(context, fbx_file_path):
                 if belongs_to_vehicle(obj.name, clean_vehicle_name):
                     remove_from_all_collections(obj)
                     fbx_collection.objects.link(obj)
+                    object_collections[obj.as_pointer()] = fbx_collection
  
 
             # Create subcollections 
@@ -941,6 +940,21 @@ def import_fbx(context, fbx_file_path):
                 if obj.name == target_name:
                     obj.name = new_name
                     print(f"Renamed: {target_name} → {new_name}")
+
+        # Ensure any remaining imported objects follow their parent's collection
+        for obj in imported_objects:
+            if obj.as_pointer() in object_collections:
+                continue
+
+            parent = obj.parent
+            parent_collection = None
+            while parent and parent_collection is None:
+                parent_collection = object_collections.get(parent.as_pointer())
+                parent = parent.parent
+
+            target_collection = parent_collection or event_collection
+            remove_from_all_collections(obj)
+            target_collection.objects.link(obj)
                     
         # Join Mesh objects separately for each vehicle
         join_mesh_objects_per_vehicle(vehicle_names)    
