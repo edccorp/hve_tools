@@ -614,11 +614,15 @@ def import_fbx(context, fbx_file_path):
     
     # Ensure the file exists
     if os.path.exists(fbx_file_path):
+        # Capture existing scene objects before import so we can diff afterwards
+        pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
+
         bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
-                
-        # Get names of the newly imported objects
-        imported_objects = bpy.context.selected_objects  # FBX import automatically selects new objects
+
+        # Determine which objects were added by the import
+        post_import_objects = list(bpy.context.scene.objects)
+        imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
         imported_names = [obj.name for obj in imported_objects]
 
         # Initialize max frame variable
