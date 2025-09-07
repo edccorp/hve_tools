@@ -341,6 +341,14 @@ def bake_shape_keys_threaded(obj_list):
         thread.join()  # Wait for all threads to complete
 
 
+def _gather_meshes(collection):
+    """Recursively collect mesh objects from ``collection`` and its children."""
+    meshes = [obj for obj in collection.objects if obj.type == "MESH"]
+    for child in collection.children:
+        meshes.extend(_gather_meshes(child))
+    return meshes
+
+
 def join_mesh_objects_per_vehicle(vehicle_names):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
     for vehicle_name in vehicle_names:
@@ -352,20 +360,27 @@ def join_mesh_objects_per_vehicle(vehicle_names):
             col for col in bpy.data.collections if col.name.startswith(collection_prefix)
         ]
 
-        if body_mesh_collections:
-            candidates = [
-                obj
-                for col in body_mesh_collections
-                for obj in col.objects
-            ]
-        else:
-            candidates = bpy.context.scene.objects
+        mesh_objects = []
+        for col in body_mesh_collections:
+            mesh_objects.extend(_gather_meshes(col))
 
-        mesh_objects = [
-            obj
-            for obj in candidates
-            if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
-        ]
+        if not mesh_objects:
+            candidates = bpy.context.scene.objects
+            mesh_objects = [
+                obj
+                for obj in candidates
+                if (
+                    obj.type == "MESH"
+                    and belongs_to_vehicle(obj.name, vehicle_name)
+                    and not (
+                        re.search(r"wheel", obj.name, re.IGNORECASE)
+                        or any(
+                            "Wheels" in col.name
+                            for col in getattr(obj, "users_collection", [])
+                        )
+                    )
+                )
+            ]
 
         if len(mesh_objects) <= 1:
             if mesh_objects:
