@@ -376,16 +376,18 @@ def join_mesh_objects_per_vehicle(vehicle_names):
             mesh_objects = [
                 obj
                 for obj in candidates
-                if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
-            ]
 
-            mesh_objects = [obj for obj in candidates if obj.type == "MESH"]
-        else:
-            candidates = bpy.context.scene.objects
-            mesh_objects = [
-                obj
-                for obj in candidates
-                if obj.type == "MESH" and belongs_to_vehicle(obj.name, vehicle_name)
+                if (
+                    obj.type == "MESH"
+                    and belongs_to_vehicle(obj.name, vehicle_name)
+                    and not (
+                        re.search(r"wheel", obj.name, re.IGNORECASE)
+                        or any(
+                            "Wheels" in col.name
+                            for col in getattr(obj, "users_collection", [])
+                        )
+                    )
+                )
             ]
 
 
