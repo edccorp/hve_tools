@@ -616,7 +616,6 @@ def import_fbx(context, fbx_file_path):
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
         pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
-
         bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
 
