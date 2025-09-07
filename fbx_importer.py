@@ -150,6 +150,7 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     axis_keywords = axis_keywords or ROTATION_AXIS_KEYWORDS
 
     norm_parent = normalize_name(parent.name)
+    vehicle_id = parent.name.split(":")[-1].strip()
     if debug:
         print(f"🛠 Normalized parent name: '{norm_parent}'")
 
@@ -160,6 +161,7 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
         if obj != parent
         and norm_parent in normalize_name(obj.name)
         and "objects" in obj.name.lower()
+        and belongs_to_vehicle(obj.name, vehicle_id)
     ]
 
     if not selected_objects:
@@ -176,7 +178,9 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     selected_objects = [
         obj
         for obj in bpy.context.selected_objects
-        if obj != parent and norm_parent in normalize_name(obj.name)
+        if obj != parent
+        and norm_parent in normalize_name(obj.name)
+        and belongs_to_vehicle(obj.name, vehicle_id)
     ]
     if debug:
         print(f"🛠 Candidate helper objects: {[obj.name for obj in selected_objects]}")
@@ -833,6 +837,7 @@ def import_fbx(context, fbx_file_path):
             if any(kw in name_lower for kw in include_keywords) and not any(
                 kw in name_lower for kw in exclude_keywords
             ):
+                bpy.ops.object.select_all(action="DESELECT")
                 obj.select_set(True)  # Select the object
                 # Run the function
                 copy_animated_rotation(obj, debug=True)
