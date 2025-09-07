@@ -8,11 +8,18 @@ source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {'re': re}
 for node in module_ast.body:
-    if isinstance(node, ast.FunctionDef) and node.name in {
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "ROTATION_AXIS_KEYWORDS":
+                code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
+                exec(code, ns)
+    elif isinstance(node, ast.FunctionDef) and node.name in {
         "normalize_root_name",
         "get_root_vehicle_names",
         "belongs_to_vehicle",
         "join_mesh_objects_per_vehicle",
+        "normalize_name",
+        "copy_animated_rotation",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
@@ -21,6 +28,9 @@ normalize_root_name = ns["normalize_root_name"]
 get_root_vehicle_names = ns["get_root_vehicle_names"]
 belongs_to_vehicle = ns["belongs_to_vehicle"]
 join_mesh_objects_per_vehicle = ns["join_mesh_objects_per_vehicle"]
+normalize_name = ns["normalize_name"]
+copy_animated_rotation = ns["copy_animated_rotation"]
+ROTATION_AXIS_KEYWORDS = ns["ROTATION_AXIS_KEYWORDS"]
 
 
 class Obj:
@@ -119,6 +129,38 @@ def test_join_mesh_objects_per_vehicle_with_colon_segments():
 
     assert len(joined) == 1
     assert {o.name for o in joined[0]} == {'Mesh: Honda:0', 'Mesh: Honda:1'}
+
+
+def test_copy_animated_rotation_discovers_helpers_with_normalized_names():
+    class Anim:
+        def __init__(self):
+            self.action = type('action', (), {'fcurves': []})()
+
+    parent = Obj('Wheel_FL')
+    parent.animation_data = Anim()
+
+    helper = Obj('Wheel FL Camber Objects')
+    helper.animation_data = Anim()
+
+    removed = []
+
+    class Objects:
+        def remove(self, obj, do_unlink=True):
+            removed.append(obj)
+
+    bpy_stub = type(
+        'bpy',
+        (),
+        {
+            'context': type('context', (), {'selected_objects': [parent, helper]})(),
+            'data': type('data', (), {'objects': Objects()})(),
+        },
+    )()
+
+    ns.update({'bpy': bpy_stub})
+    copy_animated_rotation(parent)
+
+    assert removed == [helper]
 
 
 if __name__ == "__main__":

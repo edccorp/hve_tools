@@ -24,6 +24,11 @@ ROTATION_AXIS_KEYWORDS = {
 }
 
 
+def normalize_name(name: str) -> str:
+    """Return a lowercase name with underscores replaced by spaces."""
+    return name.lower().replace("_", " ")
+
+
 def normalize_root_name(name: str) -> str:
     """Return the base vehicle identifier without numeric suffixes or colon paths."""
     name = re.sub(r"\.\d+$", "", name)
@@ -128,10 +133,15 @@ def copy_animated_rotation(parent, axis_keywords=None):
 
     axis_keywords = axis_keywords or ROTATION_AXIS_KEYWORDS
 
+    norm_parent = normalize_name(parent.name)
+
     # Get selected objects and filter by conditions
     selected_objects = [
-        obj for obj in bpy.context.selected_objects
-        if obj != parent and parent.name in obj.name and "objects" in obj.name.lower()
+        obj
+        for obj in bpy.context.selected_objects
+        if obj != parent
+        and norm_parent in normalize_name(obj.name)
+        and "objects" in obj.name.lower()
     ]
 
     if not selected_objects:
@@ -146,8 +156,9 @@ def copy_animated_rotation(parent, axis_keywords=None):
 
     # Get selected objects (excluding the parent) and only keep objects that contain the parent's name
     selected_objects = [
-        obj for obj in bpy.context.selected_objects
-        if obj != parent and parent.name in obj.name
+        obj
+        for obj in bpy.context.selected_objects
+        if obj != parent and norm_parent in normalize_name(obj.name)
     ]
 
     # Initialize rotation source objects dictionary
