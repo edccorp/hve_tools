@@ -97,6 +97,18 @@ def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
                     return True
     return False
 
+
+def is_wheel_object(obj):
+    """Return ``True`` if ``obj`` or any parent name contains ``wheel`` or ``tire``."""
+    current = obj
+    while current:
+        name_lower = current.name.lower()
+        if "wheel" in name_lower or "tire" in name_lower:
+            return True
+        current = current.parent
+    return False
+
+
 def offset_selected_animation(obj, frame_offset=-1):
     """Offsets animation keyframes for all selected objects by the given frame amount."""
 
@@ -922,14 +934,19 @@ def import_fbx(context, fbx_file_path):
         
             # Loop through imported objects
             for obj in imported_objects:
+                existing_collection = object_collections.get(obj.as_pointer())
+                if existing_collection and existing_collection != fbx_collection:
+                    continue
+
+                if is_wheel_object(obj):
+                    assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
+                    object_collections[obj.as_pointer()] = wheels_collection
+                    continue
+
                 if not belongs_to_vehicle(obj.name, clean_vehicle_name):
                     continue
 
-                name_lower = obj.name.lower()
-
-                if "wheel" in name_lower or "tire" in name_lower:
-                    assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
-                elif "Mesh" in obj.name:
+                if "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
 
             target_name = clean_vehicle_name + ": FBX"  # Original name pattern
