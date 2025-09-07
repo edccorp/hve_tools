@@ -52,14 +52,16 @@ def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
     Both names are normalized by replacing underscores with spaces and splitting
     into lowercase tokens using ``re.split('[\\W_]+')``. The vehicle tokens are
     then matched against consecutive tokens from each colon-delimited segment of
-    ``obj_name``.  Trailing numeric tokens or generic "object(s)" tokens are
-    ignored to allow names like ``"Mesh: Heil.001"``.
+    ``obj_name``.  Trailing numeric tokens or generic ``"object(s)"`` tokens, as
+    well as common wheel descriptors like ``"wheel"``, ``"tire"``,
+    ``"geometry"``, or ``"steering"``, are ignored to allow names like
+    ``"Wheel_FL: Heil Rear Wheel"``.
 
     Examples
     --------
-    >>> belongs_to_vehicle('Wheel: Heil Rear: Body', 'Heil_Rear')
+    >>> belongs_to_vehicle('Wheel_FL: Heil Rear Wheel', 'Heil_Rear')
     True
-    >>> belongs_to_vehicle('Wheel: Heil Rear: Body', 'Heil')
+    >>> belongs_to_vehicle('Wheel_FL: Heil Rear Wheel', 'Heil')
     False
     """
 
@@ -77,7 +79,21 @@ def belongs_to_vehicle(obj_name: str, vehicle_name: str) -> bool:
         for i in range(len(tokens) - len(vehicle_tokens) + 1):
             if tokens[i : i + len(vehicle_tokens)] == vehicle_tokens:
                 trailing = tokens[i + len(vehicle_tokens) :]
-                if all(t.isdigit() or t in {"object", "objects"} for t in trailing):
+                if all(
+                    t.isdigit()
+                    or t
+                    in {
+                        "object",
+                        "objects",
+                        "wheel",
+                        "wheels",
+                        "tire",
+                        "tires",
+                        "geometry",
+                        "steering",
+                    }
+                    for t in trailing
+                ):
                     return True
     return False
 
