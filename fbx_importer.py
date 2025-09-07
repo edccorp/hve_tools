@@ -881,14 +881,10 @@ def import_fbx(context, fbx_file_path):
                 bpy.context.view_layer.active_layer_collection = layer_collection
 
             # Move objects to the collection
-            for obj in bpy.context.selected_objects:
+            for obj in imported_objects:
                 if belongs_to_vehicle(obj.name, clean_vehicle_name):
-                    # Remove object from other collections (if necessary)
-                    for coll in obj.users_collection:
-                        coll.objects.unlink(obj)
-                    
-                    # Add to the new collection
-                    fbx_collection.objects.link(obj)     
+                    remove_from_all_collections(obj)
+                    fbx_collection.objects.link(obj)
  
 
             # Create subcollections 
