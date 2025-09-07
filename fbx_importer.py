@@ -226,6 +226,13 @@ def remove_from_all_collections(obj):
     for collection in list(obj.users_collection):
         collection.objects.unlink(obj)
 
+    # The scene's master collection is not included in ``obj.users_collection``,
+    # so explicitly unlink from it as well to ensure the object is fully
+    # detached before relinking.
+    active_root = bpy.context.scene.collection
+    if obj.name in active_root.objects:
+        active_root.objects.unlink(obj)
+
 def assign_objects_to_subcollection(collection_name, parent_collection, objects):
     """
     Create a subcollection under the given parent collection and assign objects to it.
@@ -375,6 +382,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
             mesh_objects = [
                 obj
                 for obj in candidates
+
                 if (
                     obj.type == "MESH"
                     and belongs_to_vehicle(obj.name, vehicle_name)
@@ -387,6 +395,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
                     )
                 )
             ]
+
 
         if len(mesh_objects) <= 1:
             if mesh_objects:
