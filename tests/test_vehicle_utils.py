@@ -69,6 +69,12 @@ def test_belongs_to_vehicle_numeric_suffix():
     assert not belongs_to_vehicle('Mesh: Other.001: Body', 'Heil')
 
 
+def test_belongs_to_vehicle_wheel_descriptors():
+    for token in ['Wheel', 'Tire', 'Geometry', 'Steering']:
+        name = f'Wheel_FL: Heil Rear {token}'
+        assert belongs_to_vehicle(name, 'Heil_Rear')
+
+
 def test_join_mesh_objects_per_vehicle_with_colon_segments():
     class Obj:
         def __init__(self, name, type='MESH'):
