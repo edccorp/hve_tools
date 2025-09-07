@@ -894,22 +894,21 @@ def import_fbx(context, fbx_file_path):
             mesh_collection = ensure_collection_exists(mesh_collection_name, fbx_collection, hide = False, dont_render=False)       
         
             # Loop through imported objects
-            for obj in bpy.context.selected_objects:
-                # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-                if ("Wheel" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
-                    obj.select_set(True)  # Select the object
-                    # Run the function
+            for obj in imported_objects:
+                if not belongs_to_vehicle(obj.name, vehicle_name):
+                    continue
+
+                name_lower = obj.name.lower()
+
+                if "wheel" in name_lower or "tire" in name_lower:
                     assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
-                if ("Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
-                    obj.select_set(True)  # Select the object
-                    # Run the function
+                elif "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
             
             target_name = vehicle_name + ": FBX"  # Original name pattern
             new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
 
-            for obj in bpy.context.selected_objects:
-                          
+            for obj in imported_objects:
                 if obj.name == target_name:
                     obj.name = new_name
                     print(f"Renamed: {target_name} → {new_name}")
