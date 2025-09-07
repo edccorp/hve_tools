@@ -797,7 +797,7 @@ def import_fbx(context, fbx_file_path):
         exclude_keywords = [
             kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
         ]
-        exclude_keywords += ["objects", "geometry"]
+        exclude_keywords += ["objects"]
         include_keywords = ["wheel"]
 
         # Loop through imported objects
@@ -875,15 +875,13 @@ def import_fbx(context, fbx_file_path):
             mesh_collection = ensure_collection_exists(mesh_collection_name, fbx_collection, hide = False, dont_render=False)       
         
             # Loop through imported objects
-            for obj in bpy.context.selected_objects:
-                # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-                if ("Wheel" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
-                    obj.select_set(True)  # Select the object
-                    # Run the function
+            for obj in imported_objects:
+                if not belongs_to_vehicle(obj.name, vehicle_name):
+                    continue
+
+                if ("Wheel" in obj.name or "Tire" in obj.name):
                     assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
-                if ("Mesh" in obj.name and belongs_to_vehicle(obj.name, vehicle_name)):
-                    obj.select_set(True)  # Select the object
-                    # Run the function
+                elif "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
             
             target_name = vehicle_name + ": FBX"  # Original name pattern
