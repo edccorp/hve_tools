@@ -413,6 +413,7 @@ def _gather_meshes(collection):
 def join_mesh_objects_per_vehicle(vehicle_names):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
     for vehicle_name in vehicle_names:
+        clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
         # Collect all mesh objects for this vehicle. Search for collections that
         # begin with "Body Mesh: {vehicle_name}:". If found, use objects from
         # those collections. Otherwise fall back to scanning the entire scene.
@@ -433,7 +434,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
 
                 if (
                     obj.type == "MESH"
-                    and belongs_to_vehicle(obj.name, vehicle_name)
+                    and belongs_to_vehicle(obj.name, clean_vehicle_name)
                     and not (
                         re.search(r"wheel", obj.name, re.IGNORECASE)
                         or any(
@@ -473,7 +474,7 @@ def join_mesh_objects_per_vehicle(vehicle_names):
 
         # Deselect after join to avoid cross-vehicle merging
         bpy.ops.object.select_all(action="DESELECT")
-        print(f"✅ Joined {len(mesh_objects)} Mesh objects for {vehicle_name}.")
+        print(f"✅ Joined {len(mesh_objects)} Mesh objects for {clean_vehicle_name}.")
 
 
 def materials_are_equal(mat1, mat2, tol=1e-4):
@@ -538,9 +539,10 @@ def materials_are_equal(mat1, mat2, tol=1e-4):
 
 def find_duplicate_materials_for_vehicle(vehicle_name):
     """Find duplicate materials within a single vehicle's objects."""
+    clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
     materials = []
     for obj in bpy.data.objects:
-        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, vehicle_name):
+        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
             materials.extend([slot.material for slot in obj.material_slots if slot.material and slot.material.name.startswith("meshMaterial")])
 
     unique_materials = []
@@ -558,8 +560,9 @@ def find_duplicate_materials_for_vehicle(vehicle_name):
 
 def replace_materials_for_vehicle(vehicle_name, material_map):
     """Replace duplicate materials within a single vehicle's objects."""
+    clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
     for obj in bpy.data.objects:
-        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, vehicle_name):
+        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
             for slot in obj.material_slots:
                 if slot.material in material_map:
                     slot.material = material_map[slot.material]
@@ -573,14 +576,15 @@ def remove_unused_materials():
 def merge_duplicate_materials_per_vehicle(vehicle_names):
     """Runs material merging separately for each vehicle."""
     for vehicle_name in vehicle_names:
-        print(f"🔍 Processing materials for {vehicle_name}...")
-        material_map = find_duplicate_materials_for_vehicle(vehicle_name)
+        clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
+        print(f"🔍 Processing materials for {clean_vehicle_name}...")
+        material_map = find_duplicate_materials_for_vehicle(clean_vehicle_name)
         if material_map:
-            replace_materials_for_vehicle(vehicle_name, material_map)
+            replace_materials_for_vehicle(clean_vehicle_name, material_map)
             remove_unused_materials()
-            print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {vehicle_name}.")
+            print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {clean_vehicle_name}.")
         else:
-            print(f"✅ No duplicate 'meshMaterial' materials found for {vehicle_name}.")
+            print(f"✅ No duplicate 'meshMaterial' materials found for {clean_vehicle_name}.")
 
 
     
