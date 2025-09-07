@@ -900,7 +900,7 @@ def import_fbx(context, fbx_file_path):
         
             # Loop through imported objects
             for obj in imported_objects:
-                if not belongs_to_vehicle(obj.name, vehicle_name):
+                if not belongs_to_vehicle(obj.name, clean_vehicle_name):
                     continue
 
                 name_lower = obj.name.lower()
@@ -909,8 +909,8 @@ def import_fbx(context, fbx_file_path):
                     assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
                 elif "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
-            
-            target_name = vehicle_name + ": FBX"  # Original name pattern
+
+            target_name = clean_vehicle_name + ": FBX"  # Original name pattern
             new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
 
             for obj in imported_objects:
