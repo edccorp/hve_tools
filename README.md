@@ -4,7 +4,7 @@
 HVE Tools is a collection of Blender add-ons and scripts aimed at importing and exporting data related to Human Vehicle Environment (HVE) simulations. The tools help streamline workflows such as converting motion data, preparing vehicles or environments, and exchanging results with other applications.
 
 ## Installation and Dependencies
-1. Install [Blender](https://www.blender.org/) 2.8x or later with its bundled Python interpreter.
+1. Install [Blender](https://www.blender.org/) 4.x or later with its bundled Python interpreter.
 2. Clone or download this repository.
 3. In Blender, open **Edit → Preferences → Add-ons**, click **Install…**, and select this folder. Enable the desired tools from the add-on list.
 
