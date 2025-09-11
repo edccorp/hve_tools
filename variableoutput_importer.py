@@ -143,7 +143,8 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
             
             try:
                 time.append(float(row[0]))
-            except:
+            except ValueError:
+                # Handle non-numeric timestamps (e.g., header rows)
                 time.append(row[0])
             data.append(row[1:])
    
