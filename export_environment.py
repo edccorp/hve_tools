@@ -193,9 +193,6 @@ def export_env(file, dirname,
     # store files to copy
     copy_set = set()
 
-    # store names of newly created meshes, so we dont overlap
-    mesh_name_set = set()
-
     fw = file.write
     base_src = os.path.dirname(bpy.data.filepath)
     base_dst = os.path.dirname(file.name)
@@ -455,35 +452,27 @@ def export_env(file, dirname,
                                 me = obj_for_mesh.to_mesh()
                             except RuntimeError:
                                 me = None
-                            do_remove = False #Set to false because set name is read only 
+                            # meshes created via to_mesh() are temporary and must be
+                            # removed after export to avoid leaking datablocks
+                            do_remove = True
                         else:
                             me = obj.data
                             do_remove = False
                         if me is not None:
-                            # ensure unique name, we could also do this by
-                            # postponing mesh removal, but clearing data - TODO
-                            if do_remove:
-                                me.name = obj.name.rstrip("1234567890").rstrip(".")
-                                me_name_new = me_name_org = me.name
-                                count = 0
-                                while me_name_new in mesh_name_set:
-                                    me.name = "%.17s.%03d" % (me_name_org, count)
-                                    me_name_new = me.name
-                                    count += 1
-                                mesh_name_set.add(me_name_new)
-                                del me_name_new, me_name_org, count
-                            # done
+                            # Mesh names from to_mesh() are not reliable for
+                            # generating stable identifiers.  We use the owning
+                            # object's name when creating export IDs and remove
+                            # any temporary meshes once written.
 
                             # -------------------------------------------------------------------------
                             #  Write Indexed Face Set
                             # -------------------------------------------------------------------------
-          
 
                             mesh = me
                             matrix = obj_matrix
-                            
+
                             obj_id = unique_name(obj, OB_ + obj.name, uuid_cache_object, clean_func=clean_def, sep="_")
-                            mesh_id = unique_name(mesh, ME_ + mesh.name, uuid_cache_mesh, clean_func=clean_def, sep="_")
+                            mesh_id = unique_name(mesh, ME_ + obj.name, uuid_cache_mesh, clean_func=clean_def, sep="_")
                             mesh_id_group = mesh_id + 'group_'
                             mesh_id_coords = mesh_id + 'coords_'
                             mesh_id_normals = mesh_id + 'normals_'
