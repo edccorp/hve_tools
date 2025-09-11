@@ -14,15 +14,23 @@ from bpy_extras.io_utils import (
         )
 import os
 
-def export_contact_surfaces(dirname, file, scale=39.3701):
-    """Function to export contact surface data."""
+
+def export_contact_surfaces(filepath, scale=39.3701):
+    """Export contact surface data.
+
+    Parameters
+    ----------
+    filepath : str
+        The destination path used to derive the output filenames.
+    scale : float, optional
+        Scale factor for converting coordinates, by default 39.3701.
+    """
+    dirname = os.path.dirname(filepath)
     if not os.path.exists(dirname):
         os.makedirs(dirname)
-        
 
-    base_src = os.path.dirname(bpy.data.filepath)
-    base_dst = os.path.dirname(file.name)
-    filename_strip = os.path.splitext(os.path.basename(file.name))[0]
+    base_dst = dirname
+    filename_strip = os.path.splitext(os.path.basename(filepath))[0]
 
     txt_path = os.path.join(base_dst, f"{filename_strip}.txt")
     csv_path = os.path.join(base_dst, f"{filename_strip}.csv")
@@ -99,7 +107,8 @@ def export_contact_surfaces(dirname, file, scale=39.3701):
 
 
     return txt_path, csv_path, txt_path4veh
-    
+
+
 def save(context,
          filepath,
          global_scale
@@ -108,15 +117,9 @@ def save(context,
     bpy.path.ensure_ext(filepath, '.csv')
 
     if bpy.ops.object.mode_set.poll():
-        bpy.ops.object.mode_set(mode='OBJECT') 
-        
-    file = open(filepath, 'w', encoding='utf-8')    
-    dirname = os.path.dirname(filepath)        
+        bpy.ops.object.mode_set(mode='OBJECT')
 
-    export_contact_surfaces(dirname, 
-           file,
-           global_scale,
-           )
+    export_contact_surfaces(filepath, global_scale)
 
     return {'FINISHED'}
 
