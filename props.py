@@ -82,7 +82,11 @@ class HVE_props_environment(bpy.types.PropertyGroup):
         ]
     )
     poWaterDepth: bpy.props.FloatProperty(name= "Water Depth", default= 0, min=0, soft_max = 5) 
-    poStaticWater: bpy.props.FloatProperty(name= "Static Water Depth", default= 0, min=0, soft_max = 5) 
+    poStaticWater: bpy.props.BoolProperty(
+    name="Static Water",
+    description="Enable (1) or Disable (0) static water",
+    default=True
+)
     polabel: bpy.props.StringProperty(name= "Overlay", default="Untitled")
     
 

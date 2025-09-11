@@ -406,7 +406,7 @@ def export_env(file, dirname,
                     poPcntClay = .02                    
                     poSurfaceType = 'EdTypeRoad'                     
                     poWaterDepth = 0                    
-                    poStaticWater = 0                     
+                    poStaticWater = 1                     
                     polabel = 'Untitled'                     
                     
                     if 'hve_env_props' in obj_main:
@@ -616,7 +616,7 @@ def export_env(file, dirname,
                                     fw('	  poPcntClay %s\n' % poPcntClay)  
                                     fw(' 	  poSurfaceType %s\n' % poSurfaceType)  
                                     fw('	  poWaterDepth %s\n' % poWaterDepth)  
-                                    fw('	  poStaticWater %s\n' % poStaticWater)  
+                                    fw('      poStaticWater %d\n' % (1 if poStaticWater else 0))  
                                     fw('	  bSignalKit 0\n')
                                     fw('	  nSignalID -1\n')
                                     fw('	  poPickCB \n')
