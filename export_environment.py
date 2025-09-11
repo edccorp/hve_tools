@@ -1083,8 +1083,6 @@ def export_env(file, dirname,
     # -------------------------------------------------------------------------
     # global cleanup
     # -------------------------------------------------------------------------
-    file.close()
-
     # copy all collected files.
     # print(copy_set)
     bpy_extras.io_utils.path_reference_copy(copy_set)
@@ -1132,28 +1130,40 @@ def save(context,
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    if use_compress:
-        file = gzip_open_utf8(filepath, 'w')
-    else:
-        file = open(filepath, 'w', encoding='utf-8')
-
     if global_matrix is None:
         global_matrix = mathutils.Matrix()
 
-    dirname = os.path.dirname(filepath)        
+    dirname = os.path.dirname(filepath)
 
-    export_env(file, dirname,
-           global_matrix,
-           context.evaluated_depsgraph_get(),
-           context.scene,
-           context.view_layer,
-           use_mesh_modifiers=use_mesh_modifiers,
-           use_selection=use_selection,
-           use_normals=use_normals,
-           use_hierarchy=use_hierarchy,
-           path_mode=path_mode,
-           name_decorations=name_decorations,
-           )
+    if use_compress:
+        with gzip_open_utf8(filepath, 'w') as file:
+            export_env(file, dirname,
+               global_matrix,
+               context.evaluated_depsgraph_get(),
+               context.scene,
+               context.view_layer,
+               use_mesh_modifiers=use_mesh_modifiers,
+               use_selection=use_selection,
+               use_normals=use_normals,
+               use_hierarchy=use_hierarchy,
+               path_mode=path_mode,
+               name_decorations=name_decorations,
+               )
+    else:
+        with open(filepath, 'w', encoding='utf-8') as file:
+            export_env(file, dirname,
+               global_matrix,
+               context.evaluated_depsgraph_get(),
+               context.scene,
+               context.view_layer,
+               use_mesh_modifiers=use_mesh_modifiers,
+               use_selection=use_selection,
+               use_normals=use_normals,
+               use_hierarchy=use_hierarchy,
+               path_mode=path_mode,
+               name_decorations=name_decorations,
+               )
 
     return {'FINISHED'}
-    
+
+
