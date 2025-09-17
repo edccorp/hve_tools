@@ -275,7 +275,7 @@ class HVE_PT_ortho_projector(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_parent_id = "HVE_PT_post"
+    bl_parent_id = "HVE_PT_other_tools"
 
     @classmethod
     def poll(cls, context: Context) -> bool:
