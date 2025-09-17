@@ -93,12 +93,13 @@ def update_panel_bl_category(self, context):
     sub_panels = (
         HVE_PT_mechanist_setup,
         HVE_PT_mechanist_export,
-        HVE_PT_contacts_exporter,        
+        HVE_PT_contacts_exporter,
         HVE_PT_fbx_importer,
         HVE_PT_variableoutput_importer,
-        HVE_PT_edr_importer,      
-        HVE_PT_xyzrpy_importer,        
-        HVE_PT_point_importer,        
+        HVE_PT_other_tools,
+        HVE_PT_edr_importer,
+        HVE_PT_xyzrpy_importer,
+        HVE_PT_point_importer,
         HVE_PT_motion_paths,
         HVE_PT_scale_objects,
         HVE_PT_race_render_exporter,
@@ -397,26 +398,41 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "HVE FBX Importer"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_post"
     @classmethod
     def poll(cls, context):
         return True
-       
+
     def draw(self, context):
         scene = context.scene
         l = self.layout
         c = l.column()
-        
+
 
         # Contacts Exporter controls
-        l.operator("import_hve.fbx", text="Import FBX", icon='IMPORT')   
- 
+        l.operator("import_hve.fbx", text="Import FBX", icon='IMPORT')
+
+class HVE_PT_other_tools(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Other Tools"
+    bl_parent_id = "HVE_PT_post"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        l = self.layout
+        l.label(text="")
+
 class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "EDR Data Importer / Entry"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_other_tools"
     @classmethod
     def poll(cls, context):
         return True
@@ -456,7 +472,7 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Motion Data Importer"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_other_tools"
     @classmethod
     def poll(cls, context):
         return True
@@ -482,7 +498,7 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Motion Path Tools"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_other_tools"
     @classmethod
     def poll(cls, context):
         return True
@@ -505,7 +521,7 @@ class HVE_PT_scale_objects(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Scale Objects"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_other_tools"
     @classmethod
     def poll(cls, context):
         return True
@@ -528,7 +544,7 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Point Importer"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_other_tools"
     @classmethod
     def poll(cls, context):
         return True
@@ -570,6 +586,7 @@ classes = (
     HVE_PT_post,
     HVE_PT_fbx_importer,
     HVE_PT_variableoutput_importer,
+    HVE_PT_other_tools,
     HVE_PT_edr_importer,
     HVE_PT_xyzrpy_importer,
     HVE_PT_motion_paths,
