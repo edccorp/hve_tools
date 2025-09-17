@@ -45,6 +45,71 @@ def approx_xy_extent(obj):
 
 
 # -----------------------------------------------------------------------------
+# Render engine helpers
+
+
+def _compute_render_engine_items():
+    render_engines = tuple(getattr(bpy.app, "render_engines", ()))
+
+    items = []
+
+    eevee_id = None
+    eevee_label = "Eevee"
+    if 'BLENDER_EEVEE_NEXT' in render_engines:
+        eevee_id = 'BLENDER_EEVEE_NEXT'
+        eevee_label = "Eevee Next"
+    elif 'BLENDER_EEVEE' in render_engines:
+        eevee_id = 'BLENDER_EEVEE'
+
+    if eevee_id:
+        items.append((eevee_id, eevee_label, ""))
+
+    if 'CYCLES' in render_engines:
+        items.append(('CYCLES', 'Cycles', ''))
+
+    if not items and render_engines:
+        # Fallback: expose whatever engines are available so the property remains usable
+        items = [(engine_id, engine_id.replace("_", " ").title(), "") for engine_id in render_engines]
+
+    if not items:
+        # Final fallback keeps registration safe even when Blender data is unavailable
+        items = [('BLENDER_EEVEE_NEXT', 'Eevee Next', ''), ('CYCLES', 'Cycles', '')]
+
+    return items
+
+
+def _render_engine_items(self, context):
+    return _compute_render_engine_items()
+
+
+def _default_render_engine():
+    items = _compute_render_engine_items()
+    return items[0][0] if items else 'BLENDER_EEVEE_NEXT'
+
+
+_DEFAULT_RENDER_ENGINE = _default_render_engine()
+
+
+def _normalize_render_engine(engine_id):
+    items = _compute_render_engine_items()
+    valid_ids = {item[0] for item in items}
+
+    if engine_id in valid_ids:
+        return engine_id
+
+    eevee_map = {
+        'BLENDER_EEVEE': 'BLENDER_EEVEE_NEXT',
+        'BLENDER_EEVEE_NEXT': 'BLENDER_EEVEE',
+    }
+
+    mapped = eevee_map.get(engine_id)
+    if mapped and mapped in valid_ids:
+        return mapped
+
+    return items[0][0] if items else engine_id
+
+
+# -----------------------------------------------------------------------------
 # Main operator (API and behaviour mirror the provided reference code)
 
 
@@ -102,8 +167,8 @@ class OrthoProjectorSettings(PropertyGroup):
 
     render_engine: EnumProperty(
         name="Render Engine",
-        items=[('CYCLES', 'Cycles', ''), ('BLENDER_EEVEE', 'Eevee', '')],
-        default='BLENDER_EEVEE',
+        items=_render_engine_items,
+        default=_DEFAULT_RENDER_ENGINE,
     )
     make_camera_ortho: BoolProperty(
         name="Force Camera Orthographic",
@@ -165,8 +230,8 @@ class OBJECT_OT_project_ortho_bake(Operator):
     # Render controls
     render_engine: EnumProperty(
         name="Render Engine",
-        items=[('CYCLES', 'Cycles', ''), ('BLENDER_EEVEE', 'Eevee', '')],
-        default='BLENDER_EEVEE',
+        items=_render_engine_items,
+        default=_DEFAULT_RENDER_ENGINE,
     )
     make_camera_ortho: BoolProperty(
         name="Force Camera Orthographic",
@@ -274,7 +339,10 @@ class OBJECT_OT_project_ortho_bake(Operator):
                 pass
 
         # Render settings
-        scene.render.engine = self.render_engine
+        resolved_engine = _normalize_render_engine(self.render_engine)
+        scene.render.engine = resolved_engine
+        if self.render_engine != resolved_engine:
+            self.render_engine = resolved_engine
         scene.render.resolution_x = self.image_size
         scene.render.resolution_y = self.image_size
         scene.render.resolution_percentage = 100
