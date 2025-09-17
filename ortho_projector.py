@@ -1,8 +1,12 @@
 import bpy
 from mathutils import Vector
-from bpy.types import Operator, Panel
+from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import (
-    StringProperty, BoolProperty, IntProperty, EnumProperty
+    StringProperty,
+    BoolProperty,
+    IntProperty,
+    EnumProperty,
+    PointerProperty,
 )
 
 # -----------------------------------------------------------------------------
@@ -42,6 +46,84 @@ def approx_xy_extent(obj):
 
 # -----------------------------------------------------------------------------
 # Main operator (API and behaviour mirror the provided reference code)
+
+
+SETTINGS_PROP_NAMES = (
+    "camera_source",
+    "keep_new_as_scene_camera",
+    "source_mode",
+    "existing_image_name",
+    "render_engine",
+    "make_camera_ortho",
+    "image_size",
+    "uv_map_name",
+    "material_name",
+    "create_new_material",
+    "use_bounds",
+    "correct_aspect",
+    "scale_to_bounds",
+)
+
+
+def _copy_settings_to_target(settings, target):
+    for prop_name in SETTINGS_PROP_NAMES:
+        setattr(target, prop_name, getattr(settings, prop_name))
+
+
+class OrthoProjectorSettings(PropertyGroup):
+    camera_source: EnumProperty(
+        name="Camera Source",
+        items=[
+            ('SELECTED', "Use Selected Camera", "Use the active object (must be a Camera)"),
+            ('ACTIVE',   "Use Scene Active Camera", "Use scene.camera"),
+            ('NEW',      "Create New Camera", "Create a new camera aligned to current view"),
+        ],
+        default='ACTIVE',
+    )
+    keep_new_as_scene_camera: BoolProperty(
+        name="Keep New Camera As Scene Camera",
+        description="If creating a new camera, keep it as scene.camera after finishing",
+        default=False,
+    )
+
+    source_mode: EnumProperty(
+        name="Texture Source",
+        items=[
+            ('RENDER', "Render From Camera", "Render current camera view and use that image"),
+            ('IMAGE',  "Use Existing Image", "Use an existing image in bpy.data.images"),
+        ],
+        default='RENDER',
+    )
+    existing_image_name: StringProperty(
+        name="Existing Image",
+        description="Name of an existing image in bpy.data.images (if Source=IMAGE)",
+        default="",
+    )
+
+    render_engine: EnumProperty(
+        name="Render Engine",
+        items=[('CYCLES', 'Cycles', ''), ('BLENDER_EEVEE', 'Eevee', '')],
+        default='BLENDER_EEVEE',
+    )
+    make_camera_ortho: BoolProperty(
+        name="Force Camera Orthographic",
+        default=True,
+    )
+    image_size: IntProperty(
+        name="Image Size",
+        description="Square size (px) for render or new image",
+        default=2048,
+        min=64,
+        max=16384,
+    )
+
+    uv_map_name: StringProperty(name="UV Map Name", default="OrthoProjUV")
+    material_name: StringProperty(name="Material Name", default="OrthoProj_MAT")
+    create_new_material: BoolProperty(name="Create/Assign Material", default=True)
+
+    use_bounds: BoolProperty(name="Project From View (Bounds)", default=True)
+    correct_aspect: BoolProperty(name="Correct Aspect", default=True)
+    scale_to_bounds: BoolProperty(name="Scale To Bounds", default=True)
 
 
 class OBJECT_OT_project_ortho_bake(Operator):
@@ -108,6 +190,8 @@ class OBJECT_OT_project_ortho_bake(Operator):
     correct_aspect: BoolProperty(name="Correct Aspect", default=True)
     scale_to_bounds: BoolProperty(name="Scale To Bounds", default=True)
 
+    use_scene_settings: BoolProperty(default=False, options={'HIDDEN'})
+
     # ------------------------------------------------------------------
     # Camera resolution helpers
 
@@ -158,7 +242,16 @@ class OBJECT_OT_project_ortho_bake(Operator):
 
     # ------------------------------------------------------------------
 
+    def _apply_scene_settings(self, context):
+        if not self.use_scene_settings:
+            return
+
+        settings = getattr(context.scene, "ortho_projector_settings", None)
+        if settings is not None:
+            _copy_settings_to_target(settings, self)
+
     def execute(self, context):
+        self._apply_scene_settings(context)
         obj = context.object
         if not obj or obj.type != 'MESH':
             self.report({'ERROR'}, "Select a mesh object.")
@@ -331,39 +424,48 @@ class HVE_PT_ortho_projector(Panel):
 
         layout.label(text="Project mesh UVs from an orthographic view")
 
+        scene = context.scene
+        settings = getattr(scene, "ortho_projector_settings", None)
+
         op_props = layout.operator(
             OBJECT_OT_project_ortho_bake.bl_idname,
             text="Project Ortho Image",
             icon='IMAGE_DATA',
         )
+        if settings is not None:
+            op_props.use_scene_settings = True
+            _copy_settings_to_target(settings, op_props)
+
+        if settings is None:
+            return
 
         box = layout.box()
         box.label(text="Camera")
-        box.prop(op_props, "camera_source")
-        box.prop(op_props, "keep_new_as_scene_camera")
+        box.prop(settings, "camera_source")
+        box.prop(settings, "keep_new_as_scene_camera")
 
         box = layout.box()
         box.label(text="Image Source")
-        box.prop(op_props, "source_mode")
-        box.prop(op_props, "existing_image_name")
+        box.prop(settings, "source_mode")
+        box.prop(settings, "existing_image_name")
 
         box = layout.box()
         box.label(text="Render")
-        box.prop(op_props, "render_engine")
-        box.prop(op_props, "make_camera_ortho")
-        box.prop(op_props, "image_size")
+        box.prop(settings, "render_engine")
+        box.prop(settings, "make_camera_ortho")
+        box.prop(settings, "image_size")
 
         box = layout.box()
         box.label(text="UV & Material")
-        box.prop(op_props, "uv_map_name")
-        box.prop(op_props, "material_name")
-        box.prop(op_props, "create_new_material")
+        box.prop(settings, "uv_map_name")
+        box.prop(settings, "material_name")
+        box.prop(settings, "create_new_material")
 
         box = layout.box()
         box.label(text="Project From View")
-        box.prop(op_props, "use_bounds")
-        box.prop(op_props, "correct_aspect")
-        box.prop(op_props, "scale_to_bounds")
+        box.prop(settings, "use_bounds")
+        box.prop(settings, "correct_aspect")
+        box.prop(settings, "scale_to_bounds")
 
 
 # -----------------------------------------------------------------------------
@@ -375,21 +477,23 @@ def menu_func(self, context):
 
 
 classes = (
+    OrthoProjectorSettings,
     OBJECT_OT_project_ortho_bake,
-
     HVE_PT_ortho_projector,
-
 )
 
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    bpy.types.Scene.ortho_projector_settings = PointerProperty(type=OrthoProjectorSettings)
     bpy.types.VIEW3D_MT_object.append(menu_func)
 
 
 def unregister():
     bpy.types.VIEW3D_MT_object.remove(menu_func)
+    if hasattr(bpy.types.Scene, "ortho_projector_settings"):
+        del bpy.types.Scene.ortho_projector_settings
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
