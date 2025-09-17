@@ -91,15 +91,13 @@ def sync_fps_with_scene(self, context):
 def update_panel_bl_category(self, context):
     from . import ortho_projector
 
-    main_panels = (HVE_PT_pre, HVE_PT_post)
+    main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_other_tools)
     sub_panels = (
         HVE_PT_mechanist_setup,
         HVE_PT_mechanist_export,
         HVE_PT_contacts_exporter,
         HVE_PT_fbx_importer,
         HVE_PT_variableoutput_importer,
-
-        HVE_PT_other_tools,
         HVE_PT_edr_importer,
         HVE_PT_xyzrpy_importer,
 
@@ -422,7 +420,6 @@ class HVE_PT_other_tools(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Other Tools"
-    bl_parent_id = "HVE_PT_post"
 
     @classmethod
     def poll(cls, context):
