@@ -317,14 +317,21 @@ def menu_func(self, context):
     self.layout.operator(OBJECT_OT_project_ortho_bake.bl_idname, icon='RENDER_STILL')
 
 
+classes = (
+    OBJECT_OT_project_ortho_bake,
+)
+
+
 def register():
-    bpy.utils.register_class(OBJECT_OT_project_ortho_bake)
+    for cls in classes:
+        bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_object.append(menu_func)
 
 
 def unregister():
     bpy.types.VIEW3D_MT_object.remove(menu_func)
-    bpy.utils.unregister_class(OBJECT_OT_project_ortho_bake)
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
 
 
 if __name__ == "__main__":
