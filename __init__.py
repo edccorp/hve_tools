@@ -19,7 +19,9 @@ try:
         racerender_exporter, racerender_exporter_ui,
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
+
         edr_importer, scale_objects, import_xyzrpy, ortho_projector,
+
     )
 
     from bpy.props import *
