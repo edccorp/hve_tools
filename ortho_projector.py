@@ -122,7 +122,7 @@ class OBJECT_OT_project_ortho_bake(Operator):
                 self.report({'ERROR'}, "Active object must be a Camera when Camera Source = Use Selected Camera.")
                 return None, None
             scene.camera = sel
-            return sel, None
+            return sel, previous_scene_cam
 
         elif self.camera_source == 'ACTIVE':
             if not scene.camera or scene.camera.type != 'CAMERA':
@@ -301,9 +301,13 @@ class OBJECT_OT_project_ortho_bake(Operator):
         except Exception:
             pass
 
-        # Restore scene camera if we created a new one and user doesn't want to keep it
-        if self.camera_source == 'NEW' and prev_scene_cam and not self.keep_new_as_scene_camera:
-            context.scene.camera = prev_scene_cam
+        # Restore previous scene camera when needed
+        if prev_scene_cam and prev_scene_cam != cam:
+            if self.camera_source == 'NEW':
+                if not self.keep_new_as_scene_camera:
+                    context.scene.camera = prev_scene_cam
+            else:
+                context.scene.camera = prev_scene_cam
 
         self.report({'INFO'}, f"Projected image '{src_img.name}' with camera '{cam.name}' onto UV '{self.uv_map_name}'.")
         return {'FINISHED'}
