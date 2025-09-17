@@ -1,6 +1,6 @@
 import bpy
 from mathutils import Vector
-from bpy.types import Operator
+from bpy.types import Operator, Panel
 from bpy.props import (
     StringProperty, BoolProperty, IntProperty, EnumProperty
 )
@@ -310,6 +310,59 @@ class OBJECT_OT_project_ortho_bake(Operator):
 
 
 # -----------------------------------------------------------------------------
+# Panel (reintroduces UI controls for the operator)
+
+
+class HVE_PT_ortho_projector(Panel):
+    bl_idname = "HVE_PT_ortho_projector"
+    bl_label = "Ortho Projector"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        layout.label(text="Project mesh UVs from an orthographic view")
+
+        op_props = layout.operator(
+            OBJECT_OT_project_ortho_bake.bl_idname,
+            text="Project Ortho Image",
+            icon='IMAGE_DATA',
+        )
+
+        box = layout.box()
+        box.label(text="Camera")
+        box.prop(op_props, "camera_source")
+        box.prop(op_props, "keep_new_as_scene_camera")
+
+        box = layout.box()
+        box.label(text="Image Source")
+        box.prop(op_props, "source_mode")
+        box.prop(op_props, "existing_image_name")
+
+        box = layout.box()
+        box.label(text="Render")
+        box.prop(op_props, "render_engine")
+        box.prop(op_props, "make_camera_ortho")
+        box.prop(op_props, "image_size")
+
+        box = layout.box()
+        box.label(text="UV & Material")
+        box.prop(op_props, "uv_map_name")
+        box.prop(op_props, "material_name")
+        box.prop(op_props, "create_new_material")
+
+        box = layout.box()
+        box.label(text="Project From View")
+        box.prop(op_props, "use_bounds")
+        box.prop(op_props, "correct_aspect")
+        box.prop(op_props, "scale_to_bounds")
+
+
+# -----------------------------------------------------------------------------
 # Simple menu hook (kept identical to the provided reference)
 
 
@@ -317,14 +370,22 @@ def menu_func(self, context):
     self.layout.operator(OBJECT_OT_project_ortho_bake.bl_idname, icon='RENDER_STILL')
 
 
+classes = (
+    OBJECT_OT_project_ortho_bake,
+    HVE_PT_ortho_projector,
+)
+
+
 def register():
-    bpy.utils.register_class(OBJECT_OT_project_ortho_bake)
+    for cls in classes:
+        bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_object.append(menu_func)
 
 
 def unregister():
     bpy.types.VIEW3D_MT_object.remove(menu_func)
-    bpy.utils.unregister_class(OBJECT_OT_project_ortho_bake)
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
 
 
 if __name__ == "__main__":
