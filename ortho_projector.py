@@ -1,78 +1,115 @@
-"""Tools for framing objects with an orthographic camera.
-
-This module provides a property group that controls the framing behaviour,
-operators that perform the framing, and a UI panel to expose the settings in
-Blender's sidebar.  The functionality is intentionally self contained so the
-main add-on can import and register the exposed classes tuple.
-"""
+"""Tools for orthographic projection utilities used by the HVE toolkit."""
 
 from __future__ import annotations
 
 import math
-from typing import List, Sequence, Tuple
+import os
+import tempfile
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 try:
     import bpy
     from bpy.props import (
         BoolProperty,
         EnumProperty,
-        FloatProperty,
+        IntVectorProperty,
         PointerProperty,
         StringProperty,
     )
-    from bpy.types import Context, Object, Operator, Panel, PropertyGroup
-    from mathutils import Vector
-except ModuleNotFoundError:  # pragma: no cover - makes tests runnable without Blender
+    from bpy.types import Area, Context, Image, Object, Operator, Panel, PropertyGroup
+    from mathutils import Matrix, Vector
+    from bpy_extras.object_utils import world_to_camera_view
+except ModuleNotFoundError:  # pragma: no cover - allows unit tests to import without Blender
     bpy = None  # type: ignore
-    BoolProperty = EnumProperty = FloatProperty = PointerProperty = StringProperty = None  # type: ignore
-    Context = Object = Operator = Panel = PropertyGroup = object  # type: ignore
-    Vector = None  # type: ignore
+    Area = Context = Image = Object = Operator = Panel = PropertyGroup = object  # type: ignore
+    BoolProperty = EnumProperty = IntVectorProperty = PointerProperty = StringProperty = None  # type: ignore
+    Matrix = Vector = None  # type: ignore
+    world_to_camera_view = None  # type: ignore
 
 
-_GEOMETRY_TYPES = {"MESH", "CURVE", "SURFACE", "META", "FONT", "GPENCIL", "VOLUME"}
-_AXIS_TO_ROTATION = {
-    "TOP": (math.radians(90.0), 0.0, 0.0),
-    "BOTTOM": (math.radians(-90.0), 0.0, 0.0),
-    "FRONT": (math.radians(90.0), 0.0, math.radians(180.0)),
-    "BACK": (math.radians(90.0), 0.0, 0.0),
-    "RIGHT": (math.radians(90.0), 0.0, math.radians(-90.0)),
-    "LEFT": (math.radians(90.0), 0.0, math.radians(90.0)),
-}
-_AXIS_TO_DIRECTION = {
-    "TOP": Vector((0.0, 0.0, 1.0)) if Vector else (0.0, 0.0, 1.0),
-    "BOTTOM": Vector((0.0, 0.0, -1.0)) if Vector else (0.0, 0.0, -1.0),
-    "FRONT": Vector((0.0, -1.0, 0.0)) if Vector else (0.0, -1.0, 0.0),
-    "BACK": Vector((0.0, 1.0, 0.0)) if Vector else (0.0, 1.0, 0.0),
-    "RIGHT": Vector((1.0, 0.0, 0.0)) if Vector else (1.0, 0.0, 0.0),
-    "LEFT": Vector((-1.0, 0.0, 0.0)) if Vector else (-1.0, 0.0, 0.0),
-}
+# -----------------------------------------------------------------------------
+# Helper utilities replicated from the reference add-on
 
 
-def _iter_target_objects(context: Context, use_selection: bool) -> List[Object]:
-    """Return the objects that should influence the projection bounds."""
+def engine_items(self, context: Optional[Context]) -> List[Tuple[str, str, str]]:
+    """Return the available render engines for the scene."""
 
-    if bpy is None:  # pragma: no cover - executed only outside Blender
+    if bpy is None:  # pragma: no cover - Blender specific
         return []
 
-    if use_selection and context.selected_objects:
-        objects = list(context.selected_objects)
-    else:
-        objects = [obj for obj in context.scene.objects if obj.visible_get()]
+    if context is None:
+        context = bpy.context
 
-    geometry_objects = [obj for obj in objects if obj.type in _GEOMETRY_TYPES]
+    enum_prop = bpy.types.RenderSettings.bl_rna.properties.get("engine")
+    if enum_prop is None:  # pragma: no cover - safety guard
+        return []
 
-    # Fall back to the active object if nothing matched the geometry set.
-    if not geometry_objects and context.active_object is not None:
-        geometry_objects = [context.active_object]
+    items = []
+    for item in enum_prop.enum_items:
+        if item.identifier:  # skip empty identifiers such as deprecated entries
+            items.append((item.identifier, item.name, item.description))
+    return items
 
-    return geometry_objects
+
+def normalize_engine(context: Optional[Context], engine: str) -> str:
+    """Ensure the requested engine exists, falling back to the current engine."""
+
+    if bpy is None:  # pragma: no cover - Blender specific
+        return engine
+
+    if context is None:
+        context = bpy.context
+
+    valid = {identifier for identifier, _, _ in engine_items(None, context)}
+    if engine in valid:
+        return engine
+    return context.scene.render.engine
 
 
-def _calculate_world_bounds(objects: Sequence[Object]) -> Tuple[Vector, Vector]:
-    """Compute a world-space bounding box for the supplied objects."""
+def find_view3d_rv3d(context: Context) -> Tuple[Optional[Area], Optional[object], Optional[object]]:
+    """Return the first available 3D view area and its regions."""
 
-    if bpy is None or Vector is None:  # pragma: no cover - only relevant without Blender
-        return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)  # type: ignore
+    if bpy is None:  # pragma: no cover - Blender specific
+        return None, None, None
+
+    window = context.window
+    if window is None:
+        return None, None, None
+
+    for area in window.screen.areas:  # type: ignore[union-attr]
+        if area.type != 'VIEW_3D':
+            continue
+        for region in area.regions:
+            if region.type == 'WINDOW':
+                space = area.spaces.active
+                rv3d = getattr(space, "region_3d", None)
+                return area, region, rv3d
+    return None, None, None
+
+
+def align_new_camera_to_active_view(context: Context, camera_obj: Object) -> None:
+    """Align a freshly created camera to the active 3D viewport."""
+
+    if bpy is None:  # pragma: no cover - Blender specific
+        return
+
+    area, region, rv3d = find_view3d_rv3d(context)
+    if rv3d is None:
+        return
+
+    view_matrix: Matrix = rv3d.view_matrix.copy()  # type: ignore[assignment]
+    camera_obj.matrix_world = view_matrix.inverted()
+
+    if rv3d.view_perspective == 'ORTHO':  # type: ignore[union-attr]
+        camera_obj.data.type = 'ORTHO'
+        camera_obj.data.ortho_scale = rv3d.view_distance * 2.0  # type: ignore[union-attr]
+
+
+def _world_bounds(objects: Sequence[Object]) -> Tuple[Vector, Vector]:
+    """Compute the world-space bounding box for a set of objects."""
+
+    if Vector is None:  # pragma: no cover - Blender specific
+        raise RuntimeError("mathutils.Vector is required")
 
     min_corner = Vector((math.inf, math.inf, math.inf))
     max_corner = Vector((-math.inf, -math.inf, -math.inf))
@@ -83,7 +120,6 @@ def _calculate_world_bounds(objects: Sequence[Object]) -> Tuple[Vector, Vector]:
             min_corner.x = min(min_corner.x, world_corner.x)
             min_corner.y = min(min_corner.y, world_corner.y)
             min_corner.z = min(min_corner.z, world_corner.z)
-
             max_corner.x = max(max_corner.x, world_corner.x)
             max_corner.y = max(max_corner.y, world_corner.y)
             max_corner.z = max(max_corner.z, world_corner.z)
@@ -91,183 +127,361 @@ def _calculate_world_bounds(objects: Sequence[Object]) -> Tuple[Vector, Vector]:
     return min_corner, max_corner
 
 
-def _ensure_camera(context: Context, settings: "OrthoProjectSettings") -> Object:
-    """Return a camera object to update, creating it when required."""
-
-    if bpy is None:  # pragma: no cover - executed only outside Blender
-        raise RuntimeError("bpy is not available")
-
-    if settings.use_active_camera and context.scene.camera is not None:
-        return context.scene.camera
-
-    camera_obj = bpy.data.objects.get(settings.camera_name)
-    if camera_obj is None or camera_obj.type != "CAMERA":
-        camera_data = bpy.data.cameras.get(settings.camera_name)
-        if camera_data is None:
-            camera_data = bpy.data.cameras.new(settings.camera_name)
-        camera_obj = bpy.data.objects.new(settings.camera_name, camera_data)
-        context.scene.collection.objects.link(camera_obj)
-
-    if settings.make_active_camera:
-        context.scene.camera = camera_obj
-
-    return camera_obj
-
-
-def _ortho_scale_for_bounds(min_corner: Vector, max_corner: Vector, margin: float) -> float:
-    dimensions = max_corner - min_corner
-    max_dim = max(dimensions.x, dimensions.y)
-    scale = max_dim * (1.0 + margin)
-    # Guard against extremely small geometry: Blender clamps at near-zero.
-    return max(scale, 0.001)
-
-
-def _position_camera(
+def set_camera_ortho_and_fit(
     camera_obj: Object,
-    min_corner: Vector,
-    max_corner: Vector,
-    axis: str,
-    margin: float,
-    distance_multiplier: float,
+    targets: Sequence[Object],
+    force_ortho: bool,
+    scale_to_bounds: bool,
 ) -> None:
-    """Align the supplied camera object to frame the bounding box."""
+    """Configure a camera for orthographic projection and frame the targets."""
 
-    if bpy is None:  # pragma: no cover - executed only outside Blender
-        return
-    if Vector is None:  # pragma: no cover - Blender always provides mathutils
+    if bpy is None:  # pragma: no cover - Blender specific
         return
 
     camera_data = camera_obj.data
-    if camera_data.type != 'ORTHO':
+    if force_ortho:
         camera_data.type = 'ORTHO'
 
-    ortho_scale = _ortho_scale_for_bounds(min_corner, max_corner, margin)
-    camera_data.ortho_scale = ortho_scale
+    if camera_data.type != 'ORTHO' or not scale_to_bounds or not targets:
+        return
+
+    min_corner, max_corner = _world_bounds(targets)
+    dimensions = max_corner - min_corner
+    ortho_scale = max(dimensions.x, dimensions.y)
+    camera_data.ortho_scale = max(ortho_scale, 0.001)
 
     centre = (min_corner + max_corner) * 0.5
-    direction = _AXIS_TO_DIRECTION[axis]
+    camera_obj.location = centre
 
-    if isinstance(direction, Vector):
-        unit_direction = direction
-    else:  # pragma: no cover - only relevant when the direction is a tuple
-        unit_direction = Vector(direction)
 
-    box_size = max((max_corner - min_corner).length, 0.001)
-    offset = unit_direction.normalized() * box_size * distance_multiplier
-    camera_obj.location = centre + offset
+def safe_render_to_image(
+    context: Context,
+    camera_obj: Object,
+    render_engine: str,
+    image_size: Sequence[int],
+) -> Image:
+    """Render the active scene with the supplied camera and return a packed image."""
 
-    rotation = _AXIS_TO_ROTATION[axis]
-    camera_obj.rotation_euler = rotation
+    if bpy is None:  # pragma: no cover - Blender specific
+        raise RuntimeError("bpy is required for rendering")
+
+    scene = context.scene
+    render = scene.render
+    previous_camera = scene.camera
+    previous_engine = render.engine
+    previous_filepath = render.filepath
+    previous_res_x = render.resolution_x
+    previous_res_y = render.resolution_y
+
+    tmp_dir = tempfile.mkdtemp(prefix="hve_ortho_")
+    tmp_path = os.path.join(tmp_dir, "ortho_projection.png")
+
+    try:
+        scene.camera = camera_obj
+        render.engine = normalize_engine(context, render_engine)
+        render.resolution_x = int(image_size[0])
+        render.resolution_y = int(image_size[1])
+        render.filepath = tmp_path
+
+        bpy.ops.render.render(write_still=True)
+
+        image = bpy.data.images.load(tmp_path)
+        image.pack()
+    finally:
+        scene.camera = previous_camera
+        render.engine = previous_engine
+        render.filepath = previous_filepath
+        render.resolution_x = previous_res_x
+        render.resolution_y = previous_res_y
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:  # pragma: no cover - best effort cleanup
+                pass
+        try:
+            os.rmdir(tmp_dir)
+        except OSError:  # pragma: no cover - directory may not be empty on failure
+            pass
+
+    return image
+
+
+def project_uvs_from_camera(
+    context: Context,
+    target_obj: Object,
+    camera_obj: Object,
+    uv_map_name: str,
+    clamp_uv: bool,
+) -> None:
+    """Project the object's UVs from the perspective of the supplied camera."""
+
+    if bpy is None or world_to_camera_view is None:  # pragma: no cover - Blender specific
+        return
+    if target_obj.type != 'MESH':
+        return
+
+    mesh = target_obj.data
+    uv_layer = mesh.uv_layers.get(uv_map_name)
+    if uv_layer is None:
+        uv_layer = mesh.uv_layers.new(name=uv_map_name)
+
+    scene = context.scene
+
+    for loop in mesh.loops:
+        vertex = mesh.vertices[loop.vertex_index]
+        world_coord = target_obj.matrix_world @ vertex.co
+        co_ndc = world_to_camera_view(scene, camera_obj, world_coord)
+        u = co_ndc.x
+        v = co_ndc.y
+        if clamp_uv:
+            u = min(max(u, 0.0), 1.0)
+            v = min(max(v, 0.0), 1.0)
+        uv_layer.data[loop.index].uv = (u, v)
+
+
+def _iter_visible_objects(context: Context) -> Iterable[Object]:
+    """Return the visible objects in the scene."""
+
+    for obj in context.scene.objects:
+        if obj.visible_get():
+            yield obj
+
+
+# -----------------------------------------------------------------------------
+# Property group definition
 
 
 class OrthoProjectSettings(PropertyGroup):
-    """Settings that control how the orthographic projection is calculated."""
+    """Settings controlling orthographic projection behaviour."""
 
-    use_selection: BoolProperty(
-        name="Use Selection",
-        description="Limit the projection bounds to the current selection",
-        default=True,
+    target_object: PointerProperty(
+        name="Target Mesh",
+        description="Mesh object to project from the active camera",
+        type=Object,
     )
 
-    use_active_camera: BoolProperty(
-        name="Use Active Camera",
-        description="Update the existing active camera when available",
-        default=True,
-    )
-
-    make_active_camera: BoolProperty(
-        name="Set As Active",
-        description="Assign the updated camera as the scene's active camera",
-        default=True,
-    )
-
-    camera_name: StringProperty(
-        name="Camera Name",
-        description="Name for a camera created by the operator",
-        default="HVE Ortho Camera",
-    )
-
-    axis: EnumProperty(
-        name="Axis",
-        description="Direction to look when creating the orthographic shot",
+    camera_source: EnumProperty(
+        name="Camera Source",
+        description="Choose which camera to render from",
         items=(
-            ("TOP", "Top (+Z)", "Look towards the negative Z axis"),
-            ("BOTTOM", "Bottom (-Z)", "Look towards the positive Z axis"),
-            ("FRONT", "Front (-Y)", "Look towards the positive Y axis"),
-            ("BACK", "Back (+Y)", "Look towards the negative Y axis"),
-            ("RIGHT", "Right (+X)", "Look towards the negative X axis"),
-            ("LEFT", "Left (-X)", "Look towards the positive X axis"),
+            ("SCENE", "Scene Camera", "Use the scene's active camera"),
+            ("ACTIVE", "Active Object", "Use the active object if it is a camera"),
+            ("NEW", "New Camera", "Create a new camera aligned to the viewport"),
         ),
-        default="TOP",
+        default="SCENE",
     )
 
-    margin: FloatProperty(
-        name="Margin",
-        description="Additional scale applied to the computed orthographic size",
-        default=0.1,
-        min=0.0,
-        soft_max=1.0,
+    render_engine: EnumProperty(
+        name="Render Engine",
+        description="Render engine used to produce the baked image",
+        items=engine_items,
     )
 
-    distance_multiplier: FloatProperty(
-        name="Distance",
-        description=(
-            "How far away from the bounding box to place the camera, "
-            "expressed as a multiple of the box size"
-        ),
-        default=1.5,
-        min=0.01,
+    image_size: IntVectorProperty(
+        name="Image Size",
+        description="Resolution of the generated orthographic render",
+        size=2,
+        default=(1024, 1024),
+        min=4,
+    )
+
+    uv_map_name: StringProperty(
+        name="UV Map",
+        description="Name of the UV map that receives the projection",
+        default="OrthoUV",
+    )
+
+    material_name: StringProperty(
+        name="Material",
+        description="Material to assign with the rendered image",
+        default="Ortho Projection",
+    )
+
+    force_ortho: BoolProperty(
+        name="Force Orthographic",
+        description="Ensure the camera is set to orthographic mode",
+        default=True,
+    )
+
+    scale_to_bounds: BoolProperty(
+        name="Fit To Bounds",
+        description="Scale and position the camera to enclose the mesh",
+        default=True,
+    )
+
+    clamp_uv: BoolProperty(
+        name="Clamp UV",
+        description="Clamp projected UV coordinates to the [0, 1] range",
+        default=True,
+    )
+
+    keep_new_as_scene_camera: BoolProperty(
+        name="Keep As Scene Camera",
+        description="Keep newly created cameras assigned as the scene camera",
+        default=False,
     )
 
     @classmethod
-    def register(cls) -> None:  # pragma: no cover - Blender registration
+    def register(cls) -> None:  # pragma: no cover - Blender registration hooks
         if bpy is None:
             return
         bpy.types.Scene.ortho_project_settings = PointerProperty(type=cls)
 
     @classmethod
-    def unregister(cls) -> None:  # pragma: no cover - Blender registration
+    def unregister(cls) -> None:  # pragma: no cover - Blender registration hooks
         if bpy is None:
             return
         if hasattr(bpy.types.Scene, "ortho_project_settings"):
             del bpy.types.Scene.ortho_project_settings
 
 
+# -----------------------------------------------------------------------------
+# Operator logic
+
+
+def _resolve_target_object(context: Context, settings: OrthoProjectSettings) -> Optional[Object]:
+    if settings.target_object is not None and settings.target_object.type == 'MESH':
+        return settings.target_object
+
+    active = context.view_layer.objects.active
+    if active is not None and active.type == 'MESH':
+        return active
+
+    for obj in _iter_visible_objects(context):
+        if obj.type == 'MESH':
+            return obj
+    return None
+
+
+def _resolve_camera(context: Context, settings: OrthoProjectSettings) -> Tuple[Optional[Object], bool]:
+    """Return a camera object and whether it was freshly created."""
+
+    if settings.camera_source == 'ACTIVE':
+        active = context.view_layer.objects.active
+        if active is not None and active.type == 'CAMERA':
+            return active, False
+
+    if settings.camera_source == 'NEW' or context.scene.camera is None:
+        camera_data = bpy.data.cameras.new(name="HVE Ortho Camera")
+        camera_obj = bpy.data.objects.new(camera_data.name, camera_data)
+        context.scene.collection.objects.link(camera_obj)
+        align_new_camera_to_active_view(context, camera_obj)
+        if settings.keep_new_as_scene_camera or context.scene.camera is None:
+            context.scene.camera = camera_obj
+        return camera_obj, True
+
+    return context.scene.camera, False
+
+
 class HVE_OT_project_ortho(Operator):
-    """Frame the chosen objects with an orthographic camera."""
+    """Project a mesh to an orthographic render and bake to a material."""
 
     bl_idname = "hve.project_ortho"
-    bl_label = "Update Ortho Camera"
-    bl_description = "Create or update an orthographic camera that frames the selection"
+    bl_label = "Project Ortho"
+    bl_description = "Render an orthographic view and project it to the mesh"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context: Context) -> bool:
-        return bpy is not None and context is not None and context.scene is not None
+        return bpy is not None and context.scene is not None
 
     def execute(self, context: Context):
-        if bpy is None:  # pragma: no cover - executed only outside Blender
+        if bpy is None:  # pragma: no cover - Blender specific
             return {'CANCELLED'}
 
         settings: OrthoProjectSettings = context.scene.ortho_project_settings
-        targets = _iter_target_objects(context, settings.use_selection)
-        if not targets:
-            self.report({'WARNING'}, "No valid objects to frame")
+
+        target_obj = _resolve_target_object(context, settings)
+        if target_obj is None:
+            self.report({'WARNING'}, "No mesh object available for projection")
             return {'CANCELLED'}
 
-        min_corner, max_corner = _calculate_world_bounds(targets)
-        camera_obj = _ensure_camera(context, settings)
-        _position_camera(
+        camera_obj, _ = _resolve_camera(context, settings)
+        if camera_obj is None:
+            self.report({'WARNING'}, "Unable to determine a camera for rendering")
+            return {'CANCELLED'}
+
+        if settings.force_ortho or settings.scale_to_bounds:
+            set_camera_ortho_and_fit(
+                camera_obj,
+                [target_obj],
+                force_ortho=settings.force_ortho,
+                scale_to_bounds=settings.scale_to_bounds,
+            )
+
+        image = safe_render_to_image(
+            context,
             camera_obj,
-            min_corner,
-            max_corner,
-            settings.axis,
-            settings.margin,
-            settings.distance_multiplier,
+            settings.render_engine,
+            settings.image_size,
         )
 
-        self.report({'INFO'}, f"Updated {camera_obj.name} for an orthographic shot")
+        project_uvs_from_camera(
+            context,
+            target_obj,
+            camera_obj,
+            settings.uv_map_name or "UVMap",
+            settings.clamp_uv,
+        )
+
+        self._ensure_material(target_obj, image, settings.material_name)
+
+        self.report({'INFO'}, f"Projected orthographic image onto {target_obj.name}")
         return {'FINISHED'}
+
+    def _ensure_material(self, target_obj: Object, image: Image, material_name: str) -> None:
+        material = bpy.data.materials.get(material_name)
+        if material is None:
+            material = bpy.data.materials.new(material_name)
+        material.use_nodes = True
+
+        node_tree = material.node_tree
+        nodes = node_tree.nodes
+        links = node_tree.links
+
+        output_node = nodes.get("Material Output")
+        if output_node is None:
+            output_node = nodes.new(type='ShaderNodeOutputMaterial')
+            output_node.location = (400, 0)
+
+        principled = None
+        for node in nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                principled = node
+                break
+        if principled is None:
+            principled = nodes.new(type='ShaderNodeBsdfPrincipled')
+            principled.location = (0, 0)
+
+        image_node = None
+        for node in nodes:
+            if node.type == 'TEX_IMAGE':
+                image_node = node
+                break
+        if image_node is None:
+            image_node = nodes.new(type='ShaderNodeTexImage')
+            image_node.location = (-300, 0)
+        image_node.image = image
+
+        # Ensure the node links exist.
+        def _has_link(output_socket, input_socket) -> bool:
+            return any(link.from_socket == output_socket and link.to_socket == input_socket for link in links)
+
+        if not _has_link(principled.outputs['BSDF'], output_node.inputs['Surface']):
+            links.new(principled.outputs['BSDF'], output_node.inputs['Surface'])
+
+        if not _has_link(image_node.outputs['Color'], principled.inputs['Base Color']):
+            links.new(image_node.outputs['Color'], principled.inputs['Base Color'])
+
+        if material.name not in [slot.material.name if slot.material else "" for slot in target_obj.material_slots]:
+            if target_obj.data.materials:
+                target_obj.data.materials[0] = material
+            else:
+                target_obj.data.materials.append(material)
+
+
+# -----------------------------------------------------------------------------
+# UI Panel
 
 
 class HVE_PT_ortho_projector(Panel):
@@ -282,26 +496,35 @@ class HVE_PT_ortho_projector(Panel):
         return bpy is not None and context.scene is not None
 
     def draw(self, context: Context) -> None:
-        if bpy is None:  # pragma: no cover - executed only outside Blender
+        if bpy is None:  # pragma: no cover - Blender specific
             return
 
         layout = self.layout
         settings: OrthoProjectSettings = context.scene.ortho_project_settings
 
-        col = layout.column(align=True)
-        col.prop(settings, "axis")
-        col.prop(settings, "margin")
-        col.prop(settings, "distance_multiplier")
+        box = layout.box()
+        box.label(text="Target")
+        box.prop(settings, "target_object")
 
-        layout.separator()
+        box = layout.box()
+        box.label(text="Camera")
+        box.prop(settings, "camera_source", text="Source")
+        if settings.camera_source == 'NEW':
+            box.prop(settings, "keep_new_as_scene_camera")
+        box.prop(settings, "force_ortho")
+        box.prop(settings, "scale_to_bounds")
 
-        col = layout.column(align=True)
-        col.prop(settings, "use_selection")
-        col.prop(settings, "use_active_camera")
-        col.prop(settings, "make_active_camera")
-        col.prop(settings, "camera_name")
+        box = layout.box()
+        box.label(text="Render")
+        box.prop(settings, "render_engine", text="Engine")
+        box.prop(settings, "image_size")
 
-        layout.separator()
+        box = layout.box()
+        box.label(text="UV & Material")
+        box.prop(settings, "uv_map_name")
+        box.prop(settings, "clamp_uv")
+        box.prop(settings, "material_name")
+
         layout.operator(HVE_OT_project_ortho.bl_idname, icon='CAMERA_DATA')
 
 
@@ -310,3 +533,4 @@ classes = (
     HVE_OT_project_ortho,
     HVE_PT_ortho_projector,
 )
+
