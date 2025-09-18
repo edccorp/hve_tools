@@ -438,8 +438,17 @@ def _gather_meshes(collection):
     return meshes
 
 
-def join_mesh_objects_per_vehicle(vehicle_names):
+def join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set=None):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
+
+    if imported_objects is None:
+        imported_objects = []
+
+    if imported_pointer_set is None:
+        imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
+    else:
+        imported_pointer_set = set(imported_pointer_set)
+
     for vehicle_name in vehicle_names:
         clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
         # Collect all mesh objects for this vehicle. Search for collections that
@@ -454,14 +463,17 @@ def join_mesh_objects_per_vehicle(vehicle_names):
         for col in body_mesh_collections:
             mesh_objects.extend(_gather_meshes(col))
 
+        mesh_objects = [
+            obj for obj in mesh_objects if obj.as_pointer() in imported_pointer_set
+        ]
+
         if not mesh_objects:
-            candidates = bpy.context.scene.objects
             mesh_objects = [
                 obj
-                for obj in candidates
-
+                for obj in imported_objects
                 if (
                     obj.type == "MESH"
+                    and obj.as_pointer() in imported_pointer_set
                     and belongs_to_vehicle(obj.name, clean_vehicle_name)
                     and not (
                         re.search(r"wheel", obj.name, re.IGNORECASE)
@@ -634,6 +646,7 @@ def import_fbx(context, fbx_file_path):
         # Determine which objects were added by the import
         post_import_objects = list(bpy.context.scene.objects)
         imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
+        imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
         imported_names = [obj.name for obj in imported_objects]
 
         # Initialize max frame variable
@@ -973,7 +986,7 @@ def import_fbx(context, fbx_file_path):
             target_collection.objects.link(obj)
                     
         # Join Mesh objects separately for each vehicle
-        join_mesh_objects_per_vehicle(vehicle_names)    
+        join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
 
         # Replace duplicate materials
         merge_duplicate_materials_per_vehicle(vehicle_names)
