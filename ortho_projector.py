@@ -378,9 +378,9 @@ class OBJECT_OT_ortho_project(bpy.types.Operator):
 # -------------------------------------------------------------------
 
 
-class VIEW3D_PT_ortho_projector(bpy.types.Panel):
+class HVE_PT_ortho_projector(bpy.types.Panel):
     bl_label = "Ortho Projector"
-    bl_idname = "VIEW3D_PT_ortho_projector"
+    bl_idname = "HVE_PT_ortho_projector"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Ortho Projector"
@@ -420,7 +420,7 @@ class VIEW3D_PT_ortho_projector(bpy.types.Panel):
 classes = (
     OrthoProjectSettings,
     OBJECT_OT_ortho_project,
-    VIEW3D_PT_ortho_projector,
+    HVE_PT_ortho_projector,
 )
 
 
