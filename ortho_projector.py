@@ -210,6 +210,16 @@ def project_uvs_from_camera(scene, obj, cam_obj, uv_map_name,
 
 
 class OrthoProjectSettings(bpy.types.PropertyGroup):
+    @classmethod
+    def register(cls):
+        if not hasattr(bpy.types.Scene, "ortho_project_settings"):
+            bpy.types.Scene.ortho_project_settings = bpy.props.PointerProperty(type=cls)
+
+    @classmethod
+    def unregister(cls):
+        if hasattr(bpy.types.Scene, "ortho_project_settings"):
+            del bpy.types.Scene.ortho_project_settings
+
     target_object: bpy.props.PointerProperty(
         name="Target Mesh",
         type=bpy.types.Object,
@@ -387,7 +397,12 @@ class HVE_PT_ortho_projector(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        s = context.scene.ortho_project_settings
+        s = getattr(context.scene, "ortho_project_settings", None)
+
+        if not s:
+            layout.label(text="Ortho Project settings unavailable.", icon='ERROR')
+            layout.label(text="Reload the add-on to continue.")
+            return
 
         col = layout.column(align=True)
         col.prop(s, "target_object")
@@ -427,11 +442,9 @@ classes = (
 def register():
     for c in classes:
         bpy.utils.register_class(c)
-    bpy.types.Scene.ortho_project_settings = bpy.props.PointerProperty(type=OrthoProjectSettings)
 
 
 def unregister():
-    del bpy.types.Scene.ortho_project_settings
     for c in reversed(classes):
         bpy.utils.unregister_class(c)
 
