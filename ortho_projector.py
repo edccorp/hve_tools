@@ -1,569 +1,439 @@
+
+"""
+Blender Ortho Projector add-on ported to match the provided reference script.
+"""
+
+bl_info = {
+    "name": "Ortho Projector",
+    "author": "ChatGPT",
+    "version": (1, 6, 0),
+    "blender": (4, 5, 0),
+    "location": "View3D > Sidebar > Ortho Projector",
+    "description": "Render from a camera and project the image onto mesh UVs (viewport-independent)",
+    "category": "UV",
+}
+
+import os
+import tempfile
+
 import bpy
-from mathutils import Vector
-from bpy.types import Operator, Panel, PropertyGroup
-from bpy.props import (
-    StringProperty,
-    BoolProperty,
-    IntProperty,
-    EnumProperty,
-    PointerProperty,
-)
-
-# -----------------------------------------------------------------------------
-# Helpers (kept simple to match the requested operator behaviour)
+from mathutils import Vector, Matrix
+from bpy_extras.object_utils import world_to_camera_view
 
 
-def get_view3d_override(context):
-    """Find a VIEW_3D + WINDOW region for operators that need UI context."""
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
+
+
+def engine_items(_self, _context):
+    """Dynamic engine list from RenderSettings enum (works with Eevee Next in 4.5)."""
+    try:
+        enum_items = bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items
+        supported = {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT', 'BLENDER_WORKBENCH'}
+        items = []
+        for e in enum_items:
+            if e.identifier in supported:
+                label = 'Eevee' if e.identifier.startswith('BLENDER_EEVEE') else e.name
+                items.append((e.identifier, label, ''))
+        if items:
+            return items
+    except Exception:
+        pass
+    return [('CYCLES', 'Cycles', '')]
+
+
+def normalize_engine(identifier: str) -> str:
+    """Map requested engine to one actually available in this Blender."""
+    try:
+        available = {e.identifier for e in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items}
+    except Exception:
+        available = {'CYCLES'}
+    eng = identifier if isinstance(identifier, str) else 'CYCLES'
+    if eng == 'BLENDER_EEVEE' and 'BLENDER_EEVEE' not in available and 'BLENDER_EEVEE_NEXT' in available:
+        eng = 'BLENDER_EEVEE_NEXT'
+    if eng not in available:
+        eng = 'CYCLES' if 'CYCLES' in available else next(iter(available))
+    return eng
+
+
+def find_view3d_rv3d(context):
+    """Return (window, area, region, rv3d) for a VIEW_3D WINDOW region, else (None, None, None, None)."""
     for win in context.window_manager.windows:
         screen = win.screen
         for area in screen.areas:
             if area.type == 'VIEW_3D':
                 for region in area.regions:
                     if region.type == 'WINDOW':
-                        return {
-                            "window": win,
-                            "screen": screen,
-                            "area": area,
-                            "region": region,
-                            "scene": context.scene,
-                            "blend_data": bpy.data,
-                        }
-    return None
+                        return win, area, region, area.spaces.active.region_3d
+    return None, None, None, None
 
 
-def bbox_world_corners(obj):
+def align_new_camera_to_active_view(context, cam_obj):
+    """
+    Align cam_obj to the current 3D View WITHOUT using operators:
+    cam.matrix_world = view_matrix.inverted()
+    If no VIEW_3D is available, aim from +Z world toward scene/mesh center.
+    """
+    win, area, region, rv3d = find_view3d_rv3d(context)
+    if rv3d:
+        # viewport view_matrix transforms from world to view; invert for camera world transform
+        cam_obj.matrix_world = rv3d.view_matrix.inverted()
+        return True
+    # Fallback: point from +Z toward scene origin
+    cam_obj.location = Vector((0, 0, 10))
+    cam_obj.rotation_euler = (0.0, 0.0, 0.0)
+    return False
+
+
+def set_camera_ortho_and_fit(obj, cam):
+    """Switch camera to ORTHO and fit ortho_scale to XY extent of obj."""
+    cam.data.type = 'ORTHO'
+    corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+    xs = [c.x for c in corners]
+    ys = [c.y for c in corners]
+    extent = max(max(xs) - min(xs), max(ys) - min(ys))
+    cam.data.ortho_scale = max(extent * 1.2, 0.001)
+
+
+def safe_render_to_image(scene, base_name="OrthoProject", size=2048):
+    """Render to a temp PNG, then load & pack it. Returns an Image datablock."""
+    tmp_dir = bpy.app.tempdir or tempfile.gettempdir()
+    tmp_path = os.path.join(tmp_dir, base_name + ".png")
+
+    # Save/restore render props
+    old_path = scene.render.filepath
+    old_fmt = scene.render.image_settings.file_format
+    old_rx = scene.render.resolution_x
+    old_ry = scene.render.resolution_y
+    old_rp = scene.render.resolution_percentage
+
+    # Square render
+    scene.render.resolution_x = size
+    scene.render.resolution_y = size
+    scene.render.resolution_percentage = 100
+
+    scene.render.image_settings.file_format = 'PNG'
+    scene.render.filepath = tmp_path
+    bpy.ops.render.render(write_still=True)
+
+    # Restore
+    scene.render.filepath = old_path
+    scene.render.image_settings.file_format = old_fmt
+    scene.render.resolution_x = old_rx
+    scene.render.resolution_y = old_ry
+    scene.render.resolution_percentage = old_rp
+
+    if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+        raise RuntimeError("Rendered file not found or empty.")
+
+    img = bpy.data.images.load(tmp_path)
+    try:
+        img.pack()
+    except Exception:
+        pass
+    return img
+
+
+def _mesh_poll(_self, obj):
+    return obj and obj.type == 'MESH'
+
+
+# -------------------------------------------------------------------
+# Core UV projection (no operators, no viewport dependency)
+# -------------------------------------------------------------------
+
+
+def project_uvs_from_camera(scene, obj, cam_obj, uv_map_name,
+                            scale_to_bounds=True, clamp_01=False):
+    """
+    For each loop on the mesh, compute UV by projecting the loop's vertex world position
+    into the camera's normalized frame with world_to_camera_view.
+    If scale_to_bounds=True, normalize UVs so the projected bbox of the mesh fills 0..1.
+    """
+    if obj.type != 'MESH' or cam_obj.type != 'CAMERA':
+        raise TypeError("project_uvs_from_camera: needs a mesh object and a camera object.")
+
+    # Ensure UV layer
+    uv_layer = obj.data.uv_layers.get(uv_map_name)
+    if not uv_layer:
+        uv_layer = obj.data.uv_layers.new(name=uv_map_name)
+    obj.data.uv_layers.active = uv_layer
+
     mw = obj.matrix_world
-    return [mw @ Vector(corner) for corner in obj.bound_box]
+    verts = obj.data.vertices
+    loops = obj.data.loops
+
+    # First pass: compute projected UVs per loop
+    uv_values = [None] * len(loops)
+    umin = vmin = float('inf')
+    umax = vmax = float('-inf')
+
+    for li, loop in enumerate(loops):
+        v = verts[loop.vertex_index]
+        world_co = mw @ v.co
+        uvw = world_to_camera_view(scene, cam_obj, world_co)  # (u,v,wdepth)
+        u, v = float(uvw.x), float(uvw.y)
+        uv_values[li] = (u, v)
+        if scale_to_bounds:
+            if u < umin:
+                umin = u
+            if v < vmin:
+                vmin = v
+            if u > umax:
+                umax = u
+            if v > vmax:
+                vmax = v
+
+    # Normalize to 0..1 based on projected bbox if requested
+    if scale_to_bounds:
+        du = max(umax - umin, 1e-8)
+        dv = max(vmax - vmin, 1e-8)
+        for li, (u, v) in enumerate(uv_values):
+            u = (u - umin) / du
+            v = (v - vmin) / dv
+            if clamp_01:
+                u = 0.0 if u < 0.0 else (1.0 if u > 1.0 else u)
+                v = 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+            uv_layer.data[li].uv = (u, v)
+    else:
+        for li, (u, v) in enumerate(uv_values):
+            if clamp_01:
+                u = 0.0 if u < 0.0 else (1.0 if u > 1.0 else u)
+                v = 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+            uv_layer.data[li].uv = (u, v)
 
 
-def approx_xy_extent(obj):
-    cs = bbox_world_corners(obj)
-    xs = [c.x for c in cs]
-    ys = [c.y for c in cs]
-    return max(max(xs) - min(xs), max(ys) - min(ys))
+# -------------------------------------------------------------------
+# Properties
+# -------------------------------------------------------------------
 
 
-# -----------------------------------------------------------------------------
-# Render engine helpers
-
-
-def _compute_render_engine_items():
-    render_engines = tuple(getattr(bpy.app, "render_engines", ()))
-
-    items = []
-
-    eevee_id = None
-    eevee_label = "Eevee"
-    if 'BLENDER_EEVEE_NEXT' in render_engines:
-        eevee_id = 'BLENDER_EEVEE_NEXT'
-        eevee_label = "Eevee Next"
-    elif 'BLENDER_EEVEE' in render_engines:
-        eevee_id = 'BLENDER_EEVEE'
-
-    if eevee_id:
-        items.append((eevee_id, eevee_label, ""))
-
-    if 'CYCLES' in render_engines:
-        items.append(('CYCLES', 'Cycles', ''))
-
-    if not items and render_engines:
-        # Fallback: expose whatever engines are available so the property remains usable
-        items = [(engine_id, engine_id.replace("_", " ").title(), "") for engine_id in render_engines]
-
-    if not items:
-        # Final fallback keeps registration safe even when Blender data is unavailable
-        items = [('BLENDER_EEVEE_NEXT', 'Eevee Next', ''), ('CYCLES', 'Cycles', '')]
-
-    return items
-
-
-def _render_engine_items(self, context):
-    return _compute_render_engine_items()
-
-
-def _default_render_engine():
-    items = _compute_render_engine_items()
-    return items[0][0] if items else 'BLENDER_EEVEE_NEXT'
-
-
-_DEFAULT_RENDER_ENGINE = _default_render_engine()
-
-
-def _normalize_render_engine(engine_id):
-    items = _compute_render_engine_items()
-    valid_ids = {item[0] for item in items}
-
-    if engine_id in valid_ids:
-        return engine_id
-
-    eevee_map = {
-        'BLENDER_EEVEE': 'BLENDER_EEVEE_NEXT',
-        'BLENDER_EEVEE_NEXT': 'BLENDER_EEVEE',
-    }
-
-    mapped = eevee_map.get(engine_id)
-    if mapped and mapped in valid_ids:
-        return mapped
-
-    return items[0][0] if items else engine_id
-
-
-# -----------------------------------------------------------------------------
-# Main operator (API and behaviour mirror the provided reference code)
-
-
-SETTINGS_PROP_NAMES = (
-    "camera_source",
-    "keep_new_as_scene_camera",
-    "source_mode",
-    "existing_image_name",
-    "render_engine",
-    "make_camera_ortho",
-    "image_size",
-    "uv_map_name",
-    "material_name",
-    "create_new_material",
-    "use_bounds",
-    "correct_aspect",
-    "scale_to_bounds",
-)
-
-
-def _copy_settings_to_target(settings, target):
-    for prop_name in SETTINGS_PROP_NAMES:
-        setattr(target, prop_name, getattr(settings, prop_name))
-
-
-class OrthoProjectorSettings(PropertyGroup):
-    camera_source: EnumProperty(
-        name="Camera Source",
+class OrthoProjectSettings(bpy.types.PropertyGroup):
+    target_object: bpy.props.PointerProperty(
+        name="Target Mesh",
+        type=bpy.types.Object,
+        poll=_mesh_poll
+    )
+    camera_source: bpy.props.EnumProperty(
+        name="Camera",
         items=[
-            ('SELECTED', "Use Selected Camera", "Use the active object (must be a Camera)"),
-            ('ACTIVE',   "Use Scene Active Camera", "Use scene.camera"),
-            ('NEW',      "Create New Camera", "Create a new camera aligned to current view"),
+            ('ACTIVE', "Scene Active", "Use scene.camera"),
+            ('SELECTED', "Selected Camera", "Use the active object (must be Camera)"),
+            ('NEW', "New Camera (from View)", "Create a new camera aligned to current 3D View"),
         ],
-        default='ACTIVE',
+        default='ACTIVE'
     )
-    keep_new_as_scene_camera: BoolProperty(
-        name="Keep New Camera As Scene Camera",
-        description="If creating a new camera, keep it as scene.camera after finishing",
-        default=False,
+    # When items is a function: default must be an integer index
+    render_engine: bpy.props.EnumProperty(
+        name="Engine",
+        items=engine_items,
+        default=0
     )
-
-    source_mode: EnumProperty(
-        name="Texture Source",
-        items=[
-            ('RENDER', "Render From Camera", "Render current camera view and use that image"),
-            ('IMAGE',  "Use Existing Image", "Use an existing image in bpy.data.images"),
-        ],
-        default='RENDER',
-    )
-    existing_image_name: StringProperty(
-        name="Existing Image",
-        description="Name of an existing image in bpy.data.images (if Source=IMAGE)",
-        default="",
+    image_size: bpy.props.IntProperty(name="Image Size", default=2048, min=64, max=16384)
+    uv_map_name: bpy.props.StringProperty(name="UV Map", default="OrthoProjUV")
+    material_name: bpy.props.StringProperty(name="Material", default="OrthoProj_MAT")
+    force_ortho: bpy.props.BoolProperty(name="Force Ortho", default=True)
+    scale_to_bounds: bpy.props.BoolProperty(name="Scale to Bounds", default=True)
+    clamp_uv: bpy.props.BoolProperty(name="Clamp UVs 0..1", default=False)
+    keep_new_as_scene_camera: bpy.props.BoolProperty(
+        name="Keep New Camera",
+        description="If a new camera is created, keep it as scene.camera after projection",
+        default=False
     )
 
-    render_engine: EnumProperty(
-        name="Render Engine",
-        items=_render_engine_items,
-        default=_DEFAULT_RENDER_ENGINE,
-    )
-    make_camera_ortho: BoolProperty(
-        name="Force Camera Orthographic",
-        default=True,
-    )
-    image_size: IntProperty(
-        name="Image Size",
-        description="Square size (px) for render or new image",
-        default=2048,
-        min=64,
-        max=16384,
-    )
 
-    uv_map_name: StringProperty(name="UV Map Name", default="OrthoProjUV")
-    material_name: StringProperty(name="Material Name", default="OrthoProj_MAT")
-    create_new_material: BoolProperty(name="Create/Assign Material", default=True)
-
-    use_bounds: BoolProperty(name="Project From View (Bounds)", default=True)
-    correct_aspect: BoolProperty(name="Correct Aspect", default=True)
-    scale_to_bounds: BoolProperty(name="Scale To Bounds", default=True)
+# -------------------------------------------------------------------
+# Operator
+# -------------------------------------------------------------------
 
 
-class OBJECT_OT_project_ortho_bake(Operator):
-    bl_idname = "object.project_ortho_bake"
-    bl_label = "Project Ortho Image to UV"
+class OBJECT_OT_ortho_project(bpy.types.Operator):
+    bl_idname = "object.ortho_project"
+    bl_label = "Execute Projection"
     bl_options = {'REGISTER', 'UNDO'}
 
-    # Camera selection exactly as requested
-    camera_source: EnumProperty(
-        name="Camera Source",
-        items=[
-            ('SELECTED', "Use Selected Camera", "Use the active object (must be a Camera)"),
-            ('ACTIVE',   "Use Scene Active Camera", "Use scene.camera"),
-            ('NEW',      "Create New Camera", "Create a new camera aligned to current view"),
-        ],
-        default='ACTIVE',
-    )
-    keep_new_as_scene_camera: BoolProperty(
-        name="Keep New Camera As Scene Camera",
-        description="If creating a new camera, keep it as scene.camera after finishing",
-        default=False,
-    )
-
-    # Texture source exactly as requested
-    source_mode: EnumProperty(
-        name="Texture Source",
-        items=[
-            ('RENDER', "Render From Camera", "Render current camera view and use that image"),
-            ('IMAGE',  "Use Existing Image", "Use an existing image in bpy.data.images"),
-        ],
-        default='RENDER',
-    )
-    existing_image_name: StringProperty(
-        name="Existing Image",
-        description="Name of an existing image in bpy.data.images (if Source=IMAGE)",
-        default="",
-    )
-
-    # Render controls
-    render_engine: EnumProperty(
-        name="Render Engine",
-        items=_render_engine_items,
-        default=_DEFAULT_RENDER_ENGINE,
-    )
-    make_camera_ortho: BoolProperty(
-        name="Force Camera Orthographic",
-        default=True,
-    )
-    image_size: IntProperty(
-        name="Image Size",
-        description="Square size (px) for render or new image",
-        default=2048,
-        min=64,
-        max=16384,
-    )
-
-    # UV & material
-    uv_map_name: StringProperty(name="UV Map Name", default="OrthoProjUV")
-    material_name: StringProperty(name="Material Name", default="OrthoProj_MAT")
-    create_new_material: BoolProperty(name="Create/Assign Material", default=True)
-
-    # Project From View options
-    use_bounds: BoolProperty(name="Project From View (Bounds)", default=True)
-    correct_aspect: BoolProperty(name="Correct Aspect", default=True)
-    scale_to_bounds: BoolProperty(name="Scale To Bounds", default=True)
-
-    use_scene_settings: BoolProperty(default=False, options={'HIDDEN'})
-
-    # ------------------------------------------------------------------
-    # Camera resolution helpers
-
-    def _resolve_camera(self, context, obj):
-        scene = context.scene
-        created_cam = None
-        previous_scene_cam = scene.camera
-
-        if self.camera_source == 'SELECTED':
-            sel = context.view_layer.objects.active
-            if not sel or sel.type != 'CAMERA':
-                self.report({'ERROR'}, "Active object must be a Camera when Camera Source = Use Selected Camera.")
-                return None, None
-            scene.camera = sel
-            return sel, previous_scene_cam
-
-        elif self.camera_source == 'ACTIVE':
-            if not scene.camera or scene.camera.type != 'CAMERA':
-                self.report({'ERROR'}, "Scene needs an active Camera (scene.camera).")
-                return None, None
-            return scene.camera, None
-
-        elif self.camera_source == 'NEW':
-            cam_data = bpy.data.cameras.new("OrthoProjCam")
-            created_cam = bpy.data.objects.new("OrthoProjCam", cam_data)
-            context.scene.collection.objects.link(created_cam)
-            scene.camera = created_cam
-
-            # Try to align the new camera to the current 3D view
-            override = get_view3d_override(context)
-            if override:
-                try:
-                    bpy.ops.view3d.view_camera(override)
-                    bpy.ops.view3d.camera_to_view(override)
-                except Exception:
-                    pass
-
-            # Fallback: position above target if alignment failed
-            if created_cam.matrix_world.translation.length == 0.0:
-                bb = bbox_world_corners(obj)
-                center = sum(bb, Vector((0, 0, 0))) / 8.0
-                created_cam.location = center + Vector((0, 0, 5.0))
-                created_cam.rotation_euler = (0.0, 0.0, 0.0)
-
-            return created_cam, previous_scene_cam
-
-        return None, None
-
-    # ------------------------------------------------------------------
-
-    def _apply_scene_settings(self, context):
-        if not self.use_scene_settings:
-            return
-
-        settings = getattr(context.scene, "ortho_projector_settings", None)
-        if settings is not None:
-            _copy_settings_to_target(settings, self)
-
     def execute(self, context):
-        self._apply_scene_settings(context)
-        obj = context.object
+        s = context.scene.ortho_project_settings
+
+        # Resolve target mesh
+        obj = s.target_object or context.object
         if not obj or obj.type != 'MESH':
-            self.report({'ERROR'}, "Select a mesh object.")
+            self.report({'ERROR'}, "Select a mesh or pick one in 'Target Mesh'.")
             return {'CANCELLED'}
 
-        scene = context.scene
+        # Ensure selectable/active
+        obj.hide_set(False)
+        obj.hide_viewport = False
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
 
         # Resolve camera
-        cam, prev_scene_cam = self._resolve_camera(context, obj)
-        if not cam:
+        scene = context.scene
+        cam_obj = None
+        prev_scene_cam = scene.camera
+
+        if s.camera_source == 'ACTIVE':
+            cam_obj = scene.camera
+            if not cam_obj or cam_obj.type != 'CAMERA':
+                self.report({'ERROR'}, "scene.camera must be a Camera.")
+                return {'CANCELLED'}
+
+        elif s.camera_source == 'SELECTED':
+            a = context.view_layer.objects.active
+            if not a or a.type != 'CAMERA':
+                self.report({'ERROR'}, "Active object must be a Camera when using 'Selected Camera'.")
+                return {'CANCELLED'}
+            cam_obj = a
+
+        elif s.camera_source == 'NEW':
+            bpy.ops.object.camera_add()
+            cam_obj = context.view_layer.objects.active
+            # Align to current viewport (matrix-level), so render truly matches the view
+            align_new_camera_to_active_view(context, cam_obj)
+
+        if not cam_obj:
+            self.report({'ERROR'}, "Could not resolve a camera.")
             return {'CANCELLED'}
 
-        # Ortho and framing
-        if self.make_camera_ortho:
-            cam.data.type = 'ORTHO'
+        # Force orthographic + fit to object (keeps alignment/rotation from above)
+        if s.force_ortho:
             try:
-                extent = max(approx_xy_extent(obj), 0.001)
-                cam.data.ortho_scale = extent * 1.2
+                set_camera_ortho_and_fit(obj, cam_obj)
             except Exception:
-                pass
+                cam_obj.data.type = 'ORTHO'
 
-        # Render settings
-        resolved_engine = _normalize_render_engine(self.render_engine)
-        scene.render.engine = resolved_engine
-        if self.render_engine != resolved_engine:
-            self.render_engine = resolved_engine
-        scene.render.resolution_x = self.image_size
-        scene.render.resolution_y = self.image_size
-        scene.render.resolution_percentage = 100
+        # Ensure the render uses THIS camera
+        scene.camera = cam_obj
 
-        # Ensure viewport is through chosen camera for 1:1 UV projection
-        override = get_view3d_override(context)
-        if override:
-            try:
-                bpy.ops.view3d.view_camera(override)
-            except Exception:
-                pass
-
-        # Source image
-        if self.source_mode == 'RENDER':
-            bpy.ops.render.render(write_still=False)
-            src_img = bpy.data.images.get("Render Result")
-            if not src_img:
-                self.report({'ERROR'}, "Couldn't get Render Result.")
-                return {'CANCELLED'}
-            baked_name = f"OrthoRender_{self.image_size:d}"
-            new_img = bpy.data.images.new(baked_name, width=self.image_size, height=self.image_size, alpha=True, float_buffer=False)
-            new_img.pixels = src_img.pixels[:]
-            src_img = new_img
-        else:
-            if not self.existing_image_name:
-                self.report({'ERROR'}, "Provide an existing image name or switch Source to Render.")
-                return {'CANCELLED'}
-            src_img = bpy.data.images.get(self.existing_image_name)
-            if not src_img:
-                self.report({'ERROR'}, f"Image '{self.existing_image_name}' not found.")
-                return {'CANCELLED'}
-
-        # UV setup
-        uv_layer = obj.data.uv_layers.get(self.uv_map_name)
-        if not uv_layer:
-            uv_layer = obj.data.uv_layers.new(name=self.uv_map_name)
-        obj.data.uv_layers.active = uv_layer
-
-        # Project From View
-        prev_mode = obj.mode
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type='FACE')
-        bpy.ops.mesh.select_all(action='SELECT')
-
+        # Render (to temp file), load image
+        scene.render.engine = normalize_engine(s.render_engine)
         try:
-            if override:
-                bpy.ops.uv.project_from_view(
-                    override,
-                    camera_bounds=self.use_bounds,
-                    correct_aspect=self.correct_aspect,
-                    scale_to_bounds=self.scale_to_bounds,
-                )
-            else:
-                bpy.ops.uv.project_from_view(
-                    camera_bounds=self.use_bounds,
-                    correct_aspect=self.correct_aspect,
-                    scale_to_bounds=self.scale_to_bounds,
-                )
+            img = safe_render_to_image(scene, base_name=s.material_name, size=s.image_size)
         except Exception as e:
-            bpy.ops.object.mode_set(mode=prev_mode)
-            self.report({'ERROR'}, f"Project From View failed: {e}")
+            self.report({'ERROR'}, f"Render failed: {e}")
             return {'CANCELLED'}
 
-        bpy.ops.object.mode_set(mode=prev_mode)
-
-        # Create/assign simple material
-        if self.create_new_material:
-            mat = bpy.data.materials.get(self.material_name)
-            if not mat:
-                mat = bpy.data.materials.new(self.material_name)
-                mat.use_nodes = True
-            nt = mat.node_tree
-            nodes = nt.nodes
-            links = nt.links
-
-            principled = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
-            if not principled:
-                principled = nodes.new("ShaderNodeBsdfPrincipled")
-                principled.location = (200, 0)
-            out = next((n for n in nodes if n.type == 'OUTPUT_MATERIAL'), None)
-            if not out:
-                out = nodes.new("ShaderNodeOutputMaterial")
-                out.location = (400, 0)
-
-            # remove previous labelled image nodes to avoid clutter
-            for n in [n for n in nodes if n.type == 'TEX_IMAGE' and n.label == "OrthoProjImage"]:
-                nodes.remove(n)
-
-            tex = nodes.new("ShaderNodeTexImage")
-            tex.label = "OrthoProjImage"
-            tex.image = src_img
-            tex.location = (-200, 0)
-
-            # ensure links
-            for l in list(principled.inputs['Base Color'].links):
-                links.remove(l)
-            links.new(tex.outputs['Color'], principled.inputs['Base Color'])
-            if not principled.outputs['BSDF'].links:
-                links.new(principled.outputs['BSDF'], out.inputs['Surface'])
-
-            # assign
-            if obj.data.materials:
-                if obj.active_material is None:
-                    obj.data.materials[0] = mat
-                else:
-                    obj.active_material = mat
-            else:
-                obj.data.materials.append(mat)
-
-        # Show the image in any open Image Editor
+        # Compute UVs directly from camera — no operators, no viewport dependency
         try:
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    for space in area.spaces:
-                        if space.type == 'IMAGE_EDITOR':
-                            space.image = src_img
-        except Exception:
-            pass
+            project_uvs_from_camera(
+                scene, obj, cam_obj, s.uv_map_name,
+                scale_to_bounds=s.scale_to_bounds,
+                clamp_01=s.clamp_uv
+            )
+        except Exception as e:
+            self.report({'ERROR'}, f"UV projection failed: {e}")
+            return {'CANCELLED'}
 
-        # Restore previous scene camera when needed
-        if prev_scene_cam and prev_scene_cam != cam:
-            if self.camera_source == 'NEW':
-                if not self.keep_new_as_scene_camera:
-                    context.scene.camera = prev_scene_cam
-            else:
-                context.scene.camera = prev_scene_cam
+        # Build/assign material with the rendered image
+        mat = bpy.data.materials.get(s.material_name)
+        if not mat:
+            mat = bpy.data.materials.new(s.material_name)
+            mat.use_nodes = True
+        nt = mat.node_tree
+        nodes = nt.nodes
+        links = nt.links
 
-        self.report({'INFO'}, f"Projected image '{src_img.name}' with camera '{cam.name}' onto UV '{self.uv_map_name}'.")
+        principled = nodes.get("Principled BSDF")
+        if not principled:
+            principled = nodes.new("ShaderNodeBsdfPrincipled")
+            principled.location = (200, 0)
+        out = next((n for n in nodes if n.type == 'OUTPUT_MATERIAL'), None)
+        if not out:
+            out = nodes.new("ShaderNodeOutputMaterial")
+            out.location = (400, 0)
+
+        # Remove prior labeled image nodes
+        for n in [n for n in nodes if n.type == 'TEX_IMAGE' and n.label == "OrthoProjImage"]:
+            nodes.remove(n)
+
+        tex = nodes.new("ShaderNodeTexImage")
+        tex.label = "OrthoProjImage"
+        tex.image = img
+        tex.location = (-200, 0)
+
+        # Rewire
+        for l in list(principled.inputs['Base Color'].links):
+            links.remove(l)
+        links.new(tex.outputs['Color'], principled.inputs['Base Color'])
+        if not principled.outputs['BSDF'].links:
+            links.new(principled.outputs['BSDF'], out.inputs['Surface'])
+
+        if obj.data.materials:
+            obj.active_material = mat
+            obj.data.materials[0] = mat
+        else:
+            obj.data.materials.append(mat)
+
+        # Restore previous scene camera if we created a new one and the user doesn't want to keep it
+        if s.camera_source == 'NEW' and prev_scene_cam and not s.keep_new_as_scene_camera:
+            scene.camera = prev_scene_cam
+
+        self.report({'INFO'}, f"Rendered from '{cam_obj.name}' and projected onto '{obj.name}'.")
         return {'FINISHED'}
 
 
-# -----------------------------------------------------------------------------
-# Panel (reintroduces UI controls for the operator)
+# -------------------------------------------------------------------
+# Panel
+# -------------------------------------------------------------------
 
 
-class HVE_PT_ortho_projector(Panel):
-    bl_idname = "HVE_PT_ortho_projector"
+class VIEW3D_PT_ortho_projector(bpy.types.Panel):
     bl_label = "Ortho Projector"
+    bl_idname = "VIEW3D_PT_ortho_projector"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "HVE"
+    bl_category = "Ortho Projector"
 
     def draw(self, context):
         layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
+        s = context.scene.ortho_project_settings
 
-        layout.label(text="Project mesh UVs from an orthographic view")
+        col = layout.column(align=True)
+        col.prop(s, "target_object")
+        col.prop(s, "camera_source")
+        if s.camera_source == 'NEW':
+            col.prop(s, "keep_new_as_scene_camera")
+        col.separator()
 
-        scene = context.scene
-        settings = getattr(scene, "ortho_projector_settings", None)
+        col.prop(s, "force_ortho")
+        col.prop(s, "render_engine")
+        col.prop(s, "image_size")
+        col.separator()
 
-        op_props = layout.operator(
-            OBJECT_OT_project_ortho_bake.bl_idname,
-            text="Project Ortho Image",
-            icon='IMAGE_DATA',
-        )
-        if settings is not None:
-            op_props.use_scene_settings = True
-            _copy_settings_to_target(settings, op_props)
+        col.prop(s, "uv_map_name")
+        col.prop(s, "material_name")
+        col.separator()
 
-        if settings is None:
-            return
+        col.prop(s, "scale_to_bounds")
+        col.prop(s, "clamp_uv")
+        col.separator()
 
-        box = layout.box()
-        box.label(text="Camera")
-        box.prop(settings, "camera_source")
-        box.prop(settings, "keep_new_as_scene_camera")
-
-        box = layout.box()
-        box.label(text="Image Source")
-        box.prop(settings, "source_mode")
-        box.prop(settings, "existing_image_name")
-
-        box = layout.box()
-        box.label(text="Render")
-        box.prop(settings, "render_engine")
-        box.prop(settings, "make_camera_ortho")
-        box.prop(settings, "image_size")
-
-        box = layout.box()
-        box.label(text="UV & Material")
-        box.prop(settings, "uv_map_name")
-        box.prop(settings, "material_name")
-        box.prop(settings, "create_new_material")
-
-        box = layout.box()
-        box.label(text="Project From View")
-        box.prop(settings, "use_bounds")
-        box.prop(settings, "correct_aspect")
-        box.prop(settings, "scale_to_bounds")
+        col.operator("object.ortho_project", icon='RENDER_STILL', text="Execute Projection")
 
 
-# -----------------------------------------------------------------------------
-# Simple menu hook (kept identical to the provided reference)
-
-
-def menu_func(self, context):
-    self.layout.operator(OBJECT_OT_project_ortho_bake.bl_idname, icon='RENDER_STILL')
+# -------------------------------------------------------------------
+# Register
+# -------------------------------------------------------------------
 
 
 classes = (
-    OrthoProjectorSettings,
-    OBJECT_OT_project_ortho_bake,
-    HVE_PT_ortho_projector,
+    OrthoProjectSettings,
+    OBJECT_OT_ortho_project,
+    VIEW3D_PT_ortho_projector,
 )
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.types.Scene.ortho_projector_settings = PointerProperty(type=OrthoProjectorSettings)
-    bpy.types.VIEW3D_MT_object.append(menu_func)
+    for c in classes:
+        bpy.utils.register_class(c)
+    bpy.types.Scene.ortho_project_settings = bpy.props.PointerProperty(type=OrthoProjectSettings)
 
 
 def unregister():
-    bpy.types.VIEW3D_MT_object.remove(menu_func)
-    if hasattr(bpy.types.Scene, "ortho_projector_settings"):
-        del bpy.types.Scene.ortho_projector_settings
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.ortho_project_settings
+    for c in reversed(classes):
+        bpy.utils.unregister_class(c)
 
 
 if __name__ == "__main__":
