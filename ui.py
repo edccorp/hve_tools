@@ -444,13 +444,13 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     def draw(self, context):
         scene = context.scene        
         anim_settings = scene.anim_settings  # Access property group
-        target_obj = anim_settings.anim_object
+        target_obj = anim_settings.edr_anim_object
 
         l = self.layout
         c = l.column()
         c.label(text="CSV Format: Time,Speed,YawRate")
-        c.label(text="Select Object:")
-        c.prop(scene.anim_settings, "anim_object")
+        c.label(text="Select EDR Object:")
+        c.prop(scene.anim_settings, "edr_anim_object")
 
         c.label(text="Frame Rate:")
         c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field
@@ -492,12 +492,12 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
-        target_obj = scene.anim_settings.anim_object
+        target_obj = scene.anim_settings.motion_anim_object
         l = self.layout
         c = l.column()
         c.label(text="CSV Format: Time,X,Y,Z,Roll,Pitch,Yaw")
-        c.label(text="Select Object:")
-        c.prop(scene.anim_settings, "anim_object")
+        c.label(text="Select Motion Object:")
+        c.prop(scene.anim_settings, "motion_anim_object")
 
         c.label(text="Frame Rate:")
         c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field

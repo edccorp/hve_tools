@@ -33,10 +33,10 @@ def get_speed_conversion_factor():
 
 
 def get_target_object(context):
-    """Get the object selected in animation settings, falling back to active object."""
+    """Get the EDR target object, falling back to legacy target then active object."""
     anim_settings = getattr(context.scene, "anim_settings", None)
-    if anim_settings and anim_settings.anim_object:
-        return anim_settings.anim_object
+    if anim_settings and anim_settings.edr_anim_object:
+        return anim_settings.edr_anim_object
     return context.object
 
 

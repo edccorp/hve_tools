@@ -29,10 +29,10 @@ class MotionDataEntry(PropertyGroup):
 
 
 def get_target_object(context):
-    """Get the object selected in animation settings, falling back to active object."""
+    """Get the motion target object, falling back to legacy target then active object."""
     anim_settings = getattr(context.scene, "anim_settings", None)
-    if anim_settings and anim_settings.anim_object:
-        return anim_settings.anim_object
+    if anim_settings and anim_settings.motion_anim_object:
+        return anim_settings.motion_anim_object
     return context.object
 
 
