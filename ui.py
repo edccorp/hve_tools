@@ -444,7 +444,7 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     def draw(self, context):
         scene = context.scene        
         anim_settings = scene.anim_settings  # Access property group
-        anim_settings.sync_edr_input_mode_from_target()
+        anim_settings.sync_edr_settings_from_target()
         target_obj = anim_settings.edr_anim_object
         edr_mode = anim_settings.edr_input_mode
 
@@ -458,10 +458,21 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
         c.prop(scene.anim_settings, "edr_anim_object")
         c.prop(scene.anim_settings, "edr_input_mode")
 
-        if edr_mode == 'STEERING_WHEEL_ANGLE':
+        needs_wheelbase = (edr_mode == 'STEERING_WHEEL_ANGLE') or scene.anim_settings.edr_use_slip_estimate
+        if needs_wheelbase:
             c.prop(scene.anim_settings, "edr_wheelbase")
+
+        if edr_mode == 'STEERING_WHEEL_ANGLE':
             c.prop(scene.anim_settings, "edr_steering_gear_ratio")
             c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
+
+        c.prop(scene.anim_settings, "edr_use_slip_estimate")
+        if scene.anim_settings.edr_use_slip_estimate:
+            c.prop(scene.anim_settings, "edr_slip_gain")
+            c.prop(scene.anim_settings, "edr_slip_max_deg")
+            c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
+            if edr_mode == 'STEERING_WHEEL_ANGLE':
+                c.label(text="(yaw_rate is first estimated from steering)")
 
         c.label(text="Frame Rate:")
         c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field

@@ -48,6 +48,12 @@ def get_vehicle_path_entries(context):
     return target_obj, target_obj.vehicle_path_entries
 
 
+def get_object_edr_setting(obj, scene_settings, setting_name, object_preference_name):
+    """Read per-object EDR setting, falling back to scene setting."""
+    if obj is not None and object_preference_name in obj:
+        return obj[object_preference_name]
+    return getattr(scene_settings, setting_name)
+
 
 ### Property Group for Time-Speed-Yaw Rate Table ###
 class VehiclePathEntry(PropertyGroup):
@@ -66,7 +72,23 @@ def estimate_yaw_rate_from_steering(speed_mps, steering_wheel_angle_deg, wheelba
     return (speed_mps / wheelbase_m) * np.tan(road_wheel_angle_rad)
 
 
-def integrate_step(x, y, psi, v, r, dt, a, rdot):
+def estimate_slip_angle_from_yaw_rate(speed_mps, yaw_rate_rps, wheelbase_m, slip_gain=1.0, max_abs_deg=12.0):
+    """Estimate an apparent body slip angle beta (rad) from speed and yaw-rate only.
+
+    This uses the no-slip front-wheel angle proxy ``atan(L*r/v)`` and scales it
+    by ``slip_gain``. Result is clipped to ``max_abs_deg`` for stability.
+    """
+    if wheelbase_m <= 0:
+        raise ValueError("Wheelbase must be greater than zero.")
+
+    speed_safe = np.maximum(np.asarray(speed_mps, dtype=float), 0.1)
+    yaw_rate = np.asarray(yaw_rate_rps, dtype=float)
+    beta = float(slip_gain) * np.arctan((wheelbase_m * yaw_rate) / speed_safe)
+    beta_max = np.deg2rad(max_abs_deg)
+    return np.clip(beta, -beta_max, beta_max)
+
+
+def integrate_step(x, y, psi, v, r, dt, a, rdot, beta_prev=0.0, beta_next=0.0):
     """Integrate one frame/sub-step from instantaneous samples.
 
     Inputs ``v`` and ``r`` are interpreted as *instantaneous* values at the
@@ -91,8 +113,10 @@ def integrate_step(x, y, psi, v, r, dt, a, rdot):
 
     # Midpoint heading gives second-order-consistent translation direction.
     psi_mid = 0.5 * (psi_prev + psi_next)
-    x_next = x + ds * float(np.cos(psi_mid))
-    y_next = y + ds * float(np.sin(psi_mid))
+    beta_mid = 0.5 * (beta_prev + beta_next)
+    velocity_heading = psi_mid + beta_mid
+    x_next = x + ds * float(np.cos(velocity_heading))
+    y_next = y + ds * float(np.sin(velocity_heading))
 
     return x_next, y_next, psi_next, v_next, r_next
 
@@ -217,10 +241,18 @@ def animate_vehicle(self, context):
     time = np.array([e.time for e in entries], dtype=float)
     speed = np.array([e.speed for e in entries], dtype=float) * speed_conversion          # m/s
 
-    mode = scene.anim_settings.edr_input_mode
+    settings = scene.anim_settings
+    mode = settings.edr_input_mode
+    wheelbase = float(get_object_edr_setting(obj, settings, "edr_wheelbase", "edr_wheelbase_preference"))
+    steering_gear_ratio = float(get_object_edr_setting(
+        obj, settings, "edr_steering_gear_ratio", "edr_steering_gear_ratio_preference"
+    ))
+    use_slip = bool(get_object_edr_setting(obj, settings, "edr_use_slip_estimate", "edr_use_slip_estimate_preference"))
+    slip_gain = float(get_object_edr_setting(obj, settings, "edr_slip_gain", "edr_slip_gain_preference"))
+    slip_max_deg = float(get_object_edr_setting(obj, settings, "edr_slip_max_deg", "edr_slip_max_deg_preference"))
+
+    steering_wheel_angle = None
     if mode == 'STEERING_WHEEL_ANGLE':
-        wheelbase = scene.anim_settings.edr_wheelbase
-        steering_gear_ratio = scene.anim_settings.edr_steering_gear_ratio
         if wheelbase <= 0 or steering_gear_ratio <= 0:
             self.report({"WARNING"}, "Wheelbase and steering gear ratio must be greater than 0.")
             return
@@ -228,6 +260,10 @@ def animate_vehicle(self, context):
         yaw_rate = estimate_yaw_rate_from_steering(speed, steering_wheel_angle, wheelbase, steering_gear_ratio)
     else:
         yaw_rate = np.array([e.yaw_rate for e in entries], dtype=float) * DEG_TO_RAD      # rad/s
+
+    if use_slip and wheelbase <= 0:
+        self.report({"WARNING"}, "Wheelbase must be greater than 0 when slip estimate is enabled.")
+        return
 
     # Basic validation / sorting (optional but safer): ensure strictly nondecreasing time
     # If you prefer to enforce sort, uncomment this block.
@@ -292,9 +328,26 @@ def animate_vehicle(self, context):
         a = (float(speed[i + 1]) - float(speed[i])) / dt_interval
         rdot = (float(yaw_rate[i + 1]) - float(yaw_rate[i])) / dt_interval
 
+        if use_slip:
+            # Use a single beta model for both input modes based on yaw-rate.
+            # In steering mode, yaw_rate was already estimated from steering above.
+            beta_start = float(estimate_slip_angle_from_yaw_rate(
+                speed[i], yaw_rate[i], wheelbase, slip_gain, slip_max_deg
+            ))
+            beta_end = float(estimate_slip_angle_from_yaw_rate(
+                speed[i + 1], yaw_rate[i + 1], wheelbase, slip_gain, slip_max_deg
+            ))
+        else:
+            beta_start = 0.0
+            beta_end = 0.0
+
         # Step through frames within this segment
         for step in range(num_steps):
-            x, y, psi, v, r = integrate_step(x, y, psi, v, r, dt, a, rdot)
+            frac_prev = step / num_steps
+            frac_next = (step + 1) / num_steps
+            beta_prev = beta_start + (beta_end - beta_start) * frac_prev
+            beta_next = beta_start + (beta_end - beta_start) * frac_next
+            x, y, psi, v, r = integrate_step(x, y, psi, v, r, dt, a, rdot, beta_prev, beta_next)
 
             frame_num = f0 + step + 1  # +1 so motion begins after initial key at frame 0
             obj.location = (x, y, 0.0)
