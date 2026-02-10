@@ -445,12 +445,22 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
         scene = context.scene        
         anim_settings = scene.anim_settings  # Access property group
         target_obj = anim_settings.edr_anim_object
+        edr_mode = anim_settings.edr_input_mode
 
         l = self.layout
         c = l.column()
-        c.label(text="CSV Format: Time,Speed,YawRate")
+        if edr_mode == 'STEERING_WHEEL_ANGLE':
+            c.label(text="CSV Format: Time,Speed,SteeringWheelAngle")
+        else:
+            c.label(text="CSV Format: Time,Speed,YawRate")
         c.label(text="Select EDR Object:")
         c.prop(scene.anim_settings, "edr_anim_object")
+        c.prop(scene.anim_settings, "edr_input_mode")
+
+        if edr_mode == 'STEERING_WHEEL_ANGLE':
+            c.prop(scene.anim_settings, "edr_wheelbase")
+            c.prop(scene.anim_settings, "edr_steering_gear_ratio")
+            c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
 
         c.label(text="Frame Rate:")
         c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field
@@ -472,7 +482,10 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
             row = c.row()
             row.prop(entry, "time", text="Time (s)")
             row.prop(entry, "speed", text="Speed")
-            row.prop(entry, "yaw_rate", text="Yaw Rate (°/s)")
+            if edr_mode == 'STEERING_WHEEL_ANGLE':
+                row.prop(entry, "steering_wheel_angle", text="Steering Wheel Angle (°)")
+            else:
+                row.prop(entry, "yaw_rate", text="Yaw Rate (°/s)")
 
         c.operator("object.add_path_entry", text="Add Entry")
         c.operator("object.remove_path_entry", text="Remove Last Entry")
