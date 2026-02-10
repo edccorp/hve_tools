@@ -32,6 +32,24 @@ def get_speed_conversion_factor():
         return 1.0  # No conversion needed
 
 
+def get_target_object(context):
+    """Get the EDR target object, falling back to legacy target then active object."""
+    anim_settings = getattr(context.scene, "anim_settings", None)
+    if anim_settings and anim_settings.edr_anim_object:
+        return anim_settings.edr_anim_object
+    if anim_settings and anim_settings.anim_object:
+        return anim_settings.anim_object
+    return context.object
+
+
+def get_vehicle_path_entries(context):
+    """Get path entries bound to the selected target object."""
+    target_obj = get_target_object(context)
+    if not target_obj:
+        return None, None
+    return target_obj, target_obj.vehicle_path_entries
+
+
 
 ### Property Group for Time-Speed-Yaw Rate Table ###
 class VehiclePathEntry(PropertyGroup):
@@ -43,9 +61,14 @@ class VehiclePathEntry(PropertyGroup):
 def import_csv_data(filepath, context):
     """Reads CSV and fills the Speed-Time table"""
     scene = context.scene
+    target_obj, entries = get_vehicle_path_entries(context)
+
+    if target_obj is None:
+        print("ERROR: No target object selected for EDR import.")
+        return
 
     # Clear existing entries
-    scene.vehicle_path_entries.clear()
+    entries.clear()
 
     times = []
 
@@ -76,7 +99,7 @@ def import_csv_data(filepath, context):
 
     # Populate scene properties
     for time_val, speed_val, yaw_rate_val in valid_rows:
-        entry = scene.vehicle_path_entries.add()
+        entry = entries.add()
         entry.time = time_val
         entry.speed = speed_val
         entry.yaw_rate = yaw_rate_val
@@ -85,12 +108,12 @@ def import_csv_data(filepath, context):
     # Offset time if the first entry is negative
     min_time = min(times)
     if min_time < 0:
-        for entry in scene.vehicle_path_entries:
+        for entry in entries:
             entry.time -= min_time  # Shift all times so the first is at 0
 
     # Adjust Blender timeline to start at frame 0
     context.scene.frame_start = 0
-    print(f"Imported {len(scene.vehicle_path_entries)} entries from {filepath}, time offset applied: {min_time:.2f}, timeline set to start at frame 0.")
+    print(f"Imported {len(entries)} entries to '{target_obj.name}' from {filepath}, time offset applied: {min_time:.2f}, timeline set to start at frame 0.")
 
 def update_motion_path(obj):
     """Check if an object has a motion path and update it."""
@@ -110,8 +133,7 @@ def animate_vehicle(self, context):
     - Uses per-interval linear change (constant accel and constant yaw-accel per segment)
     - Distributes dt exactly across frames in each segment to avoid drift from rounding
     """
-    entries = context.scene.vehicle_path_entries
-    obj = context.object
+    obj, entries = get_vehicle_path_entries(context)
     scene = context.scene
 
     if not obj:
@@ -243,6 +265,10 @@ class HVE_OT_ImportCSV(Operator, ImportHelper):
     filter_glob: StringProperty(default="*.csv", options={'HIDDEN'})
 
     def execute(self, context):
+        if get_target_object(context) is None:
+            self.report({'WARNING'}, "Select a target object before importing CSV data.")
+            return {'CANCELLED'}
+
         import_csv_data(self.filepath, context)
         return {'FINISHED'}
 
@@ -253,7 +279,12 @@ class HVE_OT_AddPathEntry(Operator):
     bl_label = "Add Entry"
 
     def execute(self, context):
-        context.scene.vehicle_path_entries.add()
+        target_obj = get_target_object(context)
+        if target_obj is None:
+            self.report({'WARNING'}, "Select a target object before adding entries.")
+            return {'CANCELLED'}
+
+        target_obj.vehicle_path_entries.add()
         return {"FINISHED"}
 
 ### Operator to Remove the Last Row ###
@@ -263,8 +294,13 @@ class HVE_OT_RemovePathEntry(Operator):
     bl_label = "Remove Last Entry"
 
     def execute(self, context):
-        if len(context.scene.vehicle_path_entries) > 0:
-            context.scene.vehicle_path_entries.remove(len(context.scene.vehicle_path_entries) - 1)
+        target_obj = get_target_object(context)
+        if target_obj is None:
+            self.report({'WARNING'}, "Select a target object before removing entries.")
+            return {'CANCELLED'}
+
+        if len(target_obj.vehicle_path_entries) > 0:
+            target_obj.vehicle_path_entries.remove(len(target_obj.vehicle_path_entries) - 1)
         return {"FINISHED"}
         
 ### Operator to Remove the Last Row ###
@@ -274,9 +310,14 @@ class HVE_OT_RemoveAllPathEntries(Operator):
     bl_label = "Remove All Entries"
 
     def execute(self, context):
-        if len(context.scene.vehicle_path_entries) > 0:
+        target_obj = get_target_object(context)
+        if target_obj is None:
+            self.report({'WARNING'}, "Select a target object before removing entries.")
+            return {'CANCELLED'}
+
+        if len(target_obj.vehicle_path_entries) > 0:
             # Clear existing entries
-            context.scene.vehicle_path_entries.clear()
+            target_obj.vehicle_path_entries.clear()
         return {"FINISHED"}
         
 
@@ -301,5 +342,3 @@ classes = [
     HVE_OT_AnimateVehicle,
 
 ]
-
-

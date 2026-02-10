@@ -14,6 +14,52 @@ import os
 from mathutils import Euler
 from math import radians
 from bpy_extras.io_utils import ImportHelper
+from bpy.props import FloatProperty
+from bpy.types import PropertyGroup
+
+
+class MotionDataEntry(PropertyGroup):
+    time: FloatProperty(name="Time (s)", default=0.0)
+    x: FloatProperty(name="X", default=0.0)
+    y: FloatProperty(name="Y", default=0.0)
+    z: FloatProperty(name="Z", default=0.0)
+    roll: FloatProperty(name="Roll", default=0.0)
+    pitch: FloatProperty(name="Pitch", default=0.0)
+    yaw: FloatProperty(name="Yaw", default=0.0)
+
+
+def get_target_object(context):
+    """Get the motion target object, falling back to legacy target then active object."""
+    anim_settings = getattr(context.scene, "anim_settings", None)
+    if anim_settings and anim_settings.motion_anim_object:
+        return anim_settings.motion_anim_object
+    if anim_settings and anim_settings.anim_object:
+        return anim_settings.anim_object
+    return context.object
+
+
+def import_motion_data_entries(filepath, target_obj):
+    """Import motion rows into the target object's stored entry collection."""
+    target_obj.motion_data_entries.clear()
+
+    with open(filepath, 'r', newline='') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if len(row) < 7:
+                continue
+            try:
+                time, x, y, z, roll, pitch, yaw = map(float, row)
+            except ValueError:
+                continue
+
+            entry = target_obj.motion_data_entries.add()
+            entry.time = time
+            entry.x = x
+            entry.y = y
+            entry.z = z
+            entry.roll = roll
+            entry.pitch = pitch
+            entry.yaw = yaw
 
 
 
@@ -27,7 +73,7 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
     filter_glob: bpy.props.StringProperty(default="*.csv", options={'HIDDEN'}, maxlen=255)
 
     def execute(self, context):
-        obj = context.scene.anim_settings.anim_object
+        obj = get_target_object(context)
         frame_rate = context.scene.render.fps  # User-defined FPS (synced with scene)
         unit_system = context.scene.unit_settings.system  # Get unit system (Metric or Imperial)
         scene = context.scene
@@ -50,6 +96,9 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
         # Clear existing animation data
         obj.animation_data_clear()
 
+        # Persist imported source data on the animated object
+        import_motion_data_entries(filepath, obj)
+
         # Set unit conversion factor
         unit_scale = 1.0
         if unit_system == 'METRIC':
@@ -62,28 +111,18 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
 
         frames = []
 
-        # Read CSV data
-        with open(filepath, 'r', newline='') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                if len(row) < 7:
-                    continue
-                try:
-                    time, x, y, z, roll, pitch, yaw = map(float, row)
-                    x *= unit_scale
-                    y *= unit_scale
-                    z *= unit_scale
-                    frame = int(time * frame_rate)
-                    frames.append(frame)
+        for entry in obj.motion_data_entries:
+            x = entry.x * unit_scale
+            y = entry.y * unit_scale
+            z = entry.z * unit_scale
+            frame = int(entry.time * frame_rate)
+            frames.append(frame)
 
-                    obj.location = (x, y, z)
-                    obj.keyframe_insert(data_path="location", frame=frame)
+            obj.location = (x, y, z)
+            obj.keyframe_insert(data_path="location", frame=frame)
 
-                    obj.rotation_euler = Euler((radians(roll), radians(pitch), radians(yaw)), 'XYZ')
-                    obj.keyframe_insert(data_path="rotation_euler", frame=frame)
-
-                except ValueError:
-                    continue
+            obj.rotation_euler = Euler((radians(entry.roll), radians(entry.pitch), radians(entry.yaw)), 'XYZ')
+            obj.keyframe_insert(data_path="rotation_euler", frame=frame)
 
         if frames:
             # 🔹 Apply the selected extrapolation mode
@@ -108,8 +147,7 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
 
 ### Registering Add-on ###
 classes = [
+    MotionDataEntry,
     ImportCSVAnimationOperator,
 
 ]
-
-

@@ -112,7 +112,19 @@ class AnimationSettings(PropertyGroup):
     anim_object: PointerProperty(
         name="Target Object",
         type=bpy.types.Object,
-        description="Select the object to animate"
+        description="Legacy shared target object (kept for compatibility)"
+    )
+
+    edr_anim_object: PointerProperty(
+        name="EDR Target Object",
+        type=bpy.types.Object,
+        description="Select the object to animate with EDR data"
+    )
+
+    motion_anim_object: PointerProperty(
+        name="Motion Target Object",
+        type=bpy.types.Object,
+        description="Select the object to animate with motion CSV data"
     )
 
     anim_fps: IntProperty(
