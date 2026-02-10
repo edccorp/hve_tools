@@ -65,13 +65,15 @@ try:
             min=0.001,
         )
 
-        bpy.types.Scene.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
+        bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
+        bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
 
         ui.update_panel_bl_category(None, bpy.context)
 
     def unregister():
         del bpy.types.Scene.scale_target_distance
-        del bpy.types.Scene.vehicle_path_entries
+        del bpy.types.Object.motion_data_entries
+        del bpy.types.Object.vehicle_path_entries
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
 
@@ -93,4 +95,3 @@ if __name__ == "__main__":
     register()
 
 print("HVE Tools successfully (re)loaded")
-
