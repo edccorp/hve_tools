@@ -104,10 +104,16 @@ def update_motion_path(obj):
 
 
 def animate_vehicle(self, context):
-    """Processes UI Table Data and Animates the Selected Object Using Acceleration"""
+    """Animates selected object from time/speed/yaw-rate samples (quick estimate).
+    - Integrates yaw_rate -> heading
+    - Integrates speed -> forward distance -> x/y
+    - Uses per-interval linear change (constant accel and constant yaw-accel per segment)
+    - Distributes dt exactly across frames in each segment to avoid drift from rounding
+    """
     entries = context.scene.vehicle_path_entries
-    obj = context.object  # Get selected object
+    obj = context.object
     scene = context.scene
+
     if not obj:
         self.report({"WARNING"}, "No object selected! Please select an object to animate.")
         return
@@ -116,72 +122,117 @@ def animate_vehicle(self, context):
         self.report({"WARNING"}, "At least two data points are required.")
         return
 
+    # Extract arrays
     speed_conversion = get_speed_conversion_factor()
+    time = np.array([e.time for e in entries], dtype=float)
+    speed = np.array([e.speed for e in entries], dtype=float) * speed_conversion          # m/s
+    yaw_rate = np.array([e.yaw_rate for e in entries], dtype=float) * DEG_TO_RAD          # rad/s
 
-    # Clear previous animation keyframes
+    # Basic validation / sorting (optional but safer): ensure strictly nondecreasing time
+    # If you prefer to enforce sort, uncomment this block.
+    # idx = np.argsort(time)
+    # time, speed, yaw_rate = time[idx], speed[idx], yaw_rate[idx]
+
+    # Guard against bad time data
+    if np.any(~np.isfinite(time)) or np.any(~np.isfinite(speed)) or np.any(~np.isfinite(yaw_rate)):
+        self.report({"WARNING"}, "Non-finite values found in table (NaN/Inf).")
+        return
+
+    # Clear previous animation
     obj.animation_data_clear()
 
+    fps = scene.render.fps
 
-    # Extract values from UI table
-    time = np.array([entry.time for entry in entries])
-    speed = np.array([entry.speed * speed_conversion for entry in entries])
-    yaw_rate = np.array([entry.yaw_rate * DEG_TO_RAD for entry in entries])   # Convert degrees to radians
+    # Initial pose
+    x0, y0, z0 = obj.location
+    psi0 = obj.rotation_euler.z
 
-    # Compute time steps (dt) and acceleration
-    dt = np.diff(time, prepend=time[0])
-    acceleration = np.zeros_like(speed)
-    yaw_rate_dot = np.zeros_like(yaw_rate)
-    
-    for i in range(1, len(speed)):
-        acceleration[i-1] = (speed[i] - speed[i - 1]) / dt[i] if dt[i] > 0 else 0
+    x = float(x0)
+    y = float(y0)
+    psi = float(psi0)
 
-    for i in range(1, len(yaw_rate)):
-        yaw_rate_dot[i-1] = (yaw_rate[i] - yaw_rate[i-1]) / dt[i] if dt[i] > 0 else 0
-    
-    # Get the object's initial position and rotation
-    x0, y0, z0 = obj.location  # Initial position
-    heading0 = obj.rotation_euler.z  # Initial Z rotation (yaw angle)
-    
-    # Initialize position tracking
-    x = [x0]
-    y = [y0]
-    heading = [heading0]
-    current_speed = speed[0]
-    current_yaw_rate = yaw_rate[0]  # Initialize yaw rate properly
-
-    fps = context.scene.render.fps
-    
-    # 🔹 **Set Initial Keyframe (First Frame)**
-    obj.location = (x0, y0, 0)  # Set object initial position
-    obj.rotation_euler.z = heading0  # Set object initial rotation
+    # Keyframe initial pose at frame 0
+    obj.location = (x, y, 0.0)
+    obj.rotation_euler.z = psi
     obj.keyframe_insert(data_path="location", frame=0)
     obj.keyframe_insert(data_path="rotation_euler", frame=0)
-    
-    # Apply animation keyframes for every frame
+
+    # Helper: map seconds -> frame index (keep consistent)
+    def t_to_frame(tsec: float) -> int:
+        # frame 0 corresponds to t=0
+        return int(round(tsec * fps))
+
+    last_keyed_frame = 0
+
+    # Integrate segment-by-segment
     for i in range(len(time) - 1):
-        start_frame = int(time[i] * fps)+1
-        end_frame = int(time[i + 1] * fps) + 1
-        num_frames = end_frame - start_frame
+        t0 = float(time[i])
+        t1 = float(time[i + 1])
+        dt_interval = t1 - t0
+        if dt_interval <= 0:
+            # Skip non-forward intervals
+            continue
 
-        for frame in range(num_frames):
-            dt_frame = 1.0 / fps  # Time step per frame
-            current_speed += acceleration[i] * dt_frame  # Update speed
-            current_yaw_rate += yaw_rate_dot[i] *dt_frame #Update yaw rate
-            heading.append(heading[-1] + current_yaw_rate * dt_frame)  # Update heading
-            
-            x.append(x[-1] + current_speed * np.cos(heading[-1]) * dt_frame + 0.5 * acceleration[i] * dt_frame**2)
-            y.append(y[-1] + current_speed * np.sin(heading[-1]) * dt_frame + 0.5 * acceleration[i] * dt_frame**2)
+        # Frames spanning this interval
+        f0 = t_to_frame(t0)
+        f1 = t_to_frame(t1)
 
-            obj.location = (x[-1], y[-1], 0)  # Set object position
-            obj.keyframe_insert(data_path="location", frame=start_frame + frame)
+        # Ensure at least 1 step so something happens even for tiny dt
+        num_steps = max(f1 - f0, 1)
 
-            obj.rotation_euler.z = heading[-1]  # Rotate object
-            obj.keyframe_insert(data_path="rotation_euler", frame=start_frame + frame)
-        # Adjust end frame if last animated frame is beyond the current scene frame_end
+        # Distribute dt exactly across steps to match the interval duration
+        dt = dt_interval / num_steps
+
+        # Snap to the sample values at the start of the segment
+        v = float(speed[i])
+        r = float(yaw_rate[i])
+
+        # Per-interval constant rates (linear interpolation of v and r over the segment)
+        a = (float(speed[i + 1]) - float(speed[i])) / dt_interval
+        rdot = (float(yaw_rate[i + 1]) - float(yaw_rate[i])) / dt_interval
+
+        # Step through frames within this segment
+        for step in range(num_steps):
+            # 2nd-order yaw integration with constant rdot
+            r_prev = r
+            psi = psi + r_prev * dt + 0.5 * rdot * dt * dt
+            r = r_prev + rdot * dt
+
+            # 2nd-order speed integration with constant a
+            v_prev = v
+            ds = v_prev * dt + 0.5 * a * dt * dt
+            v = v_prev + a * dt
+
+            # Project to world X/Y
+            x += ds * float(np.cos(psi))
+            y += ds * float(np.sin(psi))
+
+            frame_num = f0 + step + 1  # +1 so motion begins after initial key at frame 0
+            obj.location = (x, y, 0.0)
+            obj.rotation_euler.z = psi
+            obj.keyframe_insert(data_path="location", frame=frame_num)
+            obj.keyframe_insert(data_path="rotation_euler", frame=frame_num)
+
+            last_keyed_frame = max(last_keyed_frame, frame_num)
+
+        # Optional: update motion path after each segment (can be slow on large data)
         update_motion_path(obj)
-        if end_frame > scene.frame_end:
-            scene.frame_end = end_frame
-    print(f"Animation created with {len(time)} keyframes!")
+
+    # Ensure a key at the final sample time (exact end)
+    final_frame = t_to_frame(float(time[-1]))
+    # If final_frame is behind last keyed because of rounding, keep last_keyed_frame
+    final_frame = max(final_frame, last_keyed_frame)
+
+    obj.location = (x, y, 0.0)
+    obj.rotation_euler.z = psi
+    obj.keyframe_insert(data_path="location", frame=final_frame)
+    obj.keyframe_insert(data_path="rotation_euler", frame=final_frame)
+
+    # Extend timeline if needed
+    if final_frame > scene.frame_end:
+        scene.frame_end = final_frame
+
+    print(f"Animation created from {len(time)} samples, last frame: {final_frame}")
 
 class HVE_OT_ImportCSV(Operator, ImportHelper):
     """Import CSV with Time, Speed, and Yaw Rate"""

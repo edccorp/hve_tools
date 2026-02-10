@@ -950,7 +950,9 @@ def import_fbx(context, fbx_file_path):
                 existing_collection = object_collections.get(obj.as_pointer())
                 if existing_collection and existing_collection != fbx_collection:
                     continue
-
+                # Don't let a vehicle "claim" wheel-related helpers from other vehicles
+                if not belongs_to_vehicle(obj.name, clean_vehicle_name):
+                    continue
                 if is_wheel_object(obj):
                     assign_objects_to_subcollection(wheels_collection_name, fbx_collection, obj)
                     object_collections[obj.as_pointer()] = wheels_collection
