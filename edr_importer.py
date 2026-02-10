@@ -54,6 +54,16 @@ class VehiclePathEntry(PropertyGroup):
     time: FloatProperty(name="Time (s)", default=0.0)
     speed: FloatProperty(name="Speed", default=10.0, description="Speed (m/s or mph, based on unit system)")
     yaw_rate: FloatProperty(name="Yaw Rate (deg/s)", default=0.0)
+    steering_wheel_angle: FloatProperty(name="Steering Wheel Angle (deg)", default=0.0)
+
+
+def estimate_yaw_rate_from_steering(speed_mps, steering_wheel_angle_deg, wheelbase_m, steering_gear_ratio):
+    """Estimate yaw rate (rad/s) using bicycle model and steering wheel angle."""
+    if wheelbase_m <= 0 or steering_gear_ratio <= 0:
+        raise ValueError("Wheelbase and steering gear ratio must be greater than zero.")
+
+    road_wheel_angle_rad = np.deg2rad(steering_wheel_angle_deg / steering_gear_ratio)
+    return (speed_mps / wheelbase_m) * np.tan(road_wheel_angle_rad)
 
 
 def import_csv_data(filepath, context):
@@ -69,6 +79,7 @@ def import_csv_data(filepath, context):
     entries.clear()
 
     times = []
+    mode = scene.anim_settings.edr_input_mode
 
     # Read CSV file without relying on headers
     with open(filepath, newline='') as csvfile:
@@ -83,9 +94,9 @@ def import_csv_data(filepath, context):
                 # Attempt to parse the first three columns as floats
                 time_val = float(row[0])
                 speed_val = float(row[1])
-                yaw_rate_val = float(row[2])
+                third_col_val = float(row[2])
 
-                valid_rows.append((time_val, speed_val, yaw_rate_val))
+                valid_rows.append((time_val, speed_val, third_col_val))
             except ValueError:
                 # Skip any row that can't be converted to numbers
                 continue
@@ -96,11 +107,16 @@ def import_csv_data(filepath, context):
         return
 
     # Populate scene properties
-    for time_val, speed_val, yaw_rate_val in valid_rows:
+    for time_val, speed_val, third_col_val in valid_rows:
         entry = entries.add()
         entry.time = time_val
         entry.speed = speed_val
-        entry.yaw_rate = yaw_rate_val
+        if mode == 'STEERING_WHEEL_ANGLE':
+            entry.steering_wheel_angle = third_col_val
+            entry.yaw_rate = 0.0
+        else:
+            entry.yaw_rate = third_col_val
+            entry.steering_wheel_angle = 0.0
         times.append(time_val)
 
     # Offset time if the first entry is negative
@@ -169,7 +185,18 @@ def animate_vehicle(self, context):
     speed_conversion = get_speed_conversion_factor()
     time = np.array([e.time for e in entries], dtype=float)
     speed = np.array([e.speed for e in entries], dtype=float) * speed_conversion          # m/s
-    yaw_rate = np.array([e.yaw_rate for e in entries], dtype=float) * DEG_TO_RAD          # rad/s
+
+    mode = scene.anim_settings.edr_input_mode
+    if mode == 'STEERING_WHEEL_ANGLE':
+        wheelbase = scene.anim_settings.edr_wheelbase
+        steering_gear_ratio = scene.anim_settings.edr_steering_gear_ratio
+        if wheelbase <= 0 or steering_gear_ratio <= 0:
+            self.report({"WARNING"}, "Wheelbase and steering gear ratio must be greater than 0.")
+            return
+        steering_wheel_angle = np.array([e.steering_wheel_angle for e in entries], dtype=float)
+        yaw_rate = estimate_yaw_rate_from_steering(speed, steering_wheel_angle, wheelbase, steering_gear_ratio)
+    else:
+        yaw_rate = np.array([e.yaw_rate for e in entries], dtype=float) * DEG_TO_RAD      # rad/s
 
     # Basic validation / sorting (optional but safer): ensure strictly nondecreasing time
     # If you prefer to enforce sort, uncomment this block.
