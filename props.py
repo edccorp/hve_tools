@@ -114,8 +114,8 @@ class AnimationSettings(PropertyGroup):
         """Ensures that FPS in the scene updates when anim_fps is changed"""
         context.scene.render.fps = self.anim_fps
 
-    def update_edr_anim_object(self, context):
-        """Load per-object EDR mode when target object changes."""
+    def sync_edr_input_mode_from_target(self):
+        """Load per-object EDR mode for the currently selected EDR target."""
         target = self.edr_anim_object
         if not target:
             return
@@ -124,6 +124,10 @@ class AnimationSettings(PropertyGroup):
         valid_modes = {item[0] for item in self.EDR_INPUT_MODE_ITEMS}
         if stored_mode in valid_modes and self.edr_input_mode != stored_mode:
             self.edr_input_mode = stored_mode
+
+    def update_edr_anim_object(self, context):
+        """Load per-object EDR mode when target object changes."""
+        self.sync_edr_input_mode_from_target()
 
     def update_edr_input_mode(self, context):
         """Persist selected EDR input mode onto the active EDR target object."""

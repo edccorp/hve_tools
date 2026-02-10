@@ -444,6 +444,7 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     def draw(self, context):
         scene = context.scene        
         anim_settings = scene.anim_settings  # Access property group
+        anim_settings.sync_edr_input_mode_from_target()
         target_obj = anim_settings.edr_anim_object
         edr_mode = anim_settings.edr_input_mode
 
