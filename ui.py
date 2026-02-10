@@ -463,6 +463,16 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
             c.prop(scene.anim_settings, "edr_steering_gear_ratio")
             c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
 
+        c.prop(scene.anim_settings, "edr_use_slip_estimate")
+        if scene.anim_settings.edr_use_slip_estimate:
+            c.prop(scene.anim_settings, "edr_wheelbase")
+            c.prop(scene.anim_settings, "edr_slip_gain")
+            c.prop(scene.anim_settings, "edr_slip_max_deg")
+            if edr_mode == 'YAW_RATE':
+                c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
+            else:
+                c.label(text="beta ≈ gain * (steering_wheel_angle / steering_gear_ratio)")
+
         c.label(text="Frame Rate:")
         c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field
 
