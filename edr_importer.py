@@ -66,6 +66,37 @@ def estimate_yaw_rate_from_steering(speed_mps, steering_wheel_angle_deg, wheelba
     return (speed_mps / wheelbase_m) * np.tan(road_wheel_angle_rad)
 
 
+def integrate_step(x, y, psi, v, r, dt, a, rdot):
+    """Integrate one frame/sub-step from instantaneous samples.
+
+    Inputs ``v`` and ``r`` are interpreted as *instantaneous* values at the
+    start of the step. Under the per-segment linear interpolation assumption:
+    - speed uses constant acceleration ``a``
+    - yaw-rate uses constant ``rdot``
+
+    This means step-end instantaneous values are ``v_next`` and ``r_next`` and
+    the integrated heading and distance over ``dt`` are trapezoidal integrals of
+    those endpoint rates.
+    """
+    psi_prev = psi
+    v_prev = v
+    r_prev = r
+
+    v_next = v_prev + a * dt
+    r_next = r_prev + rdot * dt
+
+    # Integrals of linearly varying instantaneous signals on [t, t + dt].
+    psi_next = psi_prev + 0.5 * (r_prev + r_next) * dt
+    ds = 0.5 * (v_prev + v_next) * dt
+
+    # Midpoint heading gives second-order-consistent translation direction.
+    psi_mid = 0.5 * (psi_prev + psi_next)
+    x_next = x + ds * float(np.cos(psi_mid))
+    y_next = y + ds * float(np.sin(psi_mid))
+
+    return x_next, y_next, psi_next, v_next, r_next
+
+
 def import_csv_data(filepath, context):
     """Reads CSV and fills the Speed-Time table"""
     scene = context.scene
@@ -263,19 +294,7 @@ def animate_vehicle(self, context):
 
         # Step through frames within this segment
         for step in range(num_steps):
-            # 2nd-order yaw integration with constant rdot
-            r_prev = r
-            psi = psi + r_prev * dt + 0.5 * rdot * dt * dt
-            r = r_prev + rdot * dt
-
-            # 2nd-order speed integration with constant a
-            v_prev = v
-            ds = v_prev * dt + 0.5 * a * dt * dt
-            v = v_prev + a * dt
-
-            # Project to world X/Y
-            x += ds * float(np.cos(psi))
-            y += ds * float(np.sin(psi))
+            x, y, psi, v, r = integrate_step(x, y, psi, v, r, dt, a, rdot)
 
             frame_num = f0 + step + 1  # +1 so motion begins after initial key at frame 0
             obj.location = (x, y, 0.0)
