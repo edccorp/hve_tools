@@ -145,6 +145,33 @@ class AnimationSettings(PropertyGroup):
         default='LINEAR'  # Default selection
     )
 
+    edr_input_mode: EnumProperty(
+        name="EDR Input Mode",
+        description="Choose whether the third EDR column is yaw rate or steering wheel angle",
+        items=[
+            ('YAW_RATE', "Yaw Rate", "Time, Speed, Yaw Rate (deg/s)"),
+            ('STEERING_WHEEL_ANGLE', "Steering Wheel Angle", "Time, Speed, Steering Wheel Angle (deg)"),
+        ],
+        default='YAW_RATE'
+    )
+
+    edr_wheelbase: FloatProperty(
+        name="Wheelbase",
+        description="Wheelbase used to estimate yaw rate from steering wheel angle",
+        default=2.8,
+        min=0.001,
+        soft_max=10.0,
+        unit='LENGTH'
+    )
+
+    edr_steering_gear_ratio: FloatProperty(
+        name="Steering Gear Ratio",
+        description="Steering wheel angle to road wheel angle ratio",
+        default=16.0,
+        min=0.001,
+        soft_max=30.0
+    )
+
 
 # Store all classes in a list for batch registration
        
