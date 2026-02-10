@@ -37,8 +37,6 @@ def get_target_object(context):
     anim_settings = getattr(context.scene, "anim_settings", None)
     if anim_settings and anim_settings.edr_anim_object:
         return anim_settings.edr_anim_object
-    if anim_settings and anim_settings.anim_object:
-        return anim_settings.anim_object
     return context.object
 
 
@@ -342,3 +340,4 @@ classes = [
     HVE_OT_AnimateVehicle,
 
 ]
+

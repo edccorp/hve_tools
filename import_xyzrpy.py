@@ -33,8 +33,6 @@ def get_target_object(context):
     anim_settings = getattr(context.scene, "anim_settings", None)
     if anim_settings and anim_settings.motion_anim_object:
         return anim_settings.motion_anim_object
-    if anim_settings and anim_settings.anim_object:
-        return anim_settings.anim_object
     return context.object
 
 
