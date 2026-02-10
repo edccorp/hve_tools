@@ -442,6 +442,7 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     def draw(self, context):
         scene = context.scene        
         anim_settings = scene.anim_settings  # Access property group
+        target_obj = anim_settings.anim_object
 
         l = self.layout
         c = l.column()
@@ -457,7 +458,15 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
         c.operator("object.import_csv", text="Import CSV")
         c.separator()
         c.operator("object.animate_vehicle", text="Animate Object")
-        for i, entry in enumerate(context.scene.vehicle_path_entries):
+
+        if target_obj:
+            c.label(text=f"Entries for: {target_obj.name}")
+            entries = target_obj.vehicle_path_entries
+        else:
+            c.label(text="No target object selected")
+            entries = []
+
+        for i, entry in enumerate(entries):
             row = c.row()
             row.prop(entry, "time", text="Time (s)")
             row.prop(entry, "speed", text="Speed")
