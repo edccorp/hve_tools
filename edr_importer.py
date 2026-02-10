@@ -67,18 +67,29 @@ def estimate_yaw_rate_from_steering(speed_mps, steering_wheel_angle_deg, wheelba
 
 
 def integrate_step(x, y, psi, v, r, dt, a, rdot):
-    """Integrate one constant-(a, rdot) time step.
+    """Integrate one frame/sub-step from instantaneous samples.
 
-    Uses midpoint heading for the translation update so distance integration and
-    heading integration remain second-order consistent.
+    Inputs ``v`` and ``r`` are interpreted as *instantaneous* values at the
+    start of the step. Under the per-segment linear interpolation assumption:
+    - speed uses constant acceleration ``a``
+    - yaw-rate uses constant ``rdot``
+
+    This means step-end instantaneous values are ``v_next`` and ``r_next`` and
+    the integrated heading and distance over ``dt`` are trapezoidal integrals of
+    those endpoint rates.
     """
     psi_prev = psi
-    psi_next = psi_prev + r * dt + 0.5 * rdot * dt * dt
-    r_next = r + rdot * dt
+    v_prev = v
+    r_prev = r
 
-    ds = v * dt + 0.5 * a * dt * dt
-    v_next = v + a * dt
+    v_next = v_prev + a * dt
+    r_next = r_prev + rdot * dt
 
+    # Integrals of linearly varying instantaneous signals on [t, t + dt].
+    psi_next = psi_prev + 0.5 * (r_prev + r_next) * dt
+    ds = 0.5 * (v_prev + v_next) * dt
+
+    # Midpoint heading gives second-order-consistent translation direction.
     psi_mid = 0.5 * (psi_prev + psi_next)
     x_next = x + ds * float(np.cos(psi_mid))
     y_next = y + ds * float(np.sin(psi_mid))
