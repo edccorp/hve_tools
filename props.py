@@ -105,9 +105,33 @@ class HVE_env_props(PropertyGroup):
 
 class AnimationSettings(PropertyGroup):
     """Property group for CSV Animation settings"""
+    EDR_INPUT_MODE_ITEMS = [
+        ('YAW_RATE', "Yaw Rate", "Time, Speed, Yaw Rate (deg/s)"),
+        ('STEERING_WHEEL_ANGLE', "Steering Wheel Angle", "Time, Speed, Steering Wheel Angle (deg)"),
+    ]
+
     def update_fps(self, context):
         """Ensures that FPS in the scene updates when anim_fps is changed"""
         context.scene.render.fps = self.anim_fps
+
+    def update_edr_anim_object(self, context):
+        """Load per-object EDR mode when target object changes."""
+        target = self.edr_anim_object
+        if not target:
+            return
+
+        stored_mode = getattr(target, "edr_input_mode_preference", None)
+        valid_modes = {item[0] for item in self.EDR_INPUT_MODE_ITEMS}
+        if stored_mode in valid_modes and self.edr_input_mode != stored_mode:
+            self.edr_input_mode = stored_mode
+
+    def update_edr_input_mode(self, context):
+        """Persist selected EDR input mode onto the active EDR target object."""
+        target = self.edr_anim_object
+        if not target:
+            return
+
+        target.edr_input_mode_preference = self.edr_input_mode
 
     anim_object: PointerProperty(
         name="Target Object",
@@ -118,7 +142,8 @@ class AnimationSettings(PropertyGroup):
     edr_anim_object: PointerProperty(
         name="EDR Target Object",
         type=bpy.types.Object,
-        description="Select the object to animate with EDR data"
+        description="Select the object to animate with EDR data",
+        update=update_edr_anim_object,
     )
 
     motion_anim_object: PointerProperty(
@@ -148,11 +173,9 @@ class AnimationSettings(PropertyGroup):
     edr_input_mode: EnumProperty(
         name="EDR Input Mode",
         description="Choose whether the third EDR column is yaw rate or steering wheel angle",
-        items=[
-            ('YAW_RATE', "Yaw Rate", "Time, Speed, Yaw Rate (deg/s)"),
-            ('STEERING_WHEEL_ANGLE', "Steering Wheel Angle", "Time, Speed, Steering Wheel Angle (deg)"),
-        ],
-        default='YAW_RATE'
+        items=EDR_INPUT_MODE_ITEMS,
+        default='YAW_RATE',
+        update=update_edr_input_mode,
     )
 
     edr_wheelbase: FloatProperty(

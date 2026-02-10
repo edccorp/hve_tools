@@ -67,11 +67,18 @@ try:
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
+        bpy.types.Object.edr_input_mode_preference = EnumProperty(
+            name="EDR Input Mode Preference",
+            description="Stores which EDR input mode this object uses",
+            items=props.AnimationSettings.EDR_INPUT_MODE_ITEMS,
+            default='YAW_RATE',
+        )
 
         ui.update_panel_bl_category(None, bpy.context)
 
     def unregister():
         del bpy.types.Scene.scale_target_distance
+        del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
         for cls in reversed(classes):
