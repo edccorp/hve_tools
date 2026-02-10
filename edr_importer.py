@@ -66,6 +66,26 @@ def estimate_yaw_rate_from_steering(speed_mps, steering_wheel_angle_deg, wheelba
     return (speed_mps / wheelbase_m) * np.tan(road_wheel_angle_rad)
 
 
+def integrate_step(x, y, psi, v, r, dt, a, rdot):
+    """Integrate one constant-(a, rdot) time step.
+
+    Uses midpoint heading for the translation update so distance integration and
+    heading integration remain second-order consistent.
+    """
+    psi_prev = psi
+    psi_next = psi_prev + r * dt + 0.5 * rdot * dt * dt
+    r_next = r + rdot * dt
+
+    ds = v * dt + 0.5 * a * dt * dt
+    v_next = v + a * dt
+
+    psi_mid = 0.5 * (psi_prev + psi_next)
+    x_next = x + ds * float(np.cos(psi_mid))
+    y_next = y + ds * float(np.sin(psi_mid))
+
+    return x_next, y_next, psi_next, v_next, r_next
+
+
 def import_csv_data(filepath, context):
     """Reads CSV and fills the Speed-Time table"""
     scene = context.scene
@@ -263,19 +283,7 @@ def animate_vehicle(self, context):
 
         # Step through frames within this segment
         for step in range(num_steps):
-            # 2nd-order yaw integration with constant rdot
-            r_prev = r
-            psi = psi + r_prev * dt + 0.5 * rdot * dt * dt
-            r = r_prev + rdot * dt
-
-            # 2nd-order speed integration with constant a
-            v_prev = v
-            ds = v_prev * dt + 0.5 * a * dt * dt
-            v = v_prev + a * dt
-
-            # Project to world X/Y
-            x += ds * float(np.cos(psi))
-            y += ds * float(np.sin(psi))
+            x, y, psi, v, r = integrate_step(x, y, psi, v, r, dt, a, rdot)
 
             frame_num = f0 + step + 1  # +1 so motion begins after initial key at frame 0
             obj.location = (x, y, 0.0)
