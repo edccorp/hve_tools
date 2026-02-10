@@ -389,6 +389,7 @@ class HVE_PT_variableoutput_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
+        target_obj = scene.anim_settings.anim_object
         l = self.layout
         c = l.column()
         
@@ -408,6 +409,7 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
 
     def draw(self, context):
         scene = context.scene
+        target_obj = scene.anim_settings.anim_object
         l = self.layout
         c = l.column()
 
@@ -490,6 +492,7 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
+        target_obj = scene.anim_settings.anim_object
         l = self.layout
         c = l.column()
         c.label(text="CSV Format: Time,X,Y,Z,Roll,Pitch,Yaw")
@@ -502,6 +505,10 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
         c.prop(scene.anim_settings, "extrapolation_mode")  # 🔹 User selects extrapolation type
 
         c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
+        if target_obj:
+            c.label(text=f"Stored rows for {target_obj.name}: {len(target_obj.motion_data_entries)}")
+        else:
+            c.label(text="No target object selected")
         c.operator("import_anim.csv", text="Import and Animate Object", icon='IMPORT')
         
 class HVE_PT_motion_paths(HVE_PT_mechanist_base):
