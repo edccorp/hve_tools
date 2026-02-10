@@ -60,6 +60,27 @@ def import_motion_data_entries(filepath, target_obj):
             entry.yaw = yaw
 
 
+def ensure_origin_parent_empty(obj, context):
+    """Create an origin empty and parent the object only if it has no existing parent."""
+    if obj.parent is not None:
+        return
+
+    empty_name = f"{obj.name}_origin"
+    parent_empty = bpy.data.objects.get(empty_name)
+
+    if parent_empty is None:
+        parent_empty = bpy.data.objects.new(empty_name, None)
+        parent_empty.empty_display_type = 'PLAIN_AXES'
+        context.collection.objects.link(parent_empty)
+
+    parent_empty.location = (0.0, 0.0, 0.0)
+    parent_empty.rotation_euler = (0.0, 0.0, 0.0)
+    parent_empty.scale = (1.0, 1.0, 1.0)
+
+    obj.parent = parent_empty
+    obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
+
+
 
 class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
     """Import CSV and animate an object"""
@@ -82,6 +103,8 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
         if obj is None:
             self.report({'ERROR'}, "No object selected")
             return {'CANCELLED'}
+
+        ensure_origin_parent_empty(obj, context)
 
         filepath = self.filepath
         if not os.path.exists(filepath):
