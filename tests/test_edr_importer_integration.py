@@ -43,3 +43,20 @@ def test_integrate_step_constant_turn_uses_midpoint_heading():
     assert math.isclose(x, expected, rel_tol=1e-9)
     assert math.isclose(y, expected, rel_tol=1e-9)
     assert math.isclose(psi, math.pi / 2)
+
+
+def test_integrate_step_treats_speed_and_yaw_as_instantaneous_endpoints():
+    # Start/end instantaneous values after 1 s with constant derivatives.
+    x, y, psi, v, r = integrate_step(0.0, 0.0, 1.0, 2.0, 0.2, 1.0, 2.0, 0.4)
+
+    # v(t): 2 -> 4, r(t): 0.2 -> 0.6 over dt=1
+    assert math.isclose(v, 4.0)
+    assert math.isclose(r, 0.6)
+
+    # Trapezoidal integrals of instantaneous endpoint signals.
+    assert math.isclose(psi, 1.4)
+
+    ds = 3.0  # average speed (2+4)/2 * 1
+    psi_mid = (1.0 + 1.4) / 2
+    assert math.isclose(x, ds * math.cos(psi_mid), rel_tol=1e-9)
+    assert math.isclose(y, ds * math.sin(psi_mid), rel_tol=1e-9)
