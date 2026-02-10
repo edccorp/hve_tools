@@ -48,6 +48,12 @@ def get_vehicle_path_entries(context):
     return target_obj, target_obj.vehicle_path_entries
 
 
+def get_object_edr_setting(obj, scene_settings, setting_name, object_preference_name):
+    """Read per-object EDR setting, falling back to scene setting."""
+    if obj is not None and object_preference_name in obj:
+        return obj[object_preference_name]
+    return getattr(scene_settings, setting_name)
+
 
 ### Property Group for Time-Speed-Yaw Rate Table ###
 class VehiclePathEntry(PropertyGroup):
@@ -246,11 +252,18 @@ def animate_vehicle(self, context):
     time = np.array([e.time for e in entries], dtype=float)
     speed = np.array([e.speed for e in entries], dtype=float) * speed_conversion          # m/s
 
-    mode = scene.anim_settings.edr_input_mode
+    settings = scene.anim_settings
+    mode = settings.edr_input_mode
+    wheelbase = float(get_object_edr_setting(obj, settings, "edr_wheelbase", "edr_wheelbase_preference"))
+    steering_gear_ratio = float(get_object_edr_setting(
+        obj, settings, "edr_steering_gear_ratio", "edr_steering_gear_ratio_preference"
+    ))
+    use_slip = bool(get_object_edr_setting(obj, settings, "edr_use_slip_estimate", "edr_use_slip_estimate_preference"))
+    slip_gain = float(get_object_edr_setting(obj, settings, "edr_slip_gain", "edr_slip_gain_preference"))
+    slip_max_deg = float(get_object_edr_setting(obj, settings, "edr_slip_max_deg", "edr_slip_max_deg_preference"))
+
     steering_wheel_angle = None
     if mode == 'STEERING_WHEEL_ANGLE':
-        wheelbase = scene.anim_settings.edr_wheelbase
-        steering_gear_ratio = scene.anim_settings.edr_steering_gear_ratio
         if wheelbase <= 0 or steering_gear_ratio <= 0:
             self.report({"WARNING"}, "Wheelbase and steering gear ratio must be greater than 0.")
             return
@@ -259,10 +272,6 @@ def animate_vehicle(self, context):
     else:
         yaw_rate = np.array([e.yaw_rate for e in entries], dtype=float) * DEG_TO_RAD      # rad/s
 
-    use_slip = scene.anim_settings.edr_use_slip_estimate
-    wheelbase = scene.anim_settings.edr_wheelbase
-    slip_gain = scene.anim_settings.edr_slip_gain
-    slip_max_deg = scene.anim_settings.edr_slip_max_deg
     if use_slip and wheelbase <= 0:
         self.report({"WARNING"}, "Wheelbase must be greater than 0 when slip estimate is enabled.")
         return

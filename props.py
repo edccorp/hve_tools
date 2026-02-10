@@ -114,9 +114,12 @@ class AnimationSettings(PropertyGroup):
         """Ensures that FPS in the scene updates when anim_fps is changed"""
         context.scene.render.fps = self.anim_fps
 
-    def sync_edr_input_mode_from_target(self):
-        """Load per-object EDR mode for the currently selected EDR target."""
-        target = self.edr_anim_object
+    def _get_edr_target(self):
+        return self.edr_anim_object
+
+    def sync_edr_settings_from_target(self):
+        """Load per-object EDR settings for the currently selected EDR target."""
+        target = self._get_edr_target()
         if not target:
             return
 
@@ -125,17 +128,48 @@ class AnimationSettings(PropertyGroup):
         if stored_mode in valid_modes and self.edr_input_mode != stored_mode:
             self.edr_input_mode = stored_mode
 
+        for scene_prop, object_prop in (
+            ("edr_wheelbase", "edr_wheelbase_preference"),
+            ("edr_steering_gear_ratio", "edr_steering_gear_ratio_preference"),
+            ("edr_use_slip_estimate", "edr_use_slip_estimate_preference"),
+            ("edr_slip_gain", "edr_slip_gain_preference"),
+            ("edr_slip_max_deg", "edr_slip_max_deg_preference"),
+        ):
+            stored = getattr(target, object_prop, None)
+            if stored is not None and getattr(self, scene_prop) != stored:
+                setattr(self, scene_prop, stored)
+
     def update_edr_anim_object(self, context):
-        """Load per-object EDR mode when target object changes."""
-        self.sync_edr_input_mode_from_target()
+        """Load per-object EDR settings when target object changes."""
+        self.sync_edr_settings_from_target()
+
+    def _persist_setting(self, scene_prop, object_prop):
+        target = self._get_edr_target()
+        if not target:
+            return
+        target[object_prop] = getattr(self, scene_prop)
 
     def update_edr_input_mode(self, context):
         """Persist selected EDR input mode onto the active EDR target object."""
-        target = self.edr_anim_object
+        target = self._get_edr_target()
         if not target:
             return
-
         target.edr_input_mode_preference = self.edr_input_mode
+
+    def update_edr_wheelbase(self, context):
+        self._persist_setting("edr_wheelbase", "edr_wheelbase_preference")
+
+    def update_edr_steering_gear_ratio(self, context):
+        self._persist_setting("edr_steering_gear_ratio", "edr_steering_gear_ratio_preference")
+
+    def update_edr_use_slip_estimate(self, context):
+        self._persist_setting("edr_use_slip_estimate", "edr_use_slip_estimate_preference")
+
+    def update_edr_slip_gain(self, context):
+        self._persist_setting("edr_slip_gain", "edr_slip_gain_preference")
+
+    def update_edr_slip_max_deg(self, context):
+        self._persist_setting("edr_slip_max_deg", "edr_slip_max_deg_preference")
 
     anim_object: PointerProperty(
         name="Target Object",
@@ -184,11 +218,12 @@ class AnimationSettings(PropertyGroup):
 
     edr_wheelbase: FloatProperty(
         name="Wheelbase",
-        description="Wheelbase used to estimate yaw rate from steering wheel angle",
+        description="Wheelbase used to estimate yaw rate from steering wheel angle and slip approximation",
         default=2.8,
         min=0.001,
         soft_max=10.0,
-        unit='LENGTH'
+        unit='LENGTH',
+        update=update_edr_wheelbase,
     )
 
     edr_steering_gear_ratio: FloatProperty(
@@ -196,7 +231,33 @@ class AnimationSettings(PropertyGroup):
         description="Steering wheel angle to road wheel angle ratio",
         default=16.0,
         min=0.001,
-        soft_max=30.0
+        soft_max=30.0,
+        update=update_edr_steering_gear_ratio,
+    )
+
+    edr_use_slip_estimate: BoolProperty(
+        name="Use Slip Estimate",
+        description="Estimate an apparent body slip angle for translation using speed and the selected EDR mode",
+        default=False,
+        update=update_edr_use_slip_estimate,
+    )
+
+    edr_slip_gain: FloatProperty(
+        name="Slip Gain",
+        description="Scale factor for estimated slip angle",
+        default=1.0,
+        min=0.0,
+        soft_max=3.0,
+        update=update_edr_slip_gain,
+    )
+
+    edr_slip_max_deg: FloatProperty(
+        name="Slip Max (deg)",
+        description="Absolute clamp on estimated slip angle in degrees",
+        default=12.0,
+        min=0.0,
+        soft_max=45.0,
+        update=update_edr_slip_max_deg,
     )
 
     edr_use_slip_estimate: BoolProperty(
