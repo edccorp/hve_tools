@@ -260,28 +260,6 @@ class AnimationSettings(PropertyGroup):
         update=update_edr_slip_max_deg,
     )
 
-    edr_use_slip_estimate: BoolProperty(
-        name="Use Slip Estimate",
-        description="Estimate an apparent body slip angle for translation using speed and the selected EDR mode",
-        default=False,
-    )
-
-    edr_slip_gain: FloatProperty(
-        name="Slip Gain",
-        description="Scale factor for estimated slip angle",
-        default=1.0,
-        min=0.0,
-        soft_max=3.0,
-    )
-
-    edr_slip_max_deg: FloatProperty(
-        name="Slip Max (deg)",
-        description="Absolute clamp on estimated slip angle in degrees",
-        default=12.0,
-        min=0.0,
-        soft_max=45.0,
-    )
-
 
 # Store all classes in a list for batch registration
        

@@ -88,17 +88,6 @@ def estimate_slip_angle_from_yaw_rate(speed_mps, yaw_rate_rps, wheelbase_m, slip
     return np.clip(beta, -beta_max, beta_max)
 
 
-def estimate_slip_angle_from_steering(steering_wheel_angle_deg, steering_gear_ratio, slip_gain=1.0, max_abs_deg=12.0):
-    """Estimate apparent body slip angle beta (rad) from steering only."""
-    if steering_gear_ratio <= 0:
-        raise ValueError("Steering gear ratio must be greater than zero.")
-
-    delta_f = np.deg2rad(np.asarray(steering_wheel_angle_deg, dtype=float) / steering_gear_ratio)
-    beta = float(slip_gain) * delta_f
-    beta_max = np.deg2rad(max_abs_deg)
-    return np.clip(beta, -beta_max, beta_max)
-
-
 def integrate_step(x, y, psi, v, r, dt, a, rdot, beta_prev=0.0, beta_next=0.0):
     """Integrate one frame/sub-step from instantaneous samples.
 
@@ -340,20 +329,14 @@ def animate_vehicle(self, context):
         rdot = (float(yaw_rate[i + 1]) - float(yaw_rate[i])) / dt_interval
 
         if use_slip:
-            if mode == 'STEERING_WHEEL_ANGLE':
-                beta_start = float(estimate_slip_angle_from_steering(
-                    steering_wheel_angle[i], steering_gear_ratio, slip_gain, slip_max_deg
-                ))
-                beta_end = float(estimate_slip_angle_from_steering(
-                    steering_wheel_angle[i + 1], steering_gear_ratio, slip_gain, slip_max_deg
-                ))
-            else:
-                beta_start = float(estimate_slip_angle_from_yaw_rate(
-                    speed[i], yaw_rate[i], wheelbase, slip_gain, slip_max_deg
-                ))
-                beta_end = float(estimate_slip_angle_from_yaw_rate(
-                    speed[i + 1], yaw_rate[i + 1], wheelbase, slip_gain, slip_max_deg
-                ))
+            # Use a single beta model for both input modes based on yaw-rate.
+            # In steering mode, yaw_rate was already estimated from steering above.
+            beta_start = float(estimate_slip_angle_from_yaw_rate(
+                speed[i], yaw_rate[i], wheelbase, slip_gain, slip_max_deg
+            ))
+            beta_end = float(estimate_slip_angle_from_yaw_rate(
+                speed[i + 1], yaw_rate[i + 1], wheelbase, slip_gain, slip_max_deg
+            ))
         else:
             beta_start = 0.0
             beta_end = 0.0

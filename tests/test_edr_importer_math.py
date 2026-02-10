@@ -39,14 +39,12 @@ for node in module_ast.body:
     if isinstance(node, ast.FunctionDef) and node.name in {
         "estimate_yaw_rate_from_steering",
         "estimate_slip_angle_from_yaw_rate",
-        "estimate_slip_angle_from_steering",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
 
 estimate_yaw_rate_from_steering = ns["estimate_yaw_rate_from_steering"]
 estimate_slip_angle_from_yaw_rate = ns["estimate_slip_angle_from_yaw_rate"]
-estimate_slip_angle_from_steering = ns["estimate_slip_angle_from_steering"]
 
 
 def test_estimate_yaw_rate_from_steering_scalar():
@@ -70,6 +68,6 @@ def test_estimate_slip_angle_from_yaw_rate_scalar():
     assert math.isclose(beta, expected)
 
 
-def test_estimate_slip_angle_from_steering_clipped():
-    beta = estimate_slip_angle_from_steering(360.0, 10.0, 1.0, 12.0)
+def test_estimate_slip_angle_from_yaw_rate_clipped():
+    beta = estimate_slip_angle_from_yaw_rate(0.1, 10.0, 2.5, 1.0, 12.0)
     assert math.isclose(beta, math.radians(12.0))
