@@ -5,7 +5,6 @@ import datetime
 import numpy as np
 
 import bpy
-import bgl
 from bpy.app.handlers import persistent
 from gpu.types import GPUShader
 from gpu_extras.batch import batch_for_shader

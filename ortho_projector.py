@@ -7,7 +7,7 @@ bl_info = {
     "name": "Ortho Projector",
     "author": "ChatGPT",
     "version": (1, 6, 0),
-    "blender": (4, 5, 0),
+    "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Ortho Projector",
     "description": "Render from a camera and project the image onto mesh UVs (viewport-independent)",
     "category": "UV",

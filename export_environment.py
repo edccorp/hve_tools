@@ -100,6 +100,29 @@ def clean_def(txt):
         })
 
 
+def active_color_layer(mesh):
+    """Return active color data layer across Blender 3.x/4.x APIs."""
+    if hasattr(mesh, "vertex_colors") and mesh.vertex_colors:
+        layer = mesh.vertex_colors.active
+        if layer is not None:
+            return layer
+
+    color_attrs = getattr(mesh, "color_attributes", None)
+    if color_attrs:
+        layer = color_attrs.active_color
+        if layer is not None and getattr(layer, "domain", None) == 'CORNER':
+            return layer
+        layer = color_attrs.render_color_index if hasattr(color_attrs, 'render_color_index') else None
+        if isinstance(layer, int) and 0 <= layer < len(color_attrs):
+            cand = color_attrs[layer]
+            if getattr(cand, "domain", None) == 'CORNER':
+                return cand
+        for cand in color_attrs:
+            if getattr(cand, "domain", None) == 'CORNER':
+                return cand
+    return None
+
+
 def build_hierarchy(objects):
     """ returns parent child relationships, skipping
     """
@@ -553,8 +576,9 @@ def export_env(file, dirname,
                             for i, (material_index, image) in enumerate(zip(mesh_polygons_materials, mesh_polygons_image)):
                                 polygons_groups[material_index, image].append(i)
 
-                            is_col = mesh.vertex_colors.active
-                            mesh_loops_col = mesh.vertex_colors.active.data if is_col else None
+                            color_layer = active_color_layer(mesh)
+                            is_col = color_layer is not None
+                            mesh_loops_col = color_layer.data if is_col else None
 
                             if is_col:
                                 def calc_vertex_color():

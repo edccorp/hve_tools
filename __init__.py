@@ -2,7 +2,7 @@ bl_info = {
     "name": "HVE Menu",
     "author": "Engnineering Dynamics Company : Anthony Cornetto",
     "version": (2, 0),
-    "blender": (4, 5, 0),
+    "blender": (4, 0, 0),
     "description": "Tools for HVE",
     'warning': '',
     "category": "HVE",
