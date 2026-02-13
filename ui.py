@@ -275,44 +275,43 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
         c.label(text="HVE Type")
         c.prop(types.set_type, 'type')
 
-        if "hve_type" in o:
-            enum_value = o.hve_type.set_type.type
-            if enum_value == "VEHICLE":
-                c.separator()
-                c.label(text="HVE Light")
-                c.prop(lights.make_light, 'type')
-            elif enum_value == "ENVIRONMENT":
-                c.separator()
-                c.label(text="HVE Terrain Properties")
-                l.prop(env_props.set_env_props, "poSurfaceType")
-                l.prop(env_props.set_env_props, "polabel")
-                l.prop(env_props.set_env_props, "poName")
-                l.prop(env_props.set_env_props, "poFriction")
-                l.prop(env_props.set_env_props, "poRateDamping")
-                l.prop(env_props.set_env_props, "poForceConst")
-                l.prop(env_props.set_env_props, "poForceLinear")
-                l.prop(env_props.set_env_props, "poForceQuad")
-                l.prop(env_props.set_env_props, "poForceCubic")
-                l.prop(env_props.set_env_props, "poForceUnload")
-                l.prop(env_props.set_env_props, "poBekkerConst")
-                l.prop(env_props.set_env_props, "poKphi")
-                l.prop(env_props.set_env_props, "poKc")
-                l.prop(env_props.set_env_props, "poPcntMoisture")
-                l.prop(env_props.set_env_props, "poPcntClay")
-                l.prop(env_props.set_env_props, "poWaterDepth")
-                l.prop(env_props.set_env_props, "poStaticWater")
+        enum_value = getattr(getattr(types, "set_type", None), "type", None)
+        if enum_value == "VEHICLE":
+            c.separator()
+            c.label(text="HVE Light")
+            c.prop(lights.make_light, 'type')
+        elif enum_value == "ENVIRONMENT":
+            c.separator()
+            c.label(text="HVE Terrain Properties")
+            l.prop(env_props.set_env_props, "poSurfaceType")
+            l.prop(env_props.set_env_props, "polabel")
+            l.prop(env_props.set_env_props, "poName")
+            l.prop(env_props.set_env_props, "poFriction")
+            l.prop(env_props.set_env_props, "poRateDamping")
+            l.prop(env_props.set_env_props, "poForceConst")
+            l.prop(env_props.set_env_props, "poForceLinear")
+            l.prop(env_props.set_env_props, "poForceQuad")
+            l.prop(env_props.set_env_props, "poForceCubic")
+            l.prop(env_props.set_env_props, "poForceUnload")
+            l.prop(env_props.set_env_props, "poBekkerConst")
+            l.prop(env_props.set_env_props, "poKphi")
+            l.prop(env_props.set_env_props, "poKc")
+            l.prop(env_props.set_env_props, "poPcntMoisture")
+            l.prop(env_props.set_env_props, "poPcntClay")
+            l.prop(env_props.set_env_props, "poWaterDepth")
+            l.prop(env_props.set_env_props, "poStaticWater")
        
-                l.separator()
+            l.separator()
 
-                # Save / Load Buttons
-                row = l.row()
-                row.operator("hve.save_preset", text="Save Preset", icon="EXPORT")
-                row.operator("hve.load_preset", text="Load Preset", icon="IMPORT")
+            # Save / Load Buttons
+            row = l.row()
+            row.operator("hve.save_preset", text="Save Preset", icon="EXPORT")
+            row.operator("hve.load_preset", text="Load Preset", icon="IMPORT")
 
-                l.separator()
+            l.separator()
 
-                # Preset Dropdown
-                l.prop(context.scene, "hve_preset", text="Apply Preset")
+            # Preset Dropdown
+            l.prop(context.scene, "hve_preset", text="Apply Preset")
 
 class HVE_OT_save_preset(bpy.types.Operator):
     """Save the current HVE environment settings as a preset."""
