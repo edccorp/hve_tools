@@ -438,14 +438,17 @@ def _gather_meshes(collection):
     return meshes
 
 
-def join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set=None):
+def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported_pointer_set=None):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
 
+    def object_pointer(obj):
+        return obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)
+
     if imported_objects is None:
-        imported_objects = []
+        imported_objects = list(getattr(getattr(bpy.context, "scene", None), "objects", []))
 
     if imported_pointer_set is None:
-        imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
+        imported_pointer_set = {object_pointer(obj) for obj in imported_objects}
     else:
         imported_pointer_set = set(imported_pointer_set)
 
@@ -464,7 +467,7 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_poin
             mesh_objects.extend(_gather_meshes(col))
 
         mesh_objects = [
-            obj for obj in mesh_objects if obj.as_pointer() in imported_pointer_set
+            obj for obj in mesh_objects if object_pointer(obj) in imported_pointer_set
         ]
 
         if not mesh_objects:
@@ -473,7 +476,7 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_poin
                 for obj in imported_objects
                 if (
                     obj.type == "MESH"
-                    and obj.as_pointer() in imported_pointer_set
+                    and object_pointer(obj) in imported_pointer_set
                     and belongs_to_vehicle(obj.name, clean_vehicle_name)
                     and not (
                         re.search(r"wheel", obj.name, re.IGNORECASE)
