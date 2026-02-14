@@ -80,6 +80,10 @@ try:
             name="Show Terrain Properties",
             default=True,
         )
+        bpy.types.Scene.hve_setup_show_vehicle_lighting = bpy.props.BoolProperty(
+            name="Show Vehicle Lighting",
+            default=True,
+        )
         bpy.types.Scene.hve_setup_show_forces = bpy.props.BoolProperty(
             name="Show Forces",
             default=True,
@@ -110,6 +114,7 @@ try:
         del bpy.types.Scene.hve_setup_show_materials
         del bpy.types.Scene.hve_setup_show_object_type
         del bpy.types.Scene.hve_setup_show_terrain
+        del bpy.types.Scene.hve_setup_show_vehicle_lighting
         del bpy.types.Scene.hve_setup_show_forces
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water

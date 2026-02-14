@@ -312,8 +312,11 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
         enum_value = getattr(getattr(types, "set_type", None), "type", None)
         if enum_value == "VEHICLE":
             c.separator()
-            c.label(text="Vehicle Lighting", icon='LIGHT')
-            c.prop(lights.make_light, 'type')
+            vehicle_lighting_box = self.draw_collapsible_panel(
+                c, scene, "hve_setup_show_vehicle_lighting", "Vehicle Lighting", icon='LIGHT'
+            )
+            if vehicle_lighting_box:
+                vehicle_lighting_box.prop(lights.make_light, 'type')
         elif enum_value == "ENVIRONMENT":
             c.separator()
             terrain_box = self.draw_collapsible_panel(
