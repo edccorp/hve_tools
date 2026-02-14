@@ -109,12 +109,30 @@ def is_wheel_object(obj):
     return False
 
 
+def get_action_fcurve_collection(action):
+    """Return the action F-Curve collection when available.
+
+    Blender 5+ may return action types that no longer expose ``action.fcurves``
+    directly. Returning ``None`` allows callers to safely skip direct F-Curve
+    edits without raising ``AttributeError``.
+    """
+    return getattr(action, "fcurves", None)
+
+
+def iter_action_fcurves(action):
+    """Iterate over F-Curves from ``action`` when supported."""
+    fcurves = get_action_fcurve_collection(action)
+    if fcurves is None:
+        return ()
+    return fcurves
+
+
 def offset_selected_animation(obj, frame_offset=-1):
     """Offsets animation keyframes for all selected objects by the given frame amount."""
 
     if obj.animation_data and obj.animation_data.action:
         action = obj.animation_data.action
-        for fcurve in action.fcurves:
+        for fcurve in iter_action_fcurves(action):
             for keyframe in fcurve.keyframe_points:
                 keyframe.co.x += frame_offset  # Offset keyframe time
                 keyframe.handle_left.x += frame_offset  # Offset left handle
@@ -130,8 +148,9 @@ def adjust_animation(obj):
 
     if obj.animation_data and obj.animation_data.action:
         action = obj.animation_data.action
+        action_fcurves = get_action_fcurve_collection(action)
         #print(obj)           
-        for fcurve in action.fcurves:
+        for fcurve in iter_action_fcurves(action):
             # Adjust X rotation (Euler)
             if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
                 for keyframe in fcurve.keyframe_points:
@@ -140,9 +159,10 @@ def adjust_animation(obj):
                     keyframe.handle_right.y += math.radians(-180)
         
         # Remove Scale Animation
-        scale_fcurves = [fcurve for fcurve in action.fcurves if fcurve.data_path.endswith("scale")]
-        for fcurve in scale_fcurves:
-            action.fcurves.remove(fcurve)  # Delete scale animation
+        if action_fcurves is not None:
+            scale_fcurves = [fcurve for fcurve in action_fcurves if fcurve.data_path.endswith("scale")]
+            for fcurve in scale_fcurves:
+                action_fcurves.remove(fcurve)  # Delete scale animation
             
         obj.scale.y *= -1
         obj.scale.z *= -1
@@ -248,6 +268,10 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
 
     # Get the parent's existing action
     parent_action = parent.animation_data.action
+    parent_action_fcurves = get_action_fcurve_collection(parent_action)
+    if parent_action_fcurves is None:
+        print(f"⚠️ Warning: Parent '{parent.name}' action has no direct fcurve collection; skipping rotation copy.")
+        return
 
     # Copy rotation keyframes from sources to the parent empty
     for axis_name, axis_index in zip(["Z", "Y", "X"], [2, 1, 0]):
@@ -256,19 +280,19 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
             continue
 
         source_action = source.animation_data.action
-        for fcurve in source_action.fcurves:
+        for fcurve in iter_action_fcurves(source_action):
             # Check if the curve corresponds to rotation
             if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == axis_index:
                 # Try to find an existing F-Curve for the parent
                 parent_fcurve = None
-                for existing_fcurve in parent_action.fcurves:
+                for existing_fcurve in parent_action_fcurves:
                     if existing_fcurve.data_path == "rotation_euler" and existing_fcurve.array_index == axis_index:
                         parent_fcurve = existing_fcurve
                         break
 
                 # If no existing F-Curve, create one
                 if not parent_fcurve:
-                    parent_fcurve = parent_action.fcurves.new(
+                    parent_fcurve = parent_action_fcurves.new(
                         data_path="rotation_euler",
                         index=axis_index,
                         action_group="Rotation",
@@ -399,6 +423,9 @@ def bake_shape_keys_to_keyframes(obj):
         return  # Skip if no shape keys or no animation
 
     action = obj.data.shape_keys.animation_data.action
+    action_fcurves = get_action_fcurve_collection(action)
+    if action_fcurves is None:
+        return
     frame_range = bpy.context.scene.frame_start, bpy.context.scene.frame_end
 
     for shape_key in obj.data.shape_keys.key_blocks:
@@ -406,7 +433,7 @@ def bake_shape_keys_to_keyframes(obj):
             continue  # Skip basis shape key
 
         fcurve = next(
-            (fc for fc in action.fcurves if fc.data_path.endswith(f'key_blocks["{shape_key.name}"].value')),
+            (fc for fc in action_fcurves if fc.data_path.endswith(f'key_blocks["{shape_key.name}"].value')),
             None
         )
 
@@ -659,9 +686,15 @@ def import_fbx(context, fbx_file_path):
         for obj in imported_objects:
             if obj.animation_data and obj.animation_data.action:
                 action = obj.animation_data.action
-                for fcurve in action.fcurves:
+                fcurve_found = False
+                for fcurve in iter_action_fcurves(action):
+                    fcurve_found = True
                     for keyframe in fcurve.keyframe_points:
                         max_frame = max(max_frame, int(keyframe.co.x)) - 1 # Update max frame
+
+                if not fcurve_found:
+                    frame_end = int(action.frame_range[1]) - 1
+                    max_frame = max(max_frame, frame_end)
 
         # Get the current frame end in Blender's timeline
         current_max_frame = context.scene.frame_end
@@ -1025,5 +1058,4 @@ def load(context,
             )
 
     return {'FINISHED'}
-
 
