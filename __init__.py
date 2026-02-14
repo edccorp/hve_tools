@@ -68,6 +68,22 @@ try:
             name="Show Surface",
             default=True,
         )
+        bpy.types.Scene.hve_setup_show_materials = bpy.props.BoolProperty(
+            name="Show Materials",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_object_type = bpy.props.BoolProperty(
+            name="Show Object Type",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_terrain = bpy.props.BoolProperty(
+            name="Show Terrain Properties",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_vehicle_lighting = bpy.props.BoolProperty(
+            name="Show Vehicle Lighting",
+            default=True,
+        )
         bpy.types.Scene.hve_setup_show_forces = bpy.props.BoolProperty(
             name="Show Forces",
             default=True,
@@ -95,6 +111,10 @@ try:
     def unregister():
         del bpy.types.Scene.scale_target_distance
         del bpy.types.Scene.hve_setup_show_surface
+        del bpy.types.Scene.hve_setup_show_materials
+        del bpy.types.Scene.hve_setup_show_object_type
+        del bpy.types.Scene.hve_setup_show_terrain
+        del bpy.types.Scene.hve_setup_show_vehicle_lighting
         del bpy.types.Scene.hve_setup_show_forces
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water
