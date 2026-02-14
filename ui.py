@@ -252,8 +252,7 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
     def poll(cls, context):
         return True
 
-    def draw_collapsible_section(self, parent, data, toggle_prop, label, props):
-        scene = bpy.context.scene
+    def draw_collapsible_panel(self, parent, scene, toggle_prop, label, icon=None):
         is_open = getattr(scene, toggle_prop)
 
         box = parent.box()
@@ -265,8 +264,16 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
             icon='TRIA_DOWN' if is_open else 'TRIA_RIGHT',
             emboss=False,
         )
+        if icon:
+            row.label(text="", icon=icon)
 
-        if is_open:
+        return box if is_open else None
+
+    def draw_collapsible_section(self, parent, data, toggle_prop, label, props):
+        scene = bpy.context.scene
+        box = self.draw_collapsible_panel(parent, scene, toggle_prop, label)
+
+        if box:
             for prop_name in props:
                 box.prop(data, prop_name)
 
@@ -285,19 +292,22 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
         c = l.column()
 
         c.separator()
-        c.label(text="Materials", icon='MATERIAL')
-        c.operator("hve_material.add_hve_material", text="Add HVE Material")
+        materials_box = self.draw_collapsible_panel(
+            c, scene, "hve_setup_show_materials", "Materials", icon='MATERIAL'
+        )
+        if materials_box:
+            materials_box.operator("hve_material.add_hve_material", text="Add HVE Material")
+            materials_box.separator()
+            materials_box.operator("hve_material.add_standard_materials", text="Add Standard Materials")
+            materials_box.separator()
+            materials_box.operator("hve_material.add_hve_light_materials", text="Add HVE Light Materials")
 
         c.separator()
-        c.operator("hve_material.add_standard_materials", text="Add Standard Materials")
-
-        c.separator()
-        c.operator("hve_material.add_hve_light_materials", text="Add HVE Light Materials")
-
-        c.separator()
-
-        c.label(text="Object Type", icon='OUTLINER_OB_EMPTY')
-        c.prop(types.set_type, 'type')
+        object_type_box = self.draw_collapsible_panel(
+            c, scene, "hve_setup_show_object_type", "Object Type", icon='OUTLINER_OB_EMPTY'
+        )
+        if object_type_box:
+            object_type_box.prop(types.set_type, 'type')
 
         enum_value = getattr(getattr(types, "set_type", None), "type", None)
         if enum_value == "VEHICLE":
@@ -306,38 +316,41 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
             c.prop(lights.make_light, 'type')
         elif enum_value == "ENVIRONMENT":
             c.separator()
-            c.label(text="Terrain Properties", icon='WORLD')
-            self.draw_collapsible_section(
-                c,
-                env_props.set_env_props,
-                "hve_setup_show_surface",
-                "Surface",
-                ["poSurfaceType", "polabel", "poName", "poFriction", "poRateDamping"],
+            terrain_box = self.draw_collapsible_panel(
+                c, scene, "hve_setup_show_terrain", "Terrain Properties", icon='WORLD'
             )
+            if terrain_box:
+                self.draw_collapsible_section(
+                    terrain_box,
+                    env_props.set_env_props,
+                    "hve_setup_show_surface",
+                    "Surface",
+                    ["poSurfaceType", "polabel", "poName", "poFriction", "poRateDamping"],
+                )
 
-            self.draw_collapsible_section(
-                c,
-                env_props.set_env_props,
-                "hve_setup_show_forces",
-                "Forces",
-                ["poForceConst", "poForceLinear", "poForceQuad", "poForceCubic", "poForceUnload"],
-            )
+                self.draw_collapsible_section(
+                    terrain_box,
+                    env_props.set_env_props,
+                    "hve_setup_show_forces",
+                    "Forces",
+                    ["poForceConst", "poForceLinear", "poForceQuad", "poForceCubic", "poForceUnload"],
+                )
 
-            self.draw_collapsible_section(
-                c,
-                env_props.set_env_props,
-                "hve_setup_show_soil",
-                "Soil",
-                ["poBekkerConst", "poKphi", "poKc", "poPcntMoisture", "poPcntClay"],
-            )
+                self.draw_collapsible_section(
+                    terrain_box,
+                    env_props.set_env_props,
+                    "hve_setup_show_soil",
+                    "Soil",
+                    ["poBekkerConst", "poKphi", "poKc", "poPcntMoisture", "poPcntClay"],
+                )
 
-            self.draw_collapsible_section(
-                c,
-                env_props.set_env_props,
-                "hve_setup_show_water",
-                "Water",
-                ["poWaterDepth", "poStaticWater"],
-            )
+                self.draw_collapsible_section(
+                    terrain_box,
+                    env_props.set_env_props,
+                    "hve_setup_show_water",
+                    "Water",
+                    ["poWaterDepth", "poStaticWater"],
+                )
        
             c.separator()
 
