@@ -64,6 +64,22 @@ try:
             default=1.0,
             min=0.001,
         )
+        bpy.types.Scene.hve_setup_show_surface = bpy.props.BoolProperty(
+            name="Show Surface",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_forces = bpy.props.BoolProperty(
+            name="Show Forces",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_soil = bpy.props.BoolProperty(
+            name="Show Soil",
+            default=True,
+        )
+        bpy.types.Scene.hve_setup_show_water = bpy.props.BoolProperty(
+            name="Show Water",
+            default=True,
+        )
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
@@ -78,6 +94,10 @@ try:
 
     def unregister():
         del bpy.types.Scene.scale_target_distance
+        del bpy.types.Scene.hve_setup_show_surface
+        del bpy.types.Scene.hve_setup_show_forces
+        del bpy.types.Scene.hve_setup_show_soil
+        del bpy.types.Scene.hve_setup_show_water
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

@@ -251,6 +251,25 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
     @classmethod
     def poll(cls, context):
         return True
+
+    def draw_collapsible_section(self, parent, data, toggle_prop, label, props):
+        scene = bpy.context.scene
+        is_open = getattr(scene, toggle_prop)
+
+        box = parent.box()
+        row = box.row(align=True)
+        row.prop(
+            scene,
+            toggle_prop,
+            text=label,
+            icon='TRIA_DOWN' if is_open else 'TRIA_RIGHT',
+            emboss=False,
+        )
+
+        if is_open:
+            for prop_name in props:
+                box.prop(data, prop_name)
+
     def draw(self, context):
         o = context.active_object
         if o is None:
@@ -288,34 +307,37 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
         elif enum_value == "ENVIRONMENT":
             c.separator()
             c.label(text="Terrain Properties", icon='WORLD')
-            surface_box = c.box()
-            surface_box.label(text="Surface")
-            surface_box.prop(env_props.set_env_props, "poSurfaceType")
-            surface_box.prop(env_props.set_env_props, "polabel")
-            surface_box.prop(env_props.set_env_props, "poName")
-            surface_box.prop(env_props.set_env_props, "poFriction")
-            surface_box.prop(env_props.set_env_props, "poRateDamping")
+            self.draw_collapsible_section(
+                c,
+                env_props.set_env_props,
+                "hve_setup_show_surface",
+                "Surface",
+                ["poSurfaceType", "polabel", "poName", "poFriction", "poRateDamping"],
+            )
 
-            force_box = c.box()
-            force_box.label(text="Forces")
-            force_box.prop(env_props.set_env_props, "poForceConst")
-            force_box.prop(env_props.set_env_props, "poForceLinear")
-            force_box.prop(env_props.set_env_props, "poForceQuad")
-            force_box.prop(env_props.set_env_props, "poForceCubic")
-            force_box.prop(env_props.set_env_props, "poForceUnload")
+            self.draw_collapsible_section(
+                c,
+                env_props.set_env_props,
+                "hve_setup_show_forces",
+                "Forces",
+                ["poForceConst", "poForceLinear", "poForceQuad", "poForceCubic", "poForceUnload"],
+            )
 
-            soil_box = c.box()
-            soil_box.label(text="Soil")
-            soil_box.prop(env_props.set_env_props, "poBekkerConst")
-            soil_box.prop(env_props.set_env_props, "poKphi")
-            soil_box.prop(env_props.set_env_props, "poKc")
-            soil_box.prop(env_props.set_env_props, "poPcntMoisture")
-            soil_box.prop(env_props.set_env_props, "poPcntClay")
+            self.draw_collapsible_section(
+                c,
+                env_props.set_env_props,
+                "hve_setup_show_soil",
+                "Soil",
+                ["poBekkerConst", "poKphi", "poKc", "poPcntMoisture", "poPcntClay"],
+            )
 
-            water_box = c.box()
-            water_box.label(text="Water")
-            water_box.prop(env_props.set_env_props, "poWaterDepth")
-            water_box.prop(env_props.set_env_props, "poStaticWater")
+            self.draw_collapsible_section(
+                c,
+                env_props.set_env_props,
+                "hve_setup_show_water",
+                "Water",
+                ["poWaterDepth", "poStaticWater"],
+            )
        
             c.separator()
 
