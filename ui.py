@@ -195,13 +195,15 @@ class HVE_PT_pre(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.label(text="")
+        col = l.column(align=True)
+        col.label(text="Configure scene objects before export.", icon='INFO')
+        col.label(text="Use h3d Setup, then run h3d Export.")
 
 class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "h3d Export"
+    bl_label = "H3D Export"
     bl_parent_id = "HVE_PT_pre"
 
     @classmethod
@@ -225,8 +227,10 @@ class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
                 l.operator("export_environment.h3d", text="Export Environment", icon='EXPORT')
             else:
                 l.label(text="Invalid HVE Type", icon='ERROR')
+                l.label(text="Set HVE Type in H3D Setup.", icon='INFO')
         else:
             l.label(text="HVE Type not set", icon='ERROR')
+            l.label(text="Open H3D Setup and choose Vehicle or Environment.", icon='INFO')
 
 
 
@@ -234,7 +238,7 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "h3d Setup"
+    bl_label = "H3D Setup"
     bl_parent_id = "HVE_PT_pre"
     
     bpy.types.Scene.hve_preset = bpy.props.EnumProperty(
@@ -262,56 +266,68 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
         c = l.column()
 
         c.separator()
-        c.operator("hve_material.add_hve_material")
+        c.label(text="Materials", icon='MATERIAL')
+        c.operator("hve_material.add_hve_material", text="Add HVE Material")
 
         c.separator()
-        c.operator("hve_material.add_standard_materials")
+        c.operator("hve_material.add_standard_materials", text="Add Standard Materials")
 
         c.separator()
-        c.operator("hve_material.add_hve_light_materials")
+        c.operator("hve_material.add_hve_light_materials", text="Add HVE Light Materials")
 
         c.separator()
 
-        c.label(text="HVE Type")
+        c.label(text="Object Type", icon='OUTLINER_OB_EMPTY')
         c.prop(types.set_type, 'type')
 
         enum_value = getattr(getattr(types, "set_type", None), "type", None)
         if enum_value == "VEHICLE":
             c.separator()
-            c.label(text="HVE Light")
+            c.label(text="Vehicle Lighting", icon='LIGHT')
             c.prop(lights.make_light, 'type')
         elif enum_value == "ENVIRONMENT":
             c.separator()
-            c.label(text="HVE Terrain Properties")
-            l.prop(env_props.set_env_props, "poSurfaceType")
-            l.prop(env_props.set_env_props, "polabel")
-            l.prop(env_props.set_env_props, "poName")
-            l.prop(env_props.set_env_props, "poFriction")
-            l.prop(env_props.set_env_props, "poRateDamping")
-            l.prop(env_props.set_env_props, "poForceConst")
-            l.prop(env_props.set_env_props, "poForceLinear")
-            l.prop(env_props.set_env_props, "poForceQuad")
-            l.prop(env_props.set_env_props, "poForceCubic")
-            l.prop(env_props.set_env_props, "poForceUnload")
-            l.prop(env_props.set_env_props, "poBekkerConst")
-            l.prop(env_props.set_env_props, "poKphi")
-            l.prop(env_props.set_env_props, "poKc")
-            l.prop(env_props.set_env_props, "poPcntMoisture")
-            l.prop(env_props.set_env_props, "poPcntClay")
-            l.prop(env_props.set_env_props, "poWaterDepth")
-            l.prop(env_props.set_env_props, "poStaticWater")
+            c.label(text="Terrain Properties", icon='WORLD')
+            surface_box = c.box()
+            surface_box.label(text="Surface")
+            surface_box.prop(env_props.set_env_props, "poSurfaceType")
+            surface_box.prop(env_props.set_env_props, "polabel")
+            surface_box.prop(env_props.set_env_props, "poName")
+            surface_box.prop(env_props.set_env_props, "poFriction")
+            surface_box.prop(env_props.set_env_props, "poRateDamping")
+
+            force_box = c.box()
+            force_box.label(text="Forces")
+            force_box.prop(env_props.set_env_props, "poForceConst")
+            force_box.prop(env_props.set_env_props, "poForceLinear")
+            force_box.prop(env_props.set_env_props, "poForceQuad")
+            force_box.prop(env_props.set_env_props, "poForceCubic")
+            force_box.prop(env_props.set_env_props, "poForceUnload")
+
+            soil_box = c.box()
+            soil_box.label(text="Soil")
+            soil_box.prop(env_props.set_env_props, "poBekkerConst")
+            soil_box.prop(env_props.set_env_props, "poKphi")
+            soil_box.prop(env_props.set_env_props, "poKc")
+            soil_box.prop(env_props.set_env_props, "poPcntMoisture")
+            soil_box.prop(env_props.set_env_props, "poPcntClay")
+
+            water_box = c.box()
+            water_box.label(text="Water")
+            water_box.prop(env_props.set_env_props, "poWaterDepth")
+            water_box.prop(env_props.set_env_props, "poStaticWater")
        
-            l.separator()
+            c.separator()
 
             # Save / Load Buttons
-            row = l.row()
+            row = c.row()
             row.operator("hve.save_preset", text="Save Preset", icon="EXPORT")
             row.operator("hve.load_preset", text="Load Preset", icon="IMPORT")
 
-            l.separator()
+            c.separator()
 
             # Preset Dropdown
-            l.prop(context.scene, "hve_preset", text="Apply Preset")
+            c.prop(context.scene, "hve_preset", text="Apply Preset")
 
 class HVE_OT_save_preset(bpy.types.Operator):
     """Save the current HVE environment settings as a preset."""
@@ -372,7 +388,9 @@ class HVE_PT_post(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.label(text="")
+        col = l.column(align=True)
+        col.label(text="Import or export simulation results.", icon='INFO')
+        col.label(text="Choose a tool below based on file type.")
         
 
 
@@ -380,7 +398,7 @@ class HVE_PT_variableoutput_importer(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "HVE Motion and Variable Output Importer"
+    bl_label = "Variable Output Importer"
     bl_parent_id = "HVE_PT_post"    
     @classmethod
     def poll(cls, context):
@@ -394,7 +412,8 @@ class HVE_PT_variableoutput_importer(HVE_PT_mechanist_base):
         
 
         # Contacts Exporter controls
-        l.operator("import_variables.csv", text="Import Variable Output", icon='IMPORT')
+        c.label(text="CSV Format: Time + Variable Output Columns")
+        c.operator("import_variables.csv", text="Import Variable Output CSV", icon='IMPORT')
         
 class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
@@ -428,7 +447,9 @@ class HVE_PT_other_tools(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.label(text="")
+        col = l.column(align=True)
+        col.label(text="Utilities for data prep and analysis.", icon='TOOL_SETTINGS')
+        col.label(text="Select a utility panel below.")
 
 class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
@@ -464,12 +485,14 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
         if edr_mode == 'STEERING_WHEEL_ANGLE':
             c.prop(scene.anim_settings, "edr_steering_gear_ratio")
             c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
+            c.label(text="Tip: lower steering ratio increases computed yaw rate.", icon='INFO')
 
         c.prop(scene.anim_settings, "edr_use_slip_estimate")
         if scene.anim_settings.edr_use_slip_estimate:
             c.prop(scene.anim_settings, "edr_slip_gain")
             c.prop(scene.anim_settings, "edr_slip_max_deg")
             c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
+            c.label(text="Tip: start with small gain and increase gradually.", icon='INFO')
             if edr_mode == 'STEERING_WHEEL_ANGLE':
                 c.label(text="(yaw_rate is first estimated from steering)")
 
@@ -616,8 +639,8 @@ class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
         l = self.layout
         c = l.column()
 
-        c.label(text="Export csv for RaceRender", icon="TOOL_SETTINGS")  # Section title with an icon
-        c.operator("export_racerender.csv", text="Export RaceRender", icon='EXPORT')
+        c.label(text="Export CSV for RaceRender", icon="TOOL_SETTINGS")  # Section title with an icon
+        c.operator("export_racerender.csv", text="Export RaceRender CSV", icon='EXPORT')
 
 
 classes = (
