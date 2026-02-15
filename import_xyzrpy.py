@@ -83,6 +83,24 @@ def ensure_origin_parent_empty(obj, context):
     obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
 
 
+def iter_action_fcurves(action):
+    """Iterate over action F-Curves across classic and layered action layouts."""
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        for fcurve in fcurves:
+            yield fcurve
+        return
+
+    layers = getattr(action, "layers", None) or ()
+    for layer in layers:
+        strips = getattr(layer, "strips", None) or ()
+        for strip in strips:
+            channelbags = getattr(strip, "channelbags", None) or ()
+            for bag in channelbags:
+                for fcurve in getattr(bag, "fcurves", None) or ():
+                    yield fcurve
+
+
 
 class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
     """Import CSV and animate an object"""
@@ -164,7 +182,7 @@ class ImportCSVAnimationOperator(bpy.types.Operator, ImportHelper):
     def set_extrapolation(self, obj, mode):
         """Sets the extrapolation mode for all animation curves"""
         if obj.animation_data and obj.animation_data.action:
-            for fcurve in obj.animation_data.action.fcurves:
+            for fcurve in iter_action_fcurves(obj.animation_data.action):
                 fcurve.extrapolation = mode  # 🔹 Apply chosen extrapolation mode
 
 
