@@ -626,89 +626,64 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
 
 
 def materials_are_equal(mat1, mat2, tol=1e-4):
-    """Compare two materials based on Principled node inputs and fallback color."""
-    if mat1 is mat2 or mat1.name == mat2.name:
-        return False
+    """Compare two materials including color, roughness, specular and diffuse textures."""
+    if mat1.name == mat2.name:
+        return False  # Skip if it's the same material
 
-    def _normalize_image_path(filepath):
-        if not filepath:
-            return None
-        try:
-            filepath = bpy.path.abspath(filepath)
-        except Exception:
-            pass
-        return os.path.normpath(filepath)
-
-    def _get_principled_node(mat):
-        node_tree = getattr(mat, "node_tree", None)
-        if not node_tree:
-            return None
-        for node in node_tree.nodes:
-            if getattr(node, "type", None) == "BSDF_PRINCIPLED":
-                return node
+    def get_diffuse_texture(mat):
+        if mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE':
+                    for output in getattr(node, 'outputs', []):
+                        for link in getattr(output, 'links', []):
+                            if getattr(link.to_socket, 'name', '') == "Base Color":
+                                return node
         return None
 
-    def _get_linked_image_path(socket):
-        links = getattr(socket, "links", []) or []
-        linked = []
-        for link in links:
-            from_node = getattr(link, "from_node", None)
-            if getattr(from_node, "type", None) == "TEX_IMAGE":
-                image = getattr(from_node, "image", None)
-                linked.append(
-                    (
-                        _normalize_image_path(getattr(image, "filepath", None) if image else None),
-                        getattr(from_node, "interpolation", None),
-                        getattr(from_node, "projection", None),
-                        getattr(from_node, "extension", None),
-                        getattr(getattr(link, "from_socket", None), "name", None),
-                    )
-                )
-        return tuple(sorted(linked))
+    tex1 = get_diffuse_texture(mat1)
+    tex2 = get_diffuse_texture(mat2)
 
-    def _socket_default_value_signature(default_value):
-        if isinstance(default_value, (int, float)):
-            return round(float(default_value), 6)
-        if isinstance(default_value, (list, tuple)):
-            out = []
-            for value in default_value:
-                if isinstance(value, (int, float)):
-                    out.append(round(float(value), 6))
-                else:
-                    out.append(value)
-            return tuple(out)
-        return default_value
-
-    def _socket_value_signature(socket):
-        linked = _get_linked_image_path(socket)
-        if linked:
-            return ("LINKED_IMAGE", linked)
-        return ("DEFAULT", _socket_default_value_signature(getattr(socket, "default_value", None)))
-
-    def _material_node_tree_signature(mat):
-        principled = _get_principled_node(mat)
-        if not principled:
-            return None
-        inputs = getattr(principled, "inputs", {})
-        if hasattr(inputs, "keys"):
-            names = sorted(inputs.keys())
-            socket_get = inputs.get
+    if bool(tex1) != bool(tex2):
+        return False
+    if tex1 and tex2:
+        image1 = getattr(tex1, 'image', None)
+        image2 = getattr(tex2, 'image', None)
+        path1 = getattr(image1, 'filepath', None) if image1 else None
+        path2 = getattr(image2, 'filepath', None) if image2 else None
+        if path1 != path2:
+            return False
+    else:
+        if hasattr(mat1, 'diffuse_color') and hasattr(mat2, 'diffuse_color'):
+            for i in range(3):
+                if not math.isclose(mat1.diffuse_color[i], mat2.diffuse_color[i], abs_tol=tol):
+                    return False
         else:
-            names = sorted(getattr(socket, "name", "") for socket in inputs)
-            input_map = {getattr(socket, "name", ""): socket for socket in inputs}
-            socket_get = input_map.get
-        return tuple((name, _socket_value_signature(socket_get(name))) for name in names)
+            return False
 
-    sig1 = _material_node_tree_signature(mat1)
-    sig2 = _material_node_tree_signature(mat2)
-    if sig1 and sig2:
-        return sig1 == sig2
-    if bool(sig1) != bool(sig2):
+    def principled_params(mat):
+        if mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == 'BSDF_PRINCIPLED':
+                    rough = node.inputs.get('Roughness')
+                    spec = node.inputs.get('Specular')
+                    rough_val = getattr(rough, 'default_value', None)
+                    spec_val = getattr(spec, 'default_value', None)
+                    return rough_val, spec_val
+        return None, None
+
+    r1, s1 = principled_params(mat1)
+    r2, s2 = principled_params(mat2)
+
+    if (r1 is None) != (r2 is None):
+        return False
+    if r1 is not None and not math.isclose(r1, r2, abs_tol=tol):
+        return False
+    if (s1 is None) != (s2 is None):
+        return False
+    if s1 is not None and not math.isclose(s1, s2, abs_tol=tol):
         return False
 
-    if hasattr(mat1, 'diffuse_color') and hasattr(mat2, 'diffuse_color'):
-        return all(math.isclose(mat1.diffuse_color[i], mat2.diffuse_color[i], abs_tol=tol) for i in range(3))
-    return False
+    return True
 
 def find_duplicate_materials_for_vehicle(vehicle_name):
     """Find duplicate materials within a single vehicle's objects."""
@@ -740,52 +715,6 @@ def replace_materials_for_vehicle(vehicle_name, material_map):
                 if slot.material in material_map:
                     slot.material = material_map[slot.material]
 
-
-def deduplicate_material_slots_for_vehicle(vehicle_name):
-    """Ensure each material appears at most once per object's material slots."""
-    clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
-
-    for obj in bpy.data.objects:
-        if obj.type != 'MESH' or not belongs_to_vehicle(obj.name, clean_vehicle_name):
-            continue
-
-        slots = list(getattr(obj, "material_slots", []))
-        first_index_for_material = {}
-        canonical_for_old = {}
-
-        for index, slot in enumerate(slots):
-            mat = getattr(slot, "material", None)
-            if not mat:
-                canonical_for_old[index] = index
-                continue
-            canonical_for_old[index] = first_index_for_material.setdefault(mat, index)
-
-        keep_indices = sorted(set(canonical_for_old.values()))
-        if len(keep_indices) == len(slots):
-            continue
-
-        canonical_to_new = {old: new for new, old in enumerate(keep_indices)}
-        old_to_new = {old: canonical_to_new[canonical_for_old[old]] for old in range(len(slots))}
-
-        polygons = getattr(getattr(obj, "data", None), "polygons", None)
-        if polygons is not None:
-            for poly in polygons:
-                poly.material_index = old_to_new.get(poly.material_index, poly.material_index)
-
-        remove_indices = [i for i in range(len(slots)) if i not in keep_indices]
-        for index in sorted(remove_indices, reverse=True):
-            data_materials = getattr(getattr(obj, "data", None), "materials", None)
-            if data_materials is not None and hasattr(data_materials, "pop"):
-                try:
-                    data_materials.pop(index=index)
-                except TypeError:
-                    data_materials.pop(index)
-            elif isinstance(getattr(obj, "material_slots", None), list):
-                mat = obj.material_slots[index].material
-                if mat and hasattr(mat, "users"):
-                    mat.users = max(0, mat.users - 1)
-                del obj.material_slots[index]
-
 def remove_unused_materials():
     """Remove unused materials from Blender that start with 'meshMaterial' and have no users."""
     unused_materials = [mat for mat in bpy.data.materials if mat.name.startswith("meshMaterial") and not mat.users]
@@ -800,7 +729,6 @@ def merge_duplicate_materials_per_vehicle(vehicle_names):
         material_map = find_duplicate_materials_for_vehicle(clean_vehicle_name)
         if material_map:
             replace_materials_for_vehicle(clean_vehicle_name, material_map)
-            deduplicate_material_slots_for_vehicle(clean_vehicle_name)
             remove_unused_materials()
             print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {clean_vehicle_name}.")
         else:
