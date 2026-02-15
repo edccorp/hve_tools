@@ -18,6 +18,9 @@ for node in module_ast.body:
         "_normalize_image_path",
         "_get_principled_node",
         "_get_linked_image_path",
+        "_socket_value_signature",
+        "_socket_default_value_signature",
+        "_material_node_tree_signature",
         "materials_are_equal",
         "find_duplicate_materials_for_vehicle",
         "deduplicate_material_slots_for_vehicle",
@@ -180,6 +183,58 @@ def test_merge_by_texture():
     assert obj1.material_slots[0].material is obj2.material_slots[0].material
     assert len(bpy.data.materials) == 1
 
+
+
+
+def test_do_not_merge_when_unchecked_principled_inputs_differ():
+    principled1 = principled_node(0.3, 0.5)
+    principled1.inputs["Transmission Weight"] = types.SimpleNamespace(default_value=0.0, links=[])
+
+    principled2 = principled_node(0.3, 0.5)
+    principled2.inputs["Transmission Weight"] = types.SimpleNamespace(default_value=0.8, links=[])
+
+    m1 = Material("meshMaterial0", (0.2, 0.2, 0.2, 1.0), [principled1])
+    m2 = Material("meshMaterial1", (0.2, 0.2, 0.2, 1.0), [principled2])
+    obj1 = Obj("Mesh: Car: Body", [m1])
+    obj2 = Obj("Mesh: Car: Door", [m2])
+    reset_bpy([m1, m2], [obj1, obj2])
+
+    merge_duplicate_materials_per_vehicle(["Car"])
+
+    assert obj1.material_slots[0].material is not obj2.material_slots[0].material
+    assert len(bpy.data.materials) == 2
+
+
+
+def test_do_not_merge_when_texture_node_settings_differ():
+    principled1 = principled_node(0.3, 0.5)
+    texture1 = Node("TEX_IMAGE", image=Image("paint.png"))
+    texture1.interpolation = "Linear"
+    texture1.projection = "FLAT"
+    texture1.extension = "REPEAT"
+    principled1.inputs["Transmission Weight"] = types.SimpleNamespace(
+        links=[types.SimpleNamespace(from_node=texture1, from_socket=types.SimpleNamespace(name="Color"))]
+    )
+
+    principled2 = principled_node(0.3, 0.5)
+    texture2 = Node("TEX_IMAGE", image=Image("paint.png"))
+    texture2.interpolation = "Closest"
+    texture2.projection = "FLAT"
+    texture2.extension = "REPEAT"
+    principled2.inputs["Transmission Weight"] = types.SimpleNamespace(
+        links=[types.SimpleNamespace(from_node=texture2, from_socket=types.SimpleNamespace(name="Color"))]
+    )
+
+    m1 = Material("meshMaterial0", (0.2, 0.2, 0.2, 1.0), [principled1, texture1])
+    m2 = Material("meshMaterial1", (0.2, 0.2, 0.2, 1.0), [principled2, texture2])
+    obj1 = Obj("Mesh: Car: Body", [m1])
+    obj2 = Obj("Mesh: Car: Door", [m2])
+    reset_bpy([m1, m2], [obj1, obj2])
+
+    merge_duplicate_materials_per_vehicle(["Car"])
+
+    assert obj1.material_slots[0].material is not obj2.material_slots[0].material
+    assert len(bpy.data.materials) == 2
 
 def test_deduplicate_material_slots_within_object():
     m1 = Material("meshMaterial0", (1.0, 0.0, 0.0, 1.0), [principled_node(0.4, 0.5)])
