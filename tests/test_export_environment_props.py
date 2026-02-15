@@ -32,6 +32,22 @@ class EnvPropContainer:
         self.set_env_props = EnvProps()
 
 
+class Blender45EnvProps:
+    """Simulate Blender 4.5 reporting stale RNA values via getattr."""
+
+    poRateDamping = 0.7
+    poFriction = 0.7
+
+    def __init__(self):
+        self._idprops = {
+            "poRateDamping": 0.33,
+            "poFriction": 0.7,
+        }
+
+    def get(self, key, default=None):
+        return self._idprops.get(key, default)
+
+
 def test_get_environment_props_uses_defaults_when_props_missing():
     obj = Obj()
 
@@ -52,3 +68,13 @@ def test_get_environment_props_reads_pointer_properties_when_present():
     assert props["poRateDamping"] == 0.33
     assert props["poFriction"] == 0.7
     assert props["poStaticWater"] is False
+
+
+def test_get_environment_props_prefers_idprops_for_blender_45_damping_bug():
+    obj = Obj()
+    obj.hve_env_props = type("EnvPropContainer", (), {"set_env_props": Blender45EnvProps()})()
+
+    props = get_environment_props(obj)
+
+    assert props["poRateDamping"] == 0.33
+    assert props["poFriction"] == 0.7
