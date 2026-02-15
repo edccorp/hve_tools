@@ -539,7 +539,61 @@ def export(file, dirname,
                             fw(ident_step +'] \n')
                             fw(ident_step +'} #endTextureCoordinate2\n')
 
-                    lightSwitch = write_vehicle_light_switch(ident, obj, material_id_index, world, image)
+                    lightSwitch = None 
+                    lightSwitchProp = get_vehicle_light_type(obj)
+                    if lightSwitchProp is not None:
+                        print("Lightswitch= ", lightSwitchProp)
+                        def writelightmaterial(lightText):
+                            matnames = extract_switch_material_names(lightText)
+                            for matname in matnames:
+                                material = find_material_by_switch_id(bpy.data.materials, matname)
+                                if material is not None:
+                                    writeMaterial(
+                                        ident,
+                                        material,
+                                        material_id_index,
+                                        world,
+                                        image,
+                                        material_def_name=matname,
+                                    )
+
+                        if lightSwitchProp == "HVE_HEADLIGHT_LEFT":
+                            lightText = "#HVE_HEADLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_LEFT_High Switch {USE LIGHT_WHITE_HI}\n"
+                        elif lightSwitchProp == "HVE_HEADLIGHT_RIGHT":
+                            lightText ="#HVE_HEADLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_High Switch {USE LIGHT_WHITE_HI}\n"
+                        elif lightSwitchProp == "HVE_REVERSE_LEFT":
+                            lightText ="#HVE_REVERSE_LEFT \n    DEF HVE_LIGHT_BACKUPLIGHT_LEFT Switch {USE LIGHT_WHITE_ON}\n"
+                        elif lightSwitchProp == "HVE_REVERSE_RIGHT":
+                            lightText ="#HVE_REVERSE_RIGHT \n    DEF HVE_LIGHT_BACKUPLIGHT_RIGHT Switch {USE LIGHT_WHITE_ON}\n"
+                        elif lightSwitchProp == "HVE_FOGLIGHT_LEFT":
+                            lightText ="#HVE_FOGLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Fog Switch {USE LIGHT_WHITE_ON}\n"
+                        elif lightSwitchProp == "HVE_FOGLIGHT_RIGHT":
+                            lightText ="#HVE_FOGLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Fog Switch {USE LIGHT_WHITE_ON}\n"
+                        elif lightSwitchProp == "HVE_AMBERTURN_LEFT":
+                            lightText ="#HVE_AMBERTURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n"
+                        elif lightSwitchProp == "HVE_AMBERTURN_RIGHT":
+                            lightText ="#HVE_AMBERTURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n"  
+                        elif lightSwitchProp == "HVE_AMBERTAIL_LEFT":
+                            lightText ="#HVE_AMBERTAIL_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n"
+                        elif lightSwitchProp == "HVE_AMBERTAIL_RIGHT":
+                            lightText ="#HVE_AMBERTAIL_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n"
+                        elif lightSwitchProp == "HVE_BRAKETURN_LEFT":
+                            lightText ="#HVE_BRAKETURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n"
+                        elif lightSwitchProp == "HVE_BRAKETURN_RIGHT":
+                            lightText ="#HVE_BRAKETURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n"
+                        elif lightSwitchProp == "HVE_BRAKE_LEFT":
+                            lightText =    "#HVE_BRAKE_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n"
+                        elif lightSwitchProp == "HVE_BRAKE_RIGHT":
+                            lightText =    "#HVE_BRAKE_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n"
+                        elif lightSwitchProp == "HVE_BRAKE_CENTER":
+                            lightText = "#HVE_BRAKE_CENTER \n    DEF HVE_LIGHT_BRAKELIGHT_CENTER Switch {USE LIGHT_RED_HI}\n"  
+                        else:
+                            lightText = ""
+                        if lightText is not None:
+                            lightSwitch = lightText
+                            print(lightSwitch)                        
+                            #fw('%s \n' % (lightSwitch))
+                            writelightmaterial(lightText)
                     ident = ident[:-1]
                     if material:
                         writeMaterial(ident, material, material_id_index, world, image)                   
