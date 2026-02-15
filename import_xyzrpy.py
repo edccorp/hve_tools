@@ -76,6 +76,8 @@ def ensure_origin_parent_empty(obj, context):
     parent_empty.location = (0.0, 0.0, 0.0)
     parent_empty.rotation_euler = (0.0, 0.0, 0.0)
     parent_empty.scale = (1.0, 1.0, 1.0)
+    parent_empty.keyframe_insert(data_path="location", frame=-1)
+    parent_empty.keyframe_insert(data_path="rotation_euler", frame=-1)
 
     obj.parent = parent_empty
     obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
