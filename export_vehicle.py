@@ -54,6 +54,33 @@ def get_vehicle_light_type(obj):
     return getattr(make_light, 'type', None)
 
 
+def extract_switch_material_names(light_text):
+    """Return material identifiers used by switch entries in a light block."""
+    return re.findall(r'\{USE\s+([^}]+)\}', light_text or "")
+
+
+def get_vehicle_light_switch_text(light_type):
+    """Return the HVE switch block text for a configured vehicle light type."""
+    light_switch_text = {
+        "HVE_HEADLIGHT_LEFT": "#HVE_HEADLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_LEFT_High Switch {USE LIGHT_WHITE_HI}\n",
+        "HVE_HEADLIGHT_RIGHT": "#HVE_HEADLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_High Switch {USE LIGHT_WHITE_HI}\n",
+        "HVE_REVERSE_LEFT": "#HVE_REVERSE_LEFT \n    DEF HVE_LIGHT_BACKUPLIGHT_LEFT Switch {USE LIGHT_WHITE_ON}\n",
+        "HVE_REVERSE_RIGHT": "#HVE_REVERSE_RIGHT \n    DEF HVE_LIGHT_BACKUPLIGHT_RIGHT Switch {USE LIGHT_WHITE_ON}\n",
+        "HVE_FOGLIGHT_LEFT": "#HVE_FOGLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Fog Switch {USE LIGHT_WHITE_ON}\n",
+        "HVE_FOGLIGHT_RIGHT": "#HVE_FOGLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Fog Switch {USE LIGHT_WHITE_ON}\n",
+        "HVE_AMBERTURN_LEFT": "#HVE_AMBERTURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n",
+        "HVE_AMBERTURN_RIGHT": "#HVE_AMBERTURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n",
+        "HVE_AMBERTAIL_LEFT": "#HVE_AMBERTAIL_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n",
+        "HVE_AMBERTAIL_RIGHT": "#HVE_AMBERTAIL_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n",
+        "HVE_BRAKETURN_LEFT": "#HVE_BRAKETURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n",
+        "HVE_BRAKETURN_RIGHT": "#HVE_BRAKETURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n",
+        "HVE_BRAKE_LEFT": "#HVE_BRAKE_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n",
+        "HVE_BRAKE_RIGHT": "#HVE_BRAKE_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n",
+        "HVE_BRAKE_CENTER": "#HVE_BRAKE_CENTER \n    DEF HVE_LIGHT_BRAKELIGHT_CENTER Switch {USE LIGHT_RED_HI}\n",
+    }
+    return light_switch_text.get(light_type, "")
+
+
 def clean_def(txt):
     # see report [#28256]
     print("text " + txt)
@@ -111,6 +138,16 @@ def clean_def(txt):
         0x7b: "_",  # {
         0x7d: "_",  # }
         })
+
+
+def find_material_by_switch_id(materials, switch_material_id):
+    """Resolve a Blender material matching a switch material identifier."""
+    for material in materials:
+        if material.name == switch_material_id:
+            return material
+        if clean_def(material.name) == switch_material_id:
+            return material
+    return None
 
 
 def active_color_layer(mesh):
@@ -315,6 +352,30 @@ def export(file, dirname,
         fw('%s\n' % ident)
         return ident
 
+    def write_vehicle_light_switch(ident, obj, material_id_index, world, image):
+        light_switch_prop = get_vehicle_light_type(obj)
+        if light_switch_prop is None:
+            return None
+
+        light_text = get_vehicle_light_switch_text(light_switch_prop)
+        if not light_text:
+            return None
+
+        for matname in extract_switch_material_names(light_text):
+            material = find_material_by_switch_id(bpy.data.materials, matname)
+            if material is not None:
+                writeMaterial(
+                    ident,
+                    material,
+                    material_id_index,
+                    world,
+                    image,
+                    material_def_name=matname,
+                )
+
+        return light_text
+
+
     def writeIndexedFaceSet(ident, obj, mesh, matrix, world, material_id_index):
         print("INDEXED_FACE")
         obj_id = unique_name(obj, OB_ + obj.name, uuid_cache_object, clean_func=clean_def, sep="_")
@@ -478,55 +539,7 @@ def export(file, dirname,
                             fw(ident_step +'] \n')
                             fw(ident_step +'} #endTextureCoordinate2\n')
 
-                    lightSwitch = None 
-                    lightSwitchProp = get_vehicle_light_type(obj)
-                    if lightSwitchProp is not None:
-                        print("Lightswitch= ", lightSwitchProp)
-                        def writelightmaterial(lightText):
-                            matnames = re.findall(r'\{.*?\}',lightText)
-                            for matname in matnames:
-                                matname = matname[5:-1]
-                                for material in bpy.data.materials:
-                                    if material.name == matname:
-                                        writeMaterial(ident, material, material_id_index, world, image)
-
-                        if lightSwitchProp == "HVE_HEADLIGHT_LEFT":
-                            lightText = "#HVE_HEADLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_LEFT_High Switch {USE LIGHT_WHITE_HI}\n"
-                        elif lightSwitchProp == "HVE_HEADLIGHT_RIGHT":
-                            lightText ="#HVE_HEADLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_High Switch {USE LIGHT_WHITE_HI}\n"
-                        elif lightSwitchProp == "HVE_REVERSE_LEFT":
-                            lightText ="#HVE_REVERSE_LEFT \n    DEF HVE_LIGHT_BACKUPLIGHT_LEFT Switch {USE LIGHT_WHITE_ON}\n"
-                        elif lightSwitchProp == "HVE_REVERSE_RIGHT":
-                            lightText ="#HVE_REVERSE_RIGHT \n    DEF HVE_LIGHT_BACKUPLIGHT_RIGHT Switch {USE LIGHT_WHITE_ON}\n"
-                        elif lightSwitchProp == "HVE_FOGLIGHT_LEFT":
-                            lightText ="#HVE_FOGLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Fog Switch {USE LIGHT_WHITE_ON}\n"
-                        elif lightSwitchProp == "HVE_FOGLIGHT_RIGHT":
-                            lightText ="#HVE_FOGLIGHT_RIGHT \n    DEF HVE_LIGHT_HEADLIGHT_RIGHT_Fog Switch {USE LIGHT_WHITE_ON}\n"
-                        elif lightSwitchProp == "HVE_AMBERTURN_LEFT":
-                            lightText ="#HVE_AMBERTURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_LEFT Switch {USE LIGHT_AMBER_HI}\n"
-                        elif lightSwitchProp == "HVE_AMBERTURN_RIGHT":
-                            lightText ="#HVE_AMBERTURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_FRONT_RIGHT Switch {USE LIGHT_AMBER_HI}\n"  
-                        elif lightSwitchProp == "HVE_AMBERTAIL_LEFT":
-                            lightText ="#HVE_AMBERTAIL_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_AMBER_HI}\n"
-                        elif lightSwitchProp == "HVE_AMBERTAIL_RIGHT":
-                            lightText ="#HVE_AMBERTAIL_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_LO}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_AMBER_HI}\n"
-                        elif lightSwitchProp == "HVE_BRAKETURN_LEFT":
-                            lightText ="#HVE_BRAKETURN_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n"
-                        elif lightSwitchProp == "HVE_BRAKETURN_RIGHT":
-                            lightText ="#HVE_BRAKETURN_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_EMERGENCYFLASHERLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n    DEF HVE_LIGHT_SIGNALLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n"
-                        elif lightSwitchProp == "HVE_BRAKE_LEFT":
-                            lightText =    "#HVE_BRAKE_LEFT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_LEFT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_LEFT Switch {USE LIGHT_RED_HI}\n"
-                        elif lightSwitchProp == "HVE_BRAKE_RIGHT":
-                            lightText =    "#HVE_BRAKE_RIGHT \n    DEF HVE_LIGHT_RUNNINGLIGHT_REAR_RIGHT Switch {USE LIGHT_RED_LO}\n    DEF HVE_LIGHT_BRAKELIGHT_REAR_RIGHT Switch {USE LIGHT_RED_HI}\n"
-                        elif lightSwitchProp == "HVE_BRAKE_CENTER":
-                            lightText = "#HVE_BRAKE_CENTER \n    DEF HVE_LIGHT_BRAKELIGHT_CENTER Switch {USE LIGHT_RED_HI}\n"  
-                        else:
-                            lightText = ""
-                        if lightText is not None:
-                            lightSwitch = lightText
-                            print(lightSwitch)                        
-                            #fw('%s \n' % (lightSwitch))
-                            writelightmaterial(lightText)
+                    lightSwitch = write_vehicle_light_switch(ident, obj, material_id_index, world, image)
                     ident = ident[:-1]
                     if material:
                         writeMaterial(ident, material, material_id_index, world, image)                   
@@ -610,10 +623,10 @@ def export(file, dirname,
 
 
 
-    def writeMaterial(ident, material, material_id_index, world, image):
+    def writeMaterial(ident, material, material_id_index, world, image, material_def_name=None):
         print("MATERIAL_DEF")
         
-        material_id = clean_def(material.name)
+        material_id = material_def_name or clean_def(material.name)
         print("materialid " + material_id)
         
    
@@ -848,6 +861,11 @@ def export(file, dirname,
                     # free mesh created with create_mesh()
                     if do_remove:
                         obj_for_mesh.to_mesh_clear()
+            elif obj_type == 'LIGHT':
+                light_switch = write_vehicle_light_switch(ident, obj, material_id_index, world, '')
+                if light_switch is not None:
+                    fw('%s \n' % (light_switch))
+
 
 
             else:
