@@ -14,12 +14,19 @@ for node in module_ast.body:
                 code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
                 exec(code, ns)
     elif isinstance(node, ast.FunctionDef) and node.name in {
+        "_iter_layered_fcurve_collections",
         "normalize_root_name",
         "get_root_vehicle_names",
         "belongs_to_vehicle",
         "join_mesh_objects_per_vehicle",
         "normalize_name",
         "copy_animated_rotation",
+        "get_action_fcurve_collection",
+        "iter_action_fcurve_collections",
+        "iter_action_fcurves",
+        "offset_selected_animation",
+        "ensure_preroll_keys",
+        "adjust_animation",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
@@ -30,6 +37,8 @@ belongs_to_vehicle = ns["belongs_to_vehicle"]
 join_mesh_objects_per_vehicle = ns["join_mesh_objects_per_vehicle"]
 normalize_name = ns["normalize_name"]
 copy_animated_rotation = ns["copy_animated_rotation"]
+adjust_animation = ns["adjust_animation"]
+offset_selected_animation = ns["offset_selected_animation"]
 ROTATION_AXIS_KEYWORDS = ns["ROTATION_AXIS_KEYWORDS"]
 
 
@@ -207,6 +216,157 @@ def test_copy_animated_rotation_filters_by_vehicle_id():
     copy_animated_rotation(parent)
 
     assert set(removed) == {rotation, camber, steering}
+
+
+def test_adjust_animation_does_not_insert_synthetic_preroll_keys():
+    class KeyPoint:
+        def __init__(self, frame, value):
+            self.co = type("co", (), {"x": frame, "y": value})()
+            self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
+            self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+
+    class FCurve:
+        def __init__(self):
+            self.data_path = "rotation_euler"
+            self.array_index = 0
+            self.keyframe_points = [KeyPoint(-1, 0.0)]
+
+    class FCurveCollection(list):
+        def remove(self, _fcurve):
+            raise AssertionError("No scale fcurves should be removed in this test")
+
+    class Action:
+        def __init__(self):
+            self.fcurves = FCurveCollection([FCurve()])
+
+    class ObjWithAnimation:
+        def __init__(self):
+            self.animation_data = type("anim", (), {"action": Action()})()
+            self.scale = type("scale", (), {"y": 1.0, "z": 1.0})()
+            self.inserted = []
+
+        def keyframe_insert(self, data_path, frame):
+            self.inserted.append((data_path, frame))
+
+    obj = ObjWithAnimation()
+    ns["math"] = __import__("math")
+
+    adjust_animation(obj)
+
+    assert obj.inserted == []
+
+
+def test_ensure_preroll_keys_duplicates_first_pose_at_minus_one():
+    class KeyPoint:
+        def __init__(self, frame, value):
+            self.co = type("co", (), {"x": frame, "y": value})()
+            self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
+            self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+            self.interpolation = "BEZIER"
+
+    class KeyframeCollection(list):
+        def insert(self, frame, value, options=None):
+            key = KeyPoint(frame, value)
+            self.append(key)
+            return key
+
+    curve = type(
+        "FCurve",
+        (),
+        {
+            "data_path": "rotation_euler",
+            "array_index": 0,
+            "keyframe_points": KeyframeCollection([KeyPoint(0.0, 1.25)]),
+        },
+    )()
+
+    action = type("Action", (), {"fcurves": [curve]})()
+
+    ns["ensure_preroll_keys"](action, target_frame=-1)
+
+    xs = sorted(k.co.x for k in curve.keyframe_points)
+    assert xs == [-1.0, 0.0]
+    values = {k.co.x: k.co.y for k in curve.keyframe_points}
+    assert values[-1.0] == values[0.0] == 1.25
+
+
+def test_get_action_fcurve_collection_supports_layered_actions():
+    layered_curve = object()
+    action = type(
+        "Action",
+        (),
+        {
+            "layers": [
+                type(
+                    "Layer",
+                    (),
+                    {
+                        "strips": [
+                            type(
+                                "Strip",
+                                (),
+                                {
+                                    "channelbags": [
+                                        type("Bag", (), {"fcurves": [layered_curve]})()
+                                    ]
+                                },
+                            )()
+                        ]
+                    },
+                )()
+            ]
+        },
+    )()
+
+    fcurves = ns["get_action_fcurve_collection"](action)
+    assert list(fcurves) == [layered_curve]
+
+
+def test_offset_selected_animation_auto_aligns_first_key_to_frame_zero():
+    class KeyPoint:
+        def __init__(self, frame):
+            self.co = type("co", (), {"x": frame, "y": 0.0})()
+            self.handle_left = type("h", (), {"x": frame - 0.2, "y": 0.0})()
+            self.handle_right = type("h", (), {"x": frame + 0.2, "y": 0.0})()
+
+    curve = type(
+        "FCurve",
+        (),
+        {
+            "keyframe_points": [KeyPoint(1.0), KeyPoint(10.0)],
+            "data_path": "location",
+            "array_index": 0,
+        },
+    )()
+
+    action = type(
+        "Action",
+        (),
+        {
+            "layers": [
+                type(
+                    "Layer",
+                    (),
+                    {
+                        "strips": [
+                            type(
+                                "Strip",
+                                (),
+                                {"channelbags": [type("Bag", (), {"fcurves": [curve]})()]},
+                            )()
+                        ]
+                    },
+                )()
+            ]
+        },
+    )()
+
+    obj = type("Obj", (), {"animation_data": type("Anim", (), {"action": action})()})()
+
+    offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
+
+    assert curve.keyframe_points[0].co.x == 0.0
+    assert curve.keyframe_points[1].co.x == 9.0
 
 
 if __name__ == "__main__":
