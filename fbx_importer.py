@@ -679,11 +679,21 @@ def materials_are_equal(mat1, mat2, tol=1e-4):
     if mat1 == mat2:
         return True
 
+    def _material_setting(material, *attribute_names):
+        """Read the first available material setting across Blender versions."""
+        for attribute_name in attribute_names:
+            if hasattr(material, attribute_name):
+                return getattr(material, attribute_name)
+        return None
+
     if (
         mat1.use_nodes != mat2.use_nodes
-        or mat1.blend_method != mat2.blend_method
-        or mat1.shadow_method != mat2.shadow_method
-        or mat1.use_backface_culling != mat2.use_backface_culling
+        or _material_setting(mat1, 'blend_method', 'surface_render_method')
+        != _material_setting(mat2, 'blend_method', 'surface_render_method')
+        or _material_setting(mat1, 'shadow_method')
+        != _material_setting(mat2, 'shadow_method')
+        or _material_setting(mat1, 'use_backface_culling', 'show_transparent_back')
+        != _material_setting(mat2, 'use_backface_culling', 'show_transparent_back')
     ):
         return False
 
