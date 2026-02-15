@@ -41,6 +41,19 @@ def bool_as_str(value):
     return ('false', 'true')[bool(value)]
 
 
+def get_vehicle_light_type(obj):
+    """Return an object's configured HVE light type when available."""
+    vehicle_light = getattr(obj, 'hve_vehicle_light', None)
+    if vehicle_light is None:
+        return None
+
+    make_light = getattr(vehicle_light, 'make_light', None)
+    if make_light is None:
+        return None
+
+    return getattr(make_light, 'type', None)
+
+
 def clean_def(txt):
     # see report [#28256]
     print("text " + txt)
@@ -466,8 +479,8 @@ def export(file, dirname,
                             fw(ident_step +'} #endTextureCoordinate2\n')
 
                     lightSwitch = None 
-                    if 'hve_vehicle_light' in obj:
-                        lightSwitchProp = obj.hve_vehicle_light.make_light.type
+                    lightSwitchProp = get_vehicle_light_type(obj)
+                    if lightSwitchProp is not None:
                         print("Lightswitch= ", lightSwitchProp)
                         def writelightmaterial(lightText):
                             matnames = re.findall(r'\{.*?\}',lightText)
