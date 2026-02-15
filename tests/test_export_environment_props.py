@@ -78,3 +78,17 @@ def test_get_environment_props_prefers_idprops_for_blender_45_damping_bug():
 
     assert props["poRateDamping"] == 0.33
     assert props["poFriction"] == 0.7
+
+
+def test_get_environment_props_keeps_surface_type_enum_identifier():
+    obj = Obj()
+
+    props_group = Blender45EnvProps()
+    props_group.poSurfaceType = "EdTypeZone"
+    props_group._idprops["poSurfaceType"] = 2
+
+    obj.hve_env_props = type("EnvPropContainer", (), {"set_env_props": props_group})()
+
+    props = get_environment_props(obj)
+
+    assert props["poSurfaceType"] == "EdTypeZone"
