@@ -67,7 +67,7 @@ def assign_objects_to_collection(collection_name, objects):
     
     collection = bpy.data.collections.get(collection_name)
     if not collection:
-        print(f"Error: Parent collection '{parent_collection}' does not exist.")
+        print(f"Error: Collection '{collection_name}' does not exist.")
         return
 
     # Ensure objects is a list
@@ -149,7 +149,20 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
             data.append(row[1:])
    
    #Set the frame rate
-    time_step = time[5]-time[4]
+    if len(time) < 6:
+        print("Not enough data rows to determine frame rate.")
+        return
+
+    try:
+        time_step = float(time[5]) - float(time[4])
+    except (TypeError, ValueError):
+        print("Unable to determine frame rate from the CSV timestamps.")
+        return
+
+    if time_step == 0:
+        print("Invalid timestamp data: time step cannot be zero.")
+        return
+
     bpy.context.scene.render.fps = int(1.0/time_step)
     # Setup timeline
     numframes = len(time[4:])
@@ -205,10 +218,17 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
             vehicles[vehicle_name].update({object_name:{}})
         vehicles[vehicle_name][object_name].update({variable:[]})
         for row in (data[4:]):
-            vehicles[vehicle_name][object_name][variable].append(float(row[j]))
+            try:
+                value = float(row[j])
+            except (IndexError, TypeError, ValueError):
+                value = 0.0
+            vehicles[vehicle_name][object_name][variable].append(value)
             
-            
-    if "KinematicOut" not in vehicles[vehicle_name].keys():
+    if not vehicles:
+        print("No vehicle data found in CSV.")
+        return
+
+    if any("KinematicOut" not in vehicle_data for vehicle_data in vehicles.values()):
         print("Not a valid HVE motion file.")
         return  # Stops execution without closing Blender
     for vehicle_name in vehicles.keys():
@@ -1769,5 +1789,4 @@ def load(context,
             )
 
     return {'FINISHED'}
-
 
