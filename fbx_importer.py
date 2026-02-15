@@ -109,6 +109,23 @@ def is_wheel_object(obj):
     return False
 
 
+def _iter_layered_fcurve_collections(action):
+    """Yield F-Curve collections from layered actions (Blender 5+)."""
+    layers = getattr(action, "layers", None)
+    if not layers:
+        return
+
+    for layer in layers:
+        strips = getattr(layer, "strips", None) or ()
+        for strip in strips:
+            # Layered strips commonly expose channel bags directly.
+            channelbags = getattr(strip, "channelbags", None) or ()
+            for bag in channelbags:
+                fcurves = getattr(bag, "fcurves", None)
+                if fcurves is not None:
+                    yield fcurves
+
+
 def get_action_fcurve_collection(action):
     """Return the action F-Curve collection when available.
 
@@ -116,22 +133,52 @@ def get_action_fcurve_collection(action):
     directly. Returning ``None`` allows callers to safely skip direct F-Curve
     edits without raising ``AttributeError``.
     """
-    return getattr(action, "fcurves", None)
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        return fcurves
+
+    for layered_fcurves in _iter_layered_fcurve_collections(action):
+        return layered_fcurves
+
+    return None
+
+
+def iter_action_fcurve_collections(action):
+    """Iterate all available F-Curve collections from an action."""
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        yield fcurves
+
+    for layered_fcurves in _iter_layered_fcurve_collections(action):
+        yield layered_fcurves
 
 
 def iter_action_fcurves(action):
     """Iterate over F-Curves from ``action`` when supported."""
-    fcurves = get_action_fcurve_collection(action)
-    if fcurves is None:
-        return ()
-    return fcurves
+    for fcurve_collection in iter_action_fcurve_collections(action):
+        for fcurve in fcurve_collection:
+            yield fcurve
 
 
-def offset_selected_animation(obj, frame_offset=-1):
+def offset_selected_animation(obj, frame_offset=-1, target_start_frame=0):
     """Offsets animation keyframes for all selected objects by the given frame amount."""
 
     if obj.animation_data and obj.animation_data.action:
         action = obj.animation_data.action
+        if frame_offset is None:
+            first_frame = None
+            for fcurve in iter_action_fcurves(action):
+                for keyframe in fcurve.keyframe_points:
+                    if first_frame is None or keyframe.co.x < first_frame:
+                        first_frame = keyframe.co.x
+
+            if first_frame is None:
+                return
+            frame_offset = target_start_frame - first_frame
+
+        if frame_offset == 0:
+            return
+
         for fcurve in iter_action_fcurves(action):
             for keyframe in fcurve.keyframe_points:
                 keyframe.co.x += frame_offset  # Offset keyframe time
@@ -167,11 +214,9 @@ def adjust_animation(obj):
         obj.scale.y *= -1
         obj.scale.z *= -1
          
-        obj.location = (0, 0, 0)
-        obj.rotation_euler = (0, 0, 0)
-
-        obj.keyframe_insert(data_path="location", frame=-1)
-        obj.keyframe_insert(data_path="rotation_euler", frame=-1)
+        # Avoid inserting synthetic location/rotation keys at frame ``-1``.
+        # Imported FBX files already contain their animation data and forcing an
+        # extra keyframe can create an inverted pose at that pre-roll frame.
        
 def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
@@ -881,7 +926,7 @@ def import_fbx(context, fbx_file_path):
         # Loop through imported objects
         for obj in imported_objects:
             # Offset keyframes for all selected objects by 1 frame
-            offset_selected_animation(obj,frame_offset=-1) 
+            offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
   
         # List of keywords to exclude from selection
         exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed     
@@ -1058,4 +1103,3 @@ def load(context,
             )
 
     return {'FINISHED'}
-
