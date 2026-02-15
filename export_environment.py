@@ -144,6 +144,40 @@ def build_hierarchy(objects):
     return par_lookup.get(None, [])
 
 
+def get_environment_props(obj_main):
+    """Return terrain property values from an object, with exporter defaults."""
+    props = {
+        "poName": "Asphalt, Normal",
+        "poForceConst": 5000,
+        "poForceLinear": 50000,
+        "poForceQuad": 1000,
+        "poForceCubic": 1000,
+        "poRateDamping": 0.5,
+        "poFriction": 1,
+        "poForceUnload": 100000,
+        "poBekkerConst": 0,
+        "poKphi": 0,
+        "poKc": 0,
+        "poPcntMoisture": 0,
+        "poPcntClay": 0.02,
+        "poSurfaceType": "EdTypeRoad",
+        "poWaterDepth": 0,
+        "poStaticWater": 1,
+        "polabel": "Untitled",
+    }
+
+    env_props_group = getattr(getattr(obj_main, "hve_env_props", None), "set_env_props", None)
+    if env_props_group is None:
+        return props
+
+    for key in props:
+        value = getattr(env_props_group, key, None)
+        if value is not None:
+            props[key] = value
+
+    return props
+
+
 # -----------------------------------------------------------------------------
 # Functions for writing output file
 # -----------------------------------------------------------------------------
@@ -411,42 +445,24 @@ def export_env(file, dirname,
 
                     obj_main_id = unique_name(obj_main, obj_main.name, uuid_cache_object, clean_func=clean_def, sep="_")
               
-                    poName ='Asphalt, Normal'  
-                    poForceConst =   5000                 
-                    poForceLinear =  50000                   
-                    poForceQuad =    1000             
-                    poForceCubic =    1000               
-                    poRateDamping = 0.5                     
-                    poFriction = 1                  
-                    poForceUnload = 100000                    
-                    poBekkerConst = 0                     
-                    poKphi = 0                     
-                    poKc = 0                   
-                    poPcntMoisture = 0                     
-                    poPcntClay = .02                    
-                    poSurfaceType = 'EdTypeRoad'                     
-                    poWaterDepth = 0                    
-                    poStaticWater = 1                     
-                    polabel = 'Untitled'                     
-                    
-                    if 'hve_env_props' in obj_main:
-                        poName = obj_main.hve_env_props.set_env_props.poName
-                        poForceConst = obj_main.hve_env_props.set_env_props.poForceConst                     
-                        poForceLinear = obj_main.hve_env_props.set_env_props.poForceLinear                     
-                        poForceQuad = obj_main.hve_env_props.set_env_props.poForceQuad                     
-                        poForceCubic = obj_main.hve_env_props.set_env_props.poForceCubic                     
-                        poRateDamping = obj_main.hve_env_props.set_env_props.poFriction                     
-                        poFriction = obj_main.hve_env_props.set_env_props.poFriction                     
-                        poForceUnload = obj_main.hve_env_props.set_env_props.poForceUnload                     
-                        poBekkerConst = obj_main.hve_env_props.set_env_props.poBekkerConst                     
-                        poKphi = obj_main.hve_env_props.set_env_props.poKphi                     
-                        poKc = obj_main.hve_env_props.set_env_props.poKc                     
-                        poPcntMoisture = obj_main.hve_env_props.set_env_props.poPcntMoisture                     
-                        poPcntClay = obj_main.hve_env_props.set_env_props.poPcntClay                     
-                        poSurfaceType = obj_main.hve_env_props.set_env_props.poSurfaceType                     
-                        poWaterDepth = obj_main.hve_env_props.set_env_props.poWaterDepth                    
-                        poStaticWater = obj_main.hve_env_props.set_env_props.poStaticWater                     
-                        polabel = obj_main.hve_env_props.set_env_props.polabel                     
+                    env_props = get_environment_props(obj_main)
+                    poName = env_props["poName"]
+                    poForceConst = env_props["poForceConst"]
+                    poForceLinear = env_props["poForceLinear"]
+                    poForceQuad = env_props["poForceQuad"]
+                    poForceCubic = env_props["poForceCubic"]
+                    poRateDamping = env_props["poRateDamping"]
+                    poFriction = env_props["poFriction"]
+                    poForceUnload = env_props["poForceUnload"]
+                    poBekkerConst = env_props["poBekkerConst"]
+                    poKphi = env_props["poKphi"]
+                    poKc = env_props["poKc"]
+                    poPcntMoisture = env_props["poPcntMoisture"]
+                    poPcntClay = env_props["poPcntClay"]
+                    poSurfaceType = env_props["poSurfaceType"]
+                    poWaterDepth = env_props["poWaterDepth"]
+                    poStaticWater = env_props["poStaticWater"]
+                    polabel = env_props["polabel"]
 
                     
                 # Set here just incase we dont enter the loop below.
@@ -1178,5 +1194,3 @@ def save(context,
                )
 
     return {'FINISHED'}
-
-
