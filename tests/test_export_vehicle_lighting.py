@@ -12,6 +12,7 @@ for node in module_ast.body:
     if isinstance(node, ast.FunctionDef) and node.name in {
         "get_vehicle_light_type",
         "extract_switch_material_names",
+        "get_vehicle_light_switch_text",
         "clean_def",
         "find_material_by_switch_id",
     }:
@@ -20,6 +21,7 @@ for node in module_ast.body:
 
 get_vehicle_light_type = ns["get_vehicle_light_type"]
 extract_switch_material_names = ns["extract_switch_material_names"]
+get_vehicle_light_switch_text = ns["get_vehicle_light_switch_text"]
 find_material_by_switch_id = ns["find_material_by_switch_id"]
 
 
@@ -78,3 +80,14 @@ def test_find_material_by_switch_id_matches_exact_material_name():
     matched = find_material_by_switch_id([material], "LIGHT_RED_HI")
 
     assert matched is material
+
+
+def test_get_vehicle_light_switch_text_for_headlight_left_contains_low_and_high():
+    light_text = get_vehicle_light_switch_text("HVE_HEADLIGHT_LEFT")
+
+    assert "{USE LIGHT_WHITE_LO}" in light_text
+    assert "{USE LIGHT_WHITE_HI}" in light_text
+
+
+def test_get_vehicle_light_switch_text_unknown_type_returns_empty_string():
+    assert get_vehicle_light_switch_text("UNKNOWN") == ""
