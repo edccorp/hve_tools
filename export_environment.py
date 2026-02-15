@@ -170,8 +170,23 @@ def get_environment_props(obj_main):
     if env_props_group is None:
         return props
 
+    idprop_preferred_keys = {"poRateDamping", "poFriction"}
+
     for key in props:
-        value = getattr(env_props_group, key, None)
+        value = None
+
+        # Blender 4.5 can expose stale RNA values for some float fields.
+        # Limit ID-property preference to the known-affected keys so enum
+        # properties such as poSurfaceType keep their RNA identifier strings.
+        if key in idprop_preferred_keys and hasattr(env_props_group, "get"):
+            sentinel = object()
+            idprop_value = env_props_group.get(key, sentinel)
+            if idprop_value is not sentinel:
+                value = idprop_value
+
+        if value is None:
+            value = getattr(env_props_group, key, None)
+
         if value is not None:
             props[key] = value
 
