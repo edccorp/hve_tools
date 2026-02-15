@@ -820,6 +820,20 @@ def materials_are_equal(mat1, mat2, tol=1e-4):
     return True
 
 
+
+
+def _material_base_name(name):
+    """Return the material name without Blender's numeric duplicate suffix."""
+    if not name:
+        return name
+    return re.sub(r"\.\d+$", "", name)
+
+
+def _materials_can_merge_by_name(mat1, mat2):
+    """Only merge materials that are duplicate instances of the same base name."""
+    return _material_base_name(mat1.name) == _material_base_name(mat2.name)
+
+
 def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
     """Find duplicate materials within a single vehicle's objects."""
     clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
@@ -853,7 +867,7 @@ def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
 
     for mat in materials:
         for unique_mat in unique_materials:
-            if materials_are_equal(mat, unique_mat):
+            if _materials_can_merge_by_name(mat, unique_mat) and materials_are_equal(mat, unique_mat):
                 material_map[mat] = unique_mat
                 break
         else:
