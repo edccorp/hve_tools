@@ -7,11 +7,20 @@ import re
 module_path = pathlib.Path(__file__).resolve().parents[1] / "fbx_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
-ns = {"math": math, "re": re}
+ns = {"math": math, "re": re, "os": __import__("os")}
 for node in module_ast.body:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "MATERIAL_NAME_PREFIXES":
+                code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
+                exec(code, ns)
     if isinstance(node, ast.FunctionDef) and node.name in {
+        "_normalize_image_path",
+        "_get_principled_node",
+        "_get_linked_image_path",
         "materials_are_equal",
         "find_duplicate_materials_for_vehicle",
+        "deduplicate_material_slots_for_vehicle",
         "replace_materials_for_vehicle",
         "remove_unused_materials",
         "merge_duplicate_materials_per_vehicle",
@@ -62,6 +71,9 @@ class Material:
         self.diffuse_color = diffuse_color
         self.node_tree = NodeTree(nodes)
         self.users = 0
+        self.use_nodes = True
+        self.blend_method = "OPAQUE"
+        self.use_backface_culling = False
 
 
 class MaterialSlot:
@@ -99,9 +111,16 @@ class BpyData:
         self.materials = Materials()
 
 
+class BpyPath:
+    @staticmethod
+    def abspath(filepath):
+        return filepath
+
+
 class BpyModule:
     def __init__(self):
         self.data = BpyData()
+        self.path = BpyPath()
 
 
 bpy = BpyModule()
@@ -144,13 +163,31 @@ def test_merge_by_color_and_properties():
 
 
 def test_merge_by_texture():
-    nodes1 = [principled_node(0.1, 0.9), texture_node("tex.png")]
-    nodes2 = [principled_node(0.1, 0.9), texture_node("tex.png")]
-    m1 = Material("meshMaterial0", (0.0, 0.0, 0.0, 1.0), nodes1)
-    m2 = Material("meshMaterial1", (1.0, 1.0, 1.0, 1.0), nodes2)
+    principled1 = principled_node(0.1, 0.9)
+    texture1 = Node("TEX_IMAGE", image=Image("tex.png"))
+    principled1.inputs["Base Color"] = types.SimpleNamespace(links=[types.SimpleNamespace(from_node=texture1)])
+
+    principled2 = principled_node(0.1, 0.9)
+    texture2 = Node("TEX_IMAGE", image=Image("tex.png"))
+    principled2.inputs["Base Color"] = types.SimpleNamespace(links=[types.SimpleNamespace(from_node=texture2)])
+
+    m1 = Material("meshMaterial0", (0.0, 0.0, 0.0, 1.0), [principled1, texture1])
+    m2 = Material("meshMaterial1", (0.0, 0.0, 0.0, 1.0), [principled2, texture2])
     obj1 = Obj("Mesh: Car: Body", [m1])
     obj2 = Obj("Mesh: Car: Door", [m2])
     reset_bpy([m1, m2], [obj1, obj2])
     merge_duplicate_materials_per_vehicle(["Car"])
     assert obj1.material_slots[0].material is obj2.material_slots[0].material
+    assert len(bpy.data.materials) == 1
+
+
+def test_deduplicate_material_slots_within_object():
+    m1 = Material("meshMaterial0", (1.0, 0.0, 0.0, 1.0), [principled_node(0.4, 0.5)])
+    m2 = Material("meshMaterial1", (1.0, 0.0, 0.0, 1.0), [principled_node(0.4, 0.5)])
+    obj = Obj("Mesh: Car: Body", [m1, m2])
+    reset_bpy([m1, m2], [obj])
+
+    merge_duplicate_materials_per_vehicle(["Car"])
+
+    assert len(obj.material_slots) == 1
     assert len(bpy.data.materials) == 1
