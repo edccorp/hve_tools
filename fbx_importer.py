@@ -733,7 +733,15 @@ def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
     seen_materials = set()
     objects = candidate_objects if candidate_objects is not None else bpy.data.objects
     for obj in objects:
-        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
+        if obj is None:
+            continue
+        try:
+            obj_type = obj.type
+            obj_name = obj.name
+        except ReferenceError:
+            # Object was removed from Blender data (dangling StructRNA reference).
+            continue
+        if obj_type == 'MESH' and belongs_to_vehicle(obj_name, clean_vehicle_name):
             for slot in obj.material_slots:
                 mat = slot.material
                 if not mat:
@@ -764,7 +772,15 @@ def replace_materials_for_vehicle(vehicle_name, material_map, candidate_objects=
     clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
     objects = candidate_objects if candidate_objects is not None else bpy.data.objects
     for obj in objects:
-        if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
+        if obj is None:
+            continue
+        try:
+            obj_type = obj.type
+            obj_name = obj.name
+        except ReferenceError:
+            # Object was removed from Blender data (dangling StructRNA reference).
+            continue
+        if obj_type == 'MESH' and belongs_to_vehicle(obj_name, clean_vehicle_name):
             for slot in obj.material_slots:
                 if slot.material in material_map:
                     slot.material = material_map[slot.material]
