@@ -4,12 +4,15 @@ import re
 import math
 import threading
 import mathutils  # Blender's math utilities library
+
 bl_info = {
     "name": "HVE FBX Import",
     "category": "Import-Export",
     "author": "EDC",
     "blender": (3, 1, 0),
 }
+
+MATERIAL_NAME_PREFIXES = ("meshMaterial",)
 
 
 # Default mapping used to identify which helper objects provide rotation
@@ -639,73 +642,109 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
         print(f"✅ Joined {len(mesh_objects)} Mesh objects for {clean_vehicle_name}.")
 
 
-def materials_are_equal(mat1, mat2, tol=1e-4):
-    """Compare two materials including color, roughness, specular and diffuse textures."""
-    if mat1.name == mat2.name:
-        return False  # Skip if it's the same material
-
-    def get_diffuse_texture(mat):
-        if mat.node_tree:
-            for node in mat.node_tree.nodes:
-                if node.type == 'TEX_IMAGE':
-                    for output in getattr(node, 'outputs', []):
-                        for link in getattr(output, 'links', []):
-                            if getattr(link.to_socket, 'name', '') == "Base Color":
-                                return node
+def _normalize_image_path(image):
+    """Resolve a stable absolute path for image comparisons."""
+    if not image:
         return None
+    filepath = getattr(image, 'filepath', None)
+    if not filepath:
+        return None
+    resolved = bpy.path.abspath(filepath)
+    return os.path.normcase(os.path.normpath(resolved))
 
-    tex1 = get_diffuse_texture(mat1)
-    tex2 = get_diffuse_texture(mat2)
 
-    if bool(tex1) != bool(tex2):
-        return False
-    if tex1 and tex2:
-        image1 = getattr(tex1, 'image', None)
-        image2 = getattr(tex2, 'image', None)
-        path1 = getattr(image1, 'filepath', None) if image1 else None
-        path2 = getattr(image2, 'filepath', None) if image2 else None
-        if path1 != path2:
-            return False
-    else:
-        if hasattr(mat1, 'diffuse_color') and hasattr(mat2, 'diffuse_color'):
-            for i in range(3):
-                if not math.isclose(mat1.diffuse_color[i], mat2.diffuse_color[i], abs_tol=tol):
-                    return False
-        else:
-            return False
+def _get_principled_node(mat):
+    if mat.node_tree:
+        for node in mat.node_tree.nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                return node
+    return None
 
-    def principled_params(mat):
-        if mat.node_tree:
-            for node in mat.node_tree.nodes:
-                if node.type == 'BSDF_PRINCIPLED':
-                    rough = node.inputs.get('Roughness')
-                    spec = node.inputs.get('Specular')
-                    rough_val = getattr(rough, 'default_value', None)
-                    spec_val = getattr(spec, 'default_value', None)
-                    return rough_val, spec_val
-        return None, None
 
-    r1, s1 = principled_params(mat1)
-    r2, s2 = principled_params(mat2)
+def _get_linked_image_path(principled_node, socket_name):
+    if not principled_node:
+        return None
+    socket = principled_node.inputs.get(socket_name)
+    if not socket:
+        return None
+    for link in getattr(socket, 'links', []):
+        from_node = getattr(link, 'from_node', None)
+        if from_node and from_node.type == 'TEX_IMAGE':
+            return _normalize_image_path(getattr(from_node, 'image', None))
+    return None
 
-    if (r1 is None) != (r2 is None):
+
+def materials_are_equal(mat1, mat2, tol=1e-4):
+    """Compare two materials using shader settings and linked texture paths."""
+    if mat1 == mat2:
+        return True
+
+    if (
+        mat1.use_nodes != mat2.use_nodes
+        or mat1.blend_method != mat2.blend_method
+        or mat1.shadow_method != mat2.shadow_method
+        or mat1.use_backface_culling != mat2.use_backface_culling
+    ):
         return False
-    if r1 is not None and not math.isclose(r1, r2, abs_tol=tol):
+
+    if any(
+        not math.isclose(mat1.diffuse_color[i], mat2.diffuse_color[i], abs_tol=tol)
+        for i in range(4)
+    ):
         return False
-    if (s1 is None) != (s2 is None):
+
+    principled1 = _get_principled_node(mat1)
+    principled2 = _get_principled_node(mat2)
+    if bool(principled1) != bool(principled2):
         return False
-    if s1 is not None and not math.isclose(s1, s2, abs_tol=tol):
-        return False
+
+    if principled1 and principled2:
+        for param in ('Roughness', 'Specular', 'Metallic', 'Alpha'):
+            input1 = principled1.inputs.get(param)
+            input2 = principled2.inputs.get(param)
+            value1 = getattr(input1, 'default_value', None)
+            value2 = getattr(input2, 'default_value', None)
+            if (value1 is None) != (value2 is None):
+                return False
+            if value1 is not None and not math.isclose(value1, value2, abs_tol=tol):
+                return False
+
+        for texture_socket in (
+            'Base Color',
+            'Roughness',
+            'Metallic',
+            'Normal',
+            'Alpha',
+            'Emission Color',
+            'Emission',
+        ):
+            path1 = _get_linked_image_path(principled1, texture_socket)
+            path2 = _get_linked_image_path(principled2, texture_socket)
+            if path1 != path2:
+                return False
 
     return True
 
-def find_duplicate_materials_for_vehicle(vehicle_name):
+
+def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
     """Find duplicate materials within a single vehicle's objects."""
     clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
     materials = []
-    for obj in bpy.data.objects:
+    seen_materials = set()
+    objects = candidate_objects if candidate_objects is not None else bpy.data.objects
+    for obj in objects:
         if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
-            materials.extend([slot.material for slot in obj.material_slots if slot.material and slot.material.name.startswith("meshMaterial")])
+            for slot in obj.material_slots:
+                mat = slot.material
+                if not mat:
+                    continue
+                if not mat.name.startswith(MATERIAL_NAME_PREFIXES):
+                    continue
+                mat_ptr = mat.as_pointer()
+                if mat_ptr in seen_materials:
+                    continue
+                seen_materials.add(mat_ptr)
+                materials.append(mat)
 
     unique_materials = []
     material_map = {}
@@ -720,10 +759,11 @@ def find_duplicate_materials_for_vehicle(vehicle_name):
 
     return material_map
 
-def replace_materials_for_vehicle(vehicle_name, material_map):
+def replace_materials_for_vehicle(vehicle_name, material_map, candidate_objects=None):
     """Replace duplicate materials within a single vehicle's objects."""
     clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
-    for obj in bpy.data.objects:
+    objects = candidate_objects if candidate_objects is not None else bpy.data.objects
+    for obj in objects:
         if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
             for slot in obj.material_slots:
                 if slot.material in material_map:
@@ -731,18 +771,18 @@ def replace_materials_for_vehicle(vehicle_name, material_map):
 
 def remove_unused_materials():
     """Remove unused materials from Blender that start with 'meshMaterial' and have no users."""
-    unused_materials = [mat for mat in bpy.data.materials if mat.name.startswith("meshMaterial") and not mat.users]
+    unused_materials = [mat for mat in bpy.data.materials if mat.name.startswith(MATERIAL_NAME_PREFIXES) and not mat.users]
     for mat in unused_materials:
         bpy.data.materials.remove(mat)
 
-def merge_duplicate_materials_per_vehicle(vehicle_names):
+def merge_duplicate_materials_per_vehicle(vehicle_names, candidate_objects=None):
     """Runs material merging separately for each vehicle."""
     for vehicle_name in vehicle_names:
         clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
         print(f"🔍 Processing materials for {clean_vehicle_name}...")
-        material_map = find_duplicate_materials_for_vehicle(clean_vehicle_name)
+        material_map = find_duplicate_materials_for_vehicle(clean_vehicle_name, candidate_objects=candidate_objects)
         if material_map:
-            replace_materials_for_vehicle(clean_vehicle_name, material_map)
+            replace_materials_for_vehicle(clean_vehicle_name, material_map, candidate_objects=candidate_objects)
             remove_unused_materials()
             print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {clean_vehicle_name}.")
         else:
@@ -1120,7 +1160,7 @@ def import_fbx(context, fbx_file_path):
         join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
 
         # Replace duplicate materials
-        merge_duplicate_materials_per_vehicle(vehicle_names)
+        merge_duplicate_materials_per_vehicle(vehicle_names, candidate_objects=imported_objects)
  
        # Restore the original frame rate settings
         context.scene.render.fps = original_fps
