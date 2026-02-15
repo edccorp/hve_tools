@@ -703,45 +703,56 @@ def _material_node_tree_signature(material):
     """Build a conservative signature for node-based material comparison."""
     if not getattr(material, 'use_nodes', False):
         return None
+
     node_tree = getattr(material, 'node_tree', None)
     nodes = getattr(node_tree, 'nodes', None)
-    links = getattr(node_tree, 'links', None)
     if nodes is None:
         return None
 
+    node_list = list(nodes)
+    node_index_map = {
+        (node.as_pointer() if hasattr(node, 'as_pointer') else id(node)): index
+        for index, node in enumerate(node_list)
+    }
+
     node_signatures = []
-    for index, node in enumerate(nodes):
+    for index, node in enumerate(node_list):
         node_type = getattr(node, 'type', None)
-        image_path = None
+        node_props = []
+
         if node_type == 'TEX_IMAGE':
-            image_path = _normalize_image_path(getattr(node, 'image', None))
+            image = getattr(node, 'image', None)
+            colorspace = getattr(getattr(image, 'colorspace_settings', None), 'name', None)
+            node_props.extend([
+                ('image_path', _normalize_image_path(image)),
+                ('image_colorspace', colorspace),
+                ('interpolation', getattr(node, 'interpolation', None)),
+                ('projection', getattr(node, 'projection', None)),
+                ('extension', getattr(node, 'extension', None)),
+            ])
 
         input_values = []
         for socket_name, socket in sorted(getattr(node, 'inputs', {}).items(), key=lambda item: item[0]):
-            if getattr(socket, 'links', None):
-                input_values.append((socket_name, 'LINKED'))
+            links = getattr(socket, 'links', None) or []
+            if links:
+                link_targets = []
+                for link in links:
+                    from_node = getattr(link, 'from_node', None)
+                    from_socket = getattr(link, 'from_socket', None)
+                    from_id = from_node.as_pointer() if hasattr(from_node, 'as_pointer') else id(from_node)
+                    from_index = node_index_map.get(from_id)
+                    link_targets.append((
+                        from_index,
+                        getattr(from_node, 'type', None),
+                        getattr(from_socket, 'name', None),
+                    ))
+                input_values.append((socket_name, ('LINKED', tuple(sorted(link_targets)))))
             else:
                 input_values.append((socket_name, _socket_default_value_signature(socket)))
 
-        node_signatures.append((index, node_type, image_path, tuple(input_values)))
+        node_signatures.append((index, node_type, tuple(node_props), tuple(input_values)))
 
-    link_signatures = []
-    if links is not None:
-        for link in links:
-            from_node = getattr(link, 'from_node', None)
-            to_node = getattr(link, 'to_node', None)
-            from_socket = getattr(link, 'from_socket', None)
-            to_socket = getattr(link, 'to_socket', None)
-            link_signatures.append(
-                (
-                    getattr(from_node, 'type', None),
-                    getattr(from_socket, 'name', None),
-                    getattr(to_node, 'type', None),
-                    getattr(to_socket, 'name', None),
-                )
-            )
-
-    return (tuple(node_signatures), tuple(sorted(link_signatures)))
+    return tuple(node_signatures)
 
 
 def materials_are_equal(mat1, mat2, tol=1e-4):
