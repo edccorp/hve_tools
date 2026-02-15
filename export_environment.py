@@ -171,7 +171,20 @@ def get_environment_props(obj_main):
         return props
 
     for key in props:
-        value = getattr(env_props_group, key, None)
+        value = None
+
+        # Blender 4.5 can expose a stale RNA value for some PropertyGroup
+        # fields while the ID-property storage still contains the correct
+        # user-edited value. Prefer explicit ID-property lookups when present.
+        if hasattr(env_props_group, "get"):
+            sentinel = object()
+            idprop_value = env_props_group.get(key, sentinel)
+            if idprop_value is not sentinel:
+                value = idprop_value
+
+        if value is None:
+            value = getattr(env_props_group, key, None)
+
         if value is not None:
             props[key] = value
 
