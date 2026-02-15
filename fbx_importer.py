@@ -109,6 +109,23 @@ def is_wheel_object(obj):
     return False
 
 
+def _iter_layered_fcurve_collections(action):
+    """Yield F-Curve collections from layered actions (Blender 5+)."""
+    layers = getattr(action, "layers", None)
+    if not layers:
+        return
+
+    for layer in layers:
+        strips = getattr(layer, "strips", None) or ()
+        for strip in strips:
+            # Layered strips commonly expose channel bags directly.
+            channelbags = getattr(strip, "channelbags", None) or ()
+            for bag in channelbags:
+                fcurves = getattr(bag, "fcurves", None)
+                if fcurves is not None:
+                    yield fcurves
+
+
 def get_action_fcurve_collection(action):
     """Return the action F-Curve collection when available.
 
@@ -116,22 +133,52 @@ def get_action_fcurve_collection(action):
     directly. Returning ``None`` allows callers to safely skip direct F-Curve
     edits without raising ``AttributeError``.
     """
-    return getattr(action, "fcurves", None)
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        return fcurves
+
+    for layered_fcurves in _iter_layered_fcurve_collections(action):
+        return layered_fcurves
+
+    return None
+
+
+def iter_action_fcurve_collections(action):
+    """Iterate all available F-Curve collections from an action."""
+    fcurves = getattr(action, "fcurves", None)
+    if fcurves is not None:
+        yield fcurves
+
+    for layered_fcurves in _iter_layered_fcurve_collections(action):
+        yield layered_fcurves
 
 
 def iter_action_fcurves(action):
     """Iterate over F-Curves from ``action`` when supported."""
-    fcurves = get_action_fcurve_collection(action)
-    if fcurves is None:
-        return ()
-    return fcurves
+    for fcurve_collection in iter_action_fcurve_collections(action):
+        for fcurve in fcurve_collection:
+            yield fcurve
 
 
-def offset_selected_animation(obj, frame_offset=-1):
+def offset_selected_animation(obj, frame_offset=-1, target_start_frame=0):
     """Offsets animation keyframes for all selected objects by the given frame amount."""
 
     if obj.animation_data and obj.animation_data.action:
         action = obj.animation_data.action
+        if frame_offset is None:
+            first_frame = None
+            for fcurve in iter_action_fcurves(action):
+                for keyframe in fcurve.keyframe_points:
+                    if first_frame is None or keyframe.co.x < first_frame:
+                        first_frame = keyframe.co.x
+
+            if first_frame is None:
+                return
+            frame_offset = target_start_frame - first_frame
+
+        if frame_offset == 0:
+            return
+
         for fcurve in iter_action_fcurves(action):
             for keyframe in fcurve.keyframe_points:
                 keyframe.co.x += frame_offset  # Offset keyframe time
@@ -139,6 +186,53 @@ def offset_selected_animation(obj, frame_offset=-1):
                 keyframe.handle_right.x += frame_offset  # Offset right handle
 
 
+
+
+
+def zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1):
+    """Set top-level vehicle empties to zero location/rotation at ``frame``."""
+    for obj in imported_objects:
+        if obj.type != "EMPTY" or obj.parent is not None:
+            continue
+        if not (obj.animation_data and obj.animation_data.action):
+            continue
+
+        obj.location = (0.0, 0.0, 0.0)
+        obj.rotation_euler = (0.0, 0.0, 0.0)
+        obj.keyframe_insert(data_path="location", frame=frame)
+        obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+
+def ensure_preroll_keys(action, target_frame=-1):
+    """Duplicate first location/rotation keys to ``target_frame`` when missing.
+
+    This preserves the imported starting pose for a pre-roll frame instead of
+    inserting synthetic zeroed transforms.
+    """
+    for fcurve_collection in iter_action_fcurve_collections(action):
+        for fcurve in fcurve_collection:
+            if not (
+                fcurve.data_path.endswith("location")
+                or fcurve.data_path.endswith("rotation_euler")
+            ):
+                continue
+
+            keyframes = list(fcurve.keyframe_points)
+            if not keyframes:
+                continue
+
+            # Skip if a preroll key already exists.
+            if any(abs(k.co.x - target_frame) < 1e-6 for k in keyframes):
+                continue
+
+            first_key = min(keyframes, key=lambda k: k.co.x)
+            if first_key.co.x < target_frame:
+                continue
+
+            new_key = fcurve.keyframe_points.insert(
+                target_frame, first_key.co.y, options={'FAST'}
+            )
+            new_key.interpolation = first_key.interpolation
 
 def adjust_animation(obj):
     """Adjusts animation for selected objects:
@@ -167,11 +261,9 @@ def adjust_animation(obj):
         obj.scale.y *= -1
         obj.scale.z *= -1
          
-        obj.location = (0, 0, 0)
-        obj.rotation_euler = (0, 0, 0)
-
-        obj.keyframe_insert(data_path="location", frame=-1)
-        obj.keyframe_insert(data_path="rotation_euler", frame=-1)
+        # Preserve a pre-roll frame by duplicating the first imported pose at
+        # frame ``-1`` without forcing zero transforms.
+        ensure_preroll_keys(action, target_frame=-1)
        
 def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
@@ -881,7 +973,7 @@ def import_fbx(context, fbx_file_path):
         # Loop through imported objects
         for obj in imported_objects:
             # Offset keyframes for all selected objects by 1 frame
-            offset_selected_animation(obj,frame_offset=-1) 
+            offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
   
         # List of keywords to exclude from selection
         exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed     
@@ -893,9 +985,10 @@ def import_fbx(context, fbx_file_path):
                 obj.select_set(True)  # Select the object
 
                 # Run function to adjust X rotation and scale for selected objects
-                adjust_animation(obj)      
-                
-                
+                adjust_animation(obj)
+
+        zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1)
+
         # Derive keywords used for rotation helpers so they aren't processed as wheels
         exclude_keywords = [
             kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
@@ -1058,4 +1151,3 @@ def load(context,
             )
 
     return {'FINISHED'}
-
