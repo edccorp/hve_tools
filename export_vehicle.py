@@ -54,6 +54,11 @@ def get_vehicle_light_type(obj):
     return getattr(make_light, 'type', None)
 
 
+def extract_switch_material_names(light_text):
+    """Return material identifiers used by switch entries in a light block."""
+    return re.findall(r'\{USE\s+([^}]+)\}', light_text or "")
+
+
 def clean_def(txt):
     # see report [#28256]
     print("text " + txt)
@@ -111,6 +116,16 @@ def clean_def(txt):
         0x7b: "_",  # {
         0x7d: "_",  # }
         })
+
+
+def find_material_by_switch_id(materials, switch_material_id):
+    """Resolve a Blender material matching a switch material identifier."""
+    for material in materials:
+        if material.name == switch_material_id:
+            return material
+        if clean_def(material.name) == switch_material_id:
+            return material
+    return None
 
 
 def active_color_layer(mesh):
@@ -483,12 +498,18 @@ def export(file, dirname,
                     if lightSwitchProp is not None:
                         print("Lightswitch= ", lightSwitchProp)
                         def writelightmaterial(lightText):
-                            matnames = re.findall(r'\{.*?\}',lightText)
+                            matnames = extract_switch_material_names(lightText)
                             for matname in matnames:
-                                matname = matname[5:-1]
-                                for material in bpy.data.materials:
-                                    if material.name == matname:
-                                        writeMaterial(ident, material, material_id_index, world, image)
+                                material = find_material_by_switch_id(bpy.data.materials, matname)
+                                if material is not None:
+                                    writeMaterial(
+                                        ident,
+                                        material,
+                                        material_id_index,
+                                        world,
+                                        image,
+                                        material_def_name=matname,
+                                    )
 
                         if lightSwitchProp == "HVE_HEADLIGHT_LEFT":
                             lightText = "#HVE_HEADLIGHT_LEFT \n    DEF HVE_LIGHT_HEADLIGHT_LEFT_Low Switch {USE LIGHT_WHITE_LO}\n    DEF HVE_LIGHT_HEADLIGHT_LEFT_High Switch {USE LIGHT_WHITE_HI}\n"
@@ -610,10 +631,10 @@ def export(file, dirname,
 
 
 
-    def writeMaterial(ident, material, material_id_index, world, image):
+    def writeMaterial(ident, material, material_id_index, world, image, material_def_name=None):
         print("MATERIAL_DEF")
         
-        material_id = clean_def(material.name)
+        material_id = material_def_name or clean_def(material.name)
         print("materialid " + material_id)
         
    
