@@ -729,12 +729,61 @@ def merge_duplicate_materials_per_vehicle(vehicle_names):
         material_map = find_duplicate_materials_for_vehicle(clean_vehicle_name)
         if material_map:
             replace_materials_for_vehicle(clean_vehicle_name, material_map)
+
+            for obj in bpy.data.objects:
+                if obj.type == 'MESH' and belongs_to_vehicle(obj.name, clean_vehicle_name):
+                    collapse_material_slots(obj)
+
             remove_unused_materials()
             print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {clean_vehicle_name}.")
         else:
             print(f"✅ No duplicate 'meshMaterial' materials found for {clean_vehicle_name}.")
 
+def collapse_material_slots(obj):
+    """Merge identical material slots and remove unused ones on a mesh."""
+    if obj.type != 'MESH':
+        return
 
+    mesh = obj.data
+    slots = obj.material_slots
+
+    if not slots:
+        return
+
+    # Build map: material -> first slot index
+    mat_to_index = {}
+    remap = {}
+
+    for i, slot in enumerate(slots):
+        mat = slot.material
+        if mat is None:
+            continue
+
+        if mat.name not in mat_to_index:
+            mat_to_index[mat.name] = i
+        remap[i] = mat_to_index[mat.name]
+
+    # Remap polygon material indices
+    for poly in mesh.polygons:
+        if poly.material_index in remap:
+            poly.material_index = remap[poly.material_index]
+
+    # Remove unused slots
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Must remove from highest index downward
+    for i in reversed(range(len(slots))):
+        mat = slots[i].material
+        if mat is None:
+            obj.active_material_index = i
+            bpy.ops.object.material_slot_remove()
+            continue
+
+        # Check if any poly uses this slot
+        if not any(p.material_index == i for p in mesh.polygons):
+            obj.active_material_index = i
+            bpy.ops.object.material_slot_remove()
     
 def import_fbx(context, fbx_file_path):
     # Store the current frame rate settings
