@@ -26,6 +26,7 @@ for node in module_ast.body:
         "iter_action_fcurves",
         "offset_selected_animation",
         "ensure_preroll_keys",
+        "zero_main_vehicle_empty_transform_at_preroll",
         "adjust_animation",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
@@ -255,6 +256,38 @@ def test_adjust_animation_does_not_insert_synthetic_preroll_keys():
 
     assert obj.inserted == []
 
+
+
+def test_zero_main_vehicle_empty_transform_at_preroll_only_root_empties():
+    class StubObj:
+        def __init__(self, name, obj_type='EMPTY', parent=None, animated=True):
+            self.name = name
+            self.type = obj_type
+            self.parent = parent
+            self.location = (1.0, 2.0, 3.0)
+            self.rotation_euler = (0.1, 0.2, 0.3)
+            self.inserted = []
+            self.animation_data = (
+                type('anim', (), {'action': object()})() if animated else None
+            )
+
+        def keyframe_insert(self, data_path, frame):
+            self.inserted.append((data_path, frame))
+
+    root_empty = StubObj('Car_A')
+    child_empty = StubObj('Car_A: Child', parent=root_empty)
+    mesh = StubObj('Car_A_Mesh', obj_type='MESH')
+
+    ns['zero_main_vehicle_empty_transform_at_preroll'](
+        [root_empty, child_empty, mesh], frame=-1
+    )
+
+    assert root_empty.location == (0.0, 0.0, 0.0)
+    assert root_empty.rotation_euler == (0.0, 0.0, 0.0)
+    assert root_empty.inserted == [("location", -1), ("rotation_euler", -1)]
+
+    assert child_empty.inserted == []
+    assert mesh.inserted == []
 
 def test_ensure_preroll_keys_duplicates_first_pose_at_minus_one():
     class KeyPoint:

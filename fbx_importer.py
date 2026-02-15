@@ -189,6 +189,20 @@ def offset_selected_animation(obj, frame_offset=-1, target_start_frame=0):
 
 
 
+def zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1):
+    """Set top-level vehicle empties to zero location/rotation at ``frame``."""
+    for obj in imported_objects:
+        if obj.type != "EMPTY" or obj.parent is not None:
+            continue
+        if not (obj.animation_data and obj.animation_data.action):
+            continue
+
+        obj.location = (0.0, 0.0, 0.0)
+        obj.rotation_euler = (0.0, 0.0, 0.0)
+        obj.keyframe_insert(data_path="location", frame=frame)
+        obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+
 def ensure_preroll_keys(action, target_frame=-1):
     """Duplicate first location/rotation keys to ``target_frame`` when missing.
 
@@ -971,9 +985,10 @@ def import_fbx(context, fbx_file_path):
                 obj.select_set(True)  # Select the object
 
                 # Run function to adjust X rotation and scale for selected objects
-                adjust_animation(obj)      
-                
-                
+                adjust_animation(obj)
+
+        zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1)
+
         # Derive keywords used for rotation helpers so they aren't processed as wheels
         exclude_keywords = [
             kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
