@@ -674,6 +674,76 @@ def _get_linked_image_path(principled_node, socket_name):
     return None
 
 
+def _socket_value_signature(value):
+    if isinstance(value, (int, float, bool, str)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return tuple(_socket_value_signature(v) for v in value)
+    if hasattr(value, '__iter__'):
+        return tuple(value)
+    return repr(value)
+
+
+def _socket_default_value_signature(socket):
+    """Return a hashable representation of a socket's default value."""
+    if socket is None:
+        return None
+    value = getattr(socket, 'default_value', None)
+    if isinstance(value, (int, float, bool, str)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return tuple(_socket_value_signature(v) for v in value)
+    # mathutils vectors/colors expose iterable protocol but are not hashable.
+    if hasattr(value, '__iter__'):
+        return tuple(value)
+    return repr(value)
+
+
+def _material_node_tree_signature(material):
+    """Build a conservative signature for node-based material comparison."""
+    if not getattr(material, 'use_nodes', False):
+        return None
+    node_tree = getattr(material, 'node_tree', None)
+    nodes = getattr(node_tree, 'nodes', None)
+    links = getattr(node_tree, 'links', None)
+    if nodes is None:
+        return None
+
+    node_signatures = []
+    for index, node in enumerate(nodes):
+        node_type = getattr(node, 'type', None)
+        image_path = None
+        if node_type == 'TEX_IMAGE':
+            image_path = _normalize_image_path(getattr(node, 'image', None))
+
+        input_values = []
+        for socket_name, socket in sorted(getattr(node, 'inputs', {}).items(), key=lambda item: item[0]):
+            if getattr(socket, 'links', None):
+                input_values.append((socket_name, 'LINKED'))
+            else:
+                input_values.append((socket_name, _socket_default_value_signature(socket)))
+
+        node_signatures.append((index, node_type, image_path, tuple(input_values)))
+
+    link_signatures = []
+    if links is not None:
+        for link in links:
+            from_node = getattr(link, 'from_node', None)
+            to_node = getattr(link, 'to_node', None)
+            from_socket = getattr(link, 'from_socket', None)
+            to_socket = getattr(link, 'to_socket', None)
+            link_signatures.append(
+                (
+                    getattr(from_node, 'type', None),
+                    getattr(from_socket, 'name', None),
+                    getattr(to_node, 'type', None),
+                    getattr(to_socket, 'name', None),
+                )
+            )
+
+    return (tuple(node_signatures), tuple(sorted(link_signatures)))
+
+
 def materials_are_equal(mat1, mat2, tol=1e-4):
     """Compare two materials using shader settings and linked texture paths."""
     if mat1 == mat2:
@@ -732,6 +802,9 @@ def materials_are_equal(mat1, mat2, tol=1e-4):
             path2 = _get_linked_image_path(principled2, texture_socket)
             if path1 != path2:
                 return False
+
+    if _material_node_tree_signature(mat1) != _material_node_tree_signature(mat2):
+        return False
 
     return True
 
