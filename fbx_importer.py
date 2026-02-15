@@ -758,7 +758,7 @@ def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
                     continue
                 if not mat.name.startswith(MATERIAL_NAME_PREFIXES):
                     continue
-                mat_ptr = mat.as_pointer()
+                mat_ptr = mat.as_pointer() if hasattr(mat, 'as_pointer') else id(mat)
                 if mat_ptr in seen_materials:
                     continue
                 seen_materials.add(mat_ptr)
@@ -776,6 +776,71 @@ def find_duplicate_materials_for_vehicle(vehicle_name, candidate_objects=None):
             unique_materials.append(mat)
 
     return material_map
+
+
+def deduplicate_material_slots_for_vehicle(vehicle_name, candidate_objects=None):
+    """Remove duplicate material slots within each mesh object for a vehicle."""
+    clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
+    objects = candidate_objects if candidate_objects is not None else bpy.data.objects
+    removed_slots = 0
+
+    for obj in objects:
+        if obj is None:
+            continue
+        try:
+            obj_type = obj.type
+            obj_name = obj.name
+            slots = list(obj.material_slots)
+        except ReferenceError:
+            continue
+
+        if obj_type != 'MESH' or not belongs_to_vehicle(obj_name, clean_vehicle_name):
+            continue
+        if len(slots) < 2:
+            continue
+
+        unique_materials = []
+        material_index_map = {}
+        polygon_index_map = {}
+
+        for index, slot in enumerate(slots):
+            mat = slot.material
+            mat_key = mat.as_pointer() if hasattr(mat, 'as_pointer') else id(mat)
+            if mat_key not in material_index_map:
+                material_index_map[mat_key] = len(unique_materials)
+                unique_materials.append(mat)
+            polygon_index_map[index] = material_index_map[mat_key]
+
+        if len(unique_materials) == len(slots):
+            continue
+
+        mesh_data = getattr(obj, 'data', None)
+        polygons = getattr(mesh_data, 'polygons', None)
+        if polygons is not None:
+            for poly in polygons:
+                poly.material_index = polygon_index_map.get(poly.material_index, 0)
+
+        mesh_materials = getattr(mesh_data, 'materials', None)
+        if mesh_materials is not None and hasattr(mesh_materials, 'clear') and hasattr(mesh_materials, 'append'):
+            mesh_materials.clear()
+            for mat in unique_materials:
+                mesh_materials.append(mat)
+        elif isinstance(obj.material_slots, list):
+            deduped_slots = []
+            seen_keys = set()
+            for slot in obj.material_slots:
+                mat = slot.material
+                mat_key = mat.as_pointer() if hasattr(mat, 'as_pointer') else id(mat)
+                if mat_key in seen_keys:
+                    continue
+                seen_keys.add(mat_key)
+                deduped_slots.append(slot)
+            obj.material_slots[:] = deduped_slots
+
+        removed_slots += len(slots) - len(unique_materials)
+
+    return removed_slots
+
 
 def replace_materials_for_vehicle(vehicle_name, material_map, candidate_objects=None):
     """Replace duplicate materials within a single vehicle's objects."""
@@ -810,9 +875,19 @@ def merge_duplicate_materials_per_vehicle(vehicle_names, candidate_objects=None)
         if material_map:
             replace_materials_for_vehicle(clean_vehicle_name, material_map, candidate_objects=candidate_objects)
             remove_unused_materials()
+
+        removed_slots = deduplicate_material_slots_for_vehicle(
+            clean_vehicle_name,
+            candidate_objects=candidate_objects,
+        )
+
+        if material_map:
             print(f"✅ Merged {len(material_map)} duplicate 'meshMaterial' materials for {clean_vehicle_name}.")
         else:
             print(f"✅ No duplicate 'meshMaterial' materials found for {clean_vehicle_name}.")
+
+        if removed_slots:
+            print(f"✅ Removed {removed_slots} duplicate material slots for {clean_vehicle_name}.")
 
 
     
