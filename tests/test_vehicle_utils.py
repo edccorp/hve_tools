@@ -25,6 +25,7 @@ for node in module_ast.body:
         "iter_action_fcurve_collections",
         "iter_action_fcurves",
         "offset_selected_animation",
+        "ensure_preroll_keys",
         "adjust_animation",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
@@ -253,6 +254,40 @@ def test_adjust_animation_does_not_insert_synthetic_preroll_keys():
     adjust_animation(obj)
 
     assert obj.inserted == []
+
+
+def test_ensure_preroll_keys_duplicates_first_pose_at_minus_one():
+    class KeyPoint:
+        def __init__(self, frame, value):
+            self.co = type("co", (), {"x": frame, "y": value})()
+            self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
+            self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+            self.interpolation = "BEZIER"
+
+    class KeyframeCollection(list):
+        def insert(self, frame, value, options=None):
+            key = KeyPoint(frame, value)
+            self.append(key)
+            return key
+
+    curve = type(
+        "FCurve",
+        (),
+        {
+            "data_path": "rotation_euler",
+            "array_index": 0,
+            "keyframe_points": KeyframeCollection([KeyPoint(0.0, 1.25)]),
+        },
+    )()
+
+    action = type("Action", (), {"fcurves": [curve]})()
+
+    ns["ensure_preroll_keys"](action, target_frame=-1)
+
+    xs = sorted(k.co.x for k in curve.keyframe_points)
+    assert xs == [-1.0, 0.0]
+    values = {k.co.x: k.co.y for k in curve.keyframe_points}
+    assert values[-1.0] == values[0.0] == 1.25
 
 
 def test_get_action_fcurve_collection_supports_layered_actions():

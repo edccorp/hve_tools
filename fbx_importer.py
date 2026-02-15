@@ -187,6 +187,39 @@ def offset_selected_animation(obj, frame_offset=-1, target_start_frame=0):
 
 
 
+
+
+def ensure_preroll_keys(action, target_frame=-1):
+    """Duplicate first location/rotation keys to ``target_frame`` when missing.
+
+    This preserves the imported starting pose for a pre-roll frame instead of
+    inserting synthetic zeroed transforms.
+    """
+    for fcurve_collection in iter_action_fcurve_collections(action):
+        for fcurve in fcurve_collection:
+            if not (
+                fcurve.data_path.endswith("location")
+                or fcurve.data_path.endswith("rotation_euler")
+            ):
+                continue
+
+            keyframes = list(fcurve.keyframe_points)
+            if not keyframes:
+                continue
+
+            # Skip if a preroll key already exists.
+            if any(abs(k.co.x - target_frame) < 1e-6 for k in keyframes):
+                continue
+
+            first_key = min(keyframes, key=lambda k: k.co.x)
+            if first_key.co.x < target_frame:
+                continue
+
+            new_key = fcurve.keyframe_points.insert(
+                target_frame, first_key.co.y, options={'FAST'}
+            )
+            new_key.interpolation = first_key.interpolation
+
 def adjust_animation(obj):
     """Adjusts animation for selected objects:
        - Subtracts 180° from X rotation
@@ -214,9 +247,9 @@ def adjust_animation(obj):
         obj.scale.y *= -1
         obj.scale.z *= -1
          
-        # Avoid inserting synthetic location/rotation keys at frame ``-1``.
-        # Imported FBX files already contain their animation data and forcing an
-        # extra keyframe can create an inverted pose at that pre-roll frame.
+        # Preserve a pre-roll frame by duplicating the first imported pose at
+        # frame ``-1`` without forcing zero transforms.
+        ensure_preroll_keys(action, target_frame=-1)
        
 def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
