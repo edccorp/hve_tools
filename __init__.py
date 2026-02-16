@@ -8,9 +8,6 @@ bl_info = {
     "category": "HVE",
 }
 
-# Temporary feature flag: disable ortho map projector tools for now.
-ENABLE_ORTHO_PROJECTOR = False
-
 try:
     import bpy
     from . import (
@@ -22,12 +19,10 @@ try:
         racerender_exporter, racerender_exporter_ui,
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
-        edr_importer, scale_objects, import_xyzrpy,
+
+        edr_importer, scale_objects, import_xyzrpy, ortho_projector,
 
     )
-
-    if ENABLE_ORTHO_PROJECTOR:
-        from . import ortho_projector
 
     from bpy.props import *
     from bpy_extras.io_utils import ImportHelper
@@ -40,57 +35,24 @@ try:
         FloatProperty,
     )
 
+    props.register()
+
     modules = [
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
         fbx_importer_ui, motionpaths, xyz_importer_ui, edr_importer, scale_objects,
-        import_xyzrpy,
+        import_xyzrpy, ortho_projector,
     ]
-
-    if ENABLE_ORTHO_PROJECTOR:
-        modules.append(ortho_projector)
 
     # Aggregate all classes from modules
     classes = [cls for module in modules for cls in module.classes]
 
-    def _is_registered_class(cls):
-        """Compatibility helper for Blender versions without bpy.utils.is_registered_class."""
-        check_fn = getattr(bpy.utils, "is_registered_class", None)
-        if callable(check_fn):
-            return check_fn(cls)
-
-        # Fallback for Blender versions that don't expose is_registered_class.
-        return hasattr(cls, "bl_rna")
-
-    def _register_class_once(cls):
-        if _is_registered_class(cls):
-            return
-
-        try:
-            bpy.utils.register_class(cls)
-        except ValueError as exc:
-            # Some Blender versions can still raise even after the guard above.
-            if "already registered" not in str(exc):
-                raise
-
-    def _unregister_class_if_registered(cls):
-        if not _is_registered_class(cls):
-            return
-
-        try:
-            bpy.utils.unregister_class(cls)
-        except RuntimeError as exc:
-            if "missing bl_rna" not in str(exc) and "not registered" not in str(exc):
-                raise
-
     def register():
-        props.register()
-
         from .edr_importer import VehiclePathEntry  # Ensure correct module
-        _register_class_once(VehiclePathEntry)  # Register VehiclePathEntry FIRST
+        bpy.utils.register_class(VehiclePathEntry)  # Register VehiclePathEntry FIRST
 
         for cls in classes:
-            _register_class_once(cls)
+            bpy.utils.register_class(cls)
 
         # Ensure anim_settings is registered before UI accesses it
         if not hasattr(bpy.types.Scene, "anim_settings"):
@@ -147,36 +109,20 @@ try:
         ui.update_panel_bl_category(None, bpy.context)
 
     def unregister():
-        from .edr_importer import VehiclePathEntry
-
-        if hasattr(bpy.types.Scene, "scale_target_distance"):
-            del bpy.types.Scene.scale_target_distance
-        if hasattr(bpy.types.Scene, "hve_setup_show_surface"):
-            del bpy.types.Scene.hve_setup_show_surface
-        if hasattr(bpy.types.Scene, "hve_setup_show_materials"):
-            del bpy.types.Scene.hve_setup_show_materials
-        if hasattr(bpy.types.Scene, "hve_setup_show_object_type"):
-            del bpy.types.Scene.hve_setup_show_object_type
-        if hasattr(bpy.types.Scene, "hve_setup_show_terrain"):
-            del bpy.types.Scene.hve_setup_show_terrain
-        if hasattr(bpy.types.Scene, "hve_setup_show_vehicle_lighting"):
-            del bpy.types.Scene.hve_setup_show_vehicle_lighting
-        if hasattr(bpy.types.Scene, "hve_setup_show_forces"):
-            del bpy.types.Scene.hve_setup_show_forces
-        if hasattr(bpy.types.Scene, "hve_setup_show_soil"):
-            del bpy.types.Scene.hve_setup_show_soil
-        if hasattr(bpy.types.Scene, "hve_setup_show_water"):
-            del bpy.types.Scene.hve_setup_show_water
-        if hasattr(bpy.types.Object, "edr_input_mode_preference"):
-            del bpy.types.Object.edr_input_mode_preference
-        if hasattr(bpy.types.Object, "motion_data_entries"):
-            del bpy.types.Object.motion_data_entries
-        if hasattr(bpy.types.Object, "vehicle_path_entries"):
-            del bpy.types.Object.vehicle_path_entries
+        del bpy.types.Scene.scale_target_distance
+        del bpy.types.Scene.hve_setup_show_surface
+        del bpy.types.Scene.hve_setup_show_materials
+        del bpy.types.Scene.hve_setup_show_object_type
+        del bpy.types.Scene.hve_setup_show_terrain
+        del bpy.types.Scene.hve_setup_show_vehicle_lighting
+        del bpy.types.Scene.hve_setup_show_forces
+        del bpy.types.Scene.hve_setup_show_soil
+        del bpy.types.Scene.hve_setup_show_water
+        del bpy.types.Object.edr_input_mode_preference
+        del bpy.types.Object.motion_data_entries
+        del bpy.types.Object.vehicle_path_entries
         for cls in reversed(classes):
-            _unregister_class_if_registered(cls)
-        _unregister_class_if_registered(VehiclePathEntry)
-        props.unregister()
+            bpy.utils.unregister_class(cls)
 
 except ModuleNotFoundError:
     bpy = None
