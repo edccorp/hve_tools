@@ -266,17 +266,13 @@ class OBJECT_OT_ortho_project(bpy.types.Operator):
     def execute(self, context):
         s = context.scene.ortho_project_settings
 
+        originally_active = context.view_layer.objects.active
+
         # Resolve target mesh
         obj = s.target_object or context.object
         if not obj or obj.type != 'MESH':
             self.report({'ERROR'}, "Select a mesh or pick one in 'Target Mesh'.")
             return {'CANCELLED'}
-
-        # Ensure selectable/active
-        obj.hide_set(False)
-        obj.hide_viewport = False
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
 
         # Resolve camera
         scene = context.scene
@@ -290,7 +286,7 @@ class OBJECT_OT_ortho_project(bpy.types.Operator):
                 return {'CANCELLED'}
 
         elif s.camera_source == 'SELECTED':
-            a = context.view_layer.objects.active
+            a = originally_active
             if not a or a.type != 'CAMERA':
                 self.report({'ERROR'}, "Active object must be a Camera when using 'Selected Camera'.")
                 return {'CANCELLED'}
@@ -305,6 +301,12 @@ class OBJECT_OT_ortho_project(bpy.types.Operator):
         if not cam_obj:
             self.report({'ERROR'}, "Could not resolve a camera.")
             return {'CANCELLED'}
+
+        # Ensure selectable/active mesh for downstream material/uv edits
+        obj.hide_set(False)
+        obj.hide_viewport = False
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
 
         # Force orthographic + fit to object (keeps alignment/rotation from above)
         if s.force_ortho:
