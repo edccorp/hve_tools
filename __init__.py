@@ -53,13 +53,35 @@ try:
     # Aggregate all classes from modules
     classes = [cls for module in modules for cls in module.classes]
 
+    def _is_registered_class(cls):
+        """Compatibility helper for Blender versions without bpy.utils.is_registered_class."""
+        check_fn = getattr(bpy.utils, "is_registered_class", None)
+        if callable(check_fn):
+            return check_fn(cls)
+
+        # Fallback for Blender versions that don't expose is_registered_class.
+        return hasattr(cls, "bl_rna")
+
     def _register_class_once(cls):
-        if not bpy.utils.is_registered_class(cls):
+        if _is_registered_class(cls):
+            return
+
+        try:
             bpy.utils.register_class(cls)
+        except ValueError as exc:
+            # Some Blender versions can still raise even after the guard above.
+            if "already registered" not in str(exc):
+                raise
 
     def _unregister_class_if_registered(cls):
-        if bpy.utils.is_registered_class(cls):
+        if not _is_registered_class(cls):
+            return
+
+        try:
             bpy.utils.unregister_class(cls)
+        except RuntimeError as exc:
+            if "missing bl_rna" not in str(exc) and "not registered" not in str(exc):
+                raise
 
     def register():
         props.register()
