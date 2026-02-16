@@ -47,12 +47,20 @@ try:
     # Aggregate all classes from modules
     classes = [cls for module in modules for cls in module.classes]
 
+    def _register_class_once(cls):
+        if not hasattr(bpy.types, cls.__name__):
+            bpy.utils.register_class(cls)
+
+    def _unregister_class_if_registered(cls):
+        if hasattr(bpy.types, cls.__name__):
+            bpy.utils.unregister_class(cls)
+
     def register():
         from .edr_importer import VehiclePathEntry  # Ensure correct module
-        bpy.utils.register_class(VehiclePathEntry)  # Register VehiclePathEntry FIRST
+        _register_class_once(VehiclePathEntry)  # Register VehiclePathEntry FIRST
 
         for cls in classes:
-            bpy.utils.register_class(cls)
+            _register_class_once(cls)
 
         # Ensure anim_settings is registered before UI accesses it
         if not hasattr(bpy.types.Scene, "anim_settings"):
@@ -109,20 +117,35 @@ try:
         ui.update_panel_bl_category(None, bpy.context)
 
     def unregister():
-        del bpy.types.Scene.scale_target_distance
-        del bpy.types.Scene.hve_setup_show_surface
-        del bpy.types.Scene.hve_setup_show_materials
-        del bpy.types.Scene.hve_setup_show_object_type
-        del bpy.types.Scene.hve_setup_show_terrain
-        del bpy.types.Scene.hve_setup_show_vehicle_lighting
-        del bpy.types.Scene.hve_setup_show_forces
-        del bpy.types.Scene.hve_setup_show_soil
-        del bpy.types.Scene.hve_setup_show_water
-        del bpy.types.Object.edr_input_mode_preference
-        del bpy.types.Object.motion_data_entries
-        del bpy.types.Object.vehicle_path_entries
+        from .edr_importer import VehiclePathEntry
+
+        if hasattr(bpy.types.Scene, "scale_target_distance"):
+            del bpy.types.Scene.scale_target_distance
+        if hasattr(bpy.types.Scene, "hve_setup_show_surface"):
+            del bpy.types.Scene.hve_setup_show_surface
+        if hasattr(bpy.types.Scene, "hve_setup_show_materials"):
+            del bpy.types.Scene.hve_setup_show_materials
+        if hasattr(bpy.types.Scene, "hve_setup_show_object_type"):
+            del bpy.types.Scene.hve_setup_show_object_type
+        if hasattr(bpy.types.Scene, "hve_setup_show_terrain"):
+            del bpy.types.Scene.hve_setup_show_terrain
+        if hasattr(bpy.types.Scene, "hve_setup_show_vehicle_lighting"):
+            del bpy.types.Scene.hve_setup_show_vehicle_lighting
+        if hasattr(bpy.types.Scene, "hve_setup_show_forces"):
+            del bpy.types.Scene.hve_setup_show_forces
+        if hasattr(bpy.types.Scene, "hve_setup_show_soil"):
+            del bpy.types.Scene.hve_setup_show_soil
+        if hasattr(bpy.types.Scene, "hve_setup_show_water"):
+            del bpy.types.Scene.hve_setup_show_water
+        if hasattr(bpy.types.Object, "edr_input_mode_preference"):
+            del bpy.types.Object.edr_input_mode_preference
+        if hasattr(bpy.types.Object, "motion_data_entries"):
+            del bpy.types.Object.motion_data_entries
+        if hasattr(bpy.types.Object, "vehicle_path_entries"):
+            del bpy.types.Object.vehicle_path_entries
         for cls in reversed(classes):
-            bpy.utils.unregister_class(cls)
+            _unregister_class_if_registered(cls)
+        _unregister_class_if_registered(VehiclePathEntry)
 
 except ModuleNotFoundError:
     bpy = None
