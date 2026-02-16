@@ -89,8 +89,6 @@ def sync_fps_with_scene(self, context):
         context.scene.anim_settings.anim_fps = context.scene.render.fps
         
 def update_panel_bl_category(self, context):
-    from . import ortho_projector
-
     main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_other_tools)
     sub_panels = (
         HVE_PT_mechanist_setup,
@@ -105,8 +103,8 @@ def update_panel_bl_category(self, context):
         HVE_PT_motion_paths,
         HVE_PT_scale_objects,
         HVE_PT_race_render_exporter,
-        ortho_projector.HVE_PT_ortho_projector,
     )
+
     try:
         for p in main_panels:
             bpy.utils.unregister_class(p)

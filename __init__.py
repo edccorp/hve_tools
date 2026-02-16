@@ -19,8 +19,7 @@ try:
         racerender_exporter, racerender_exporter_ui,
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
-
-        edr_importer, scale_objects, import_xyzrpy, ortho_projector,
+        edr_importer, scale_objects, import_xyzrpy,
 
     )
 
@@ -41,7 +40,7 @@ try:
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
         fbx_importer_ui, motionpaths, xyz_importer_ui, edr_importer, scale_objects,
-        import_xyzrpy, ortho_projector,
+        import_xyzrpy,
     ]
 
     # Aggregate all classes from modules
