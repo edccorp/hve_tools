@@ -274,10 +274,21 @@ classes = (
     AnimationSettings,
 
 )  
+
+
+def _is_registered_class(cls):
+    """Compatibility helper for Blender versions without bpy.utils.is_registered_class."""
+    check_fn = getattr(bpy.utils, "is_registered_class", None)
+    if callable(check_fn):
+        return check_fn(cls)
+
+    return hasattr(bpy.types, cls.__name__)
+
+
       
 def register():
     for cls in classes:
-        if not bpy.utils.is_registered_class(cls):
+        if not _is_registered_class(cls):
             bpy.utils.register_class(cls)
     
     # Ensure Scene property is registered
@@ -289,5 +300,5 @@ def unregister():
         del bpy.types.Scene.anim_settings
 
     for cls in reversed(classes):
-        if bpy.utils.is_registered_class(cls):
+        if _is_registered_class(cls):
             bpy.utils.unregister_class(cls)
