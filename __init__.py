@@ -40,8 +40,6 @@ try:
         FloatProperty,
     )
 
-    props.register()
-
     modules = [
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
@@ -56,14 +54,16 @@ try:
     classes = [cls for module in modules for cls in module.classes]
 
     def _register_class_once(cls):
-        if not hasattr(bpy.types, cls.__name__):
+        if not bpy.utils.is_registered_class(cls):
             bpy.utils.register_class(cls)
 
     def _unregister_class_if_registered(cls):
-        if hasattr(bpy.types, cls.__name__):
+        if bpy.utils.is_registered_class(cls):
             bpy.utils.unregister_class(cls)
 
     def register():
+        props.register()
+
         from .edr_importer import VehiclePathEntry  # Ensure correct module
         _register_class_once(VehiclePathEntry)  # Register VehiclePathEntry FIRST
 
@@ -154,6 +154,7 @@ try:
         for cls in reversed(classes):
             _unregister_class_if_registered(cls)
         _unregister_class_if_registered(VehiclePathEntry)
+        props.unregister()
 
 except ModuleNotFoundError:
     bpy = None

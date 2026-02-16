@@ -277,7 +277,8 @@ classes = (
       
 def register():
     for cls in classes:
-        bpy.utils.register_class(cls)
+        if not bpy.utils.is_registered_class(cls):
+            bpy.utils.register_class(cls)
     
     # Ensure Scene property is registered
     if not hasattr(bpy.types.Scene, "anim_settings"):
@@ -288,4 +289,5 @@ def unregister():
         del bpy.types.Scene.anim_settings
 
     for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+        if bpy.utils.is_registered_class(cls):
+            bpy.utils.unregister_class(cls)
