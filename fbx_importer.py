@@ -220,6 +220,54 @@ def ensure_preroll_keys(action, target_frame=-1):
             )
             new_key.interpolation = first_key.interpolation
 
+def force_zero_preroll_pose(obj, frame=-1):
+    """Force obj to be at origin with no rotation at a given frame by setting/overwriting keys."""
+    if not obj or not obj.animation_data or not obj.animation_data.action:
+        return
+
+    action = obj.animation_data.action
+    fcurves = get_action_fcurve_collection(action)
+
+    # If we can edit fcurves directly (preferred)
+    if fcurves is not None:
+        # Ensure 3 location + 3 rotation fcurves exist, then set key at 'frame' to 0.0
+        for data_path, indices in (("location", (0, 1, 2)), ("rotation_euler", (0, 1, 2))):
+            for idx in indices:
+                fc = None
+                for existing in fcurves:
+                    if existing.data_path == data_path and existing.array_index == idx:
+                        fc = existing
+                        break
+                if fc is None:
+                    fc = fcurves.new(data_path=data_path, index=idx)
+
+                # Remove any existing key at this frame (avoid duplicates)
+                for kp in list(fc.keyframe_points):
+                    if abs(kp.co.x - frame) < 1e-6:
+                        fc.keyframe_points.remove(kp)
+
+                kp = fc.keyframe_points.insert(frame, 0.0, options={'FAST'})
+                kp.interpolation = 'LINEAR'
+        return
+
+    # Fallback when action is layered / no direct fcurves exposed:
+    # Use keyframe_insert safely.
+    scene = bpy.context.scene
+    cur_frame = scene.frame_current
+
+    loc0 = obj.location.copy()
+    rot0 = obj.rotation_euler.copy()
+
+    scene.frame_set(frame)
+    obj.location = (0.0, 0.0, 0.0)
+    obj.rotation_euler = (0.0, 0.0, 0.0)
+    obj.keyframe_insert(data_path="location", frame=frame)
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+    scene.frame_set(cur_frame)
+    obj.location = loc0
+    obj.rotation_euler = rot0
+
 def adjust_animation(obj):
     """Adjusts animation for selected objects:
        - Subtracts 180° from X rotation
@@ -1055,6 +1103,14 @@ def import_fbx(context, fbx_file_path):
 
         # Determine root vehicle names after any renaming or cleanup
         vehicle_names = get_root_vehicle_names(imported_objects)
+        
+        # Force vehicle root empties to be zeroed at frame -1
+        for obj in imported_objects:
+            if obj.type == "EMPTY" and obj.parent is None:
+                # Only apply to the top-level vehicle empties we detected
+                root = normalize_root_name(obj.name)
+                if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
+                    force_zero_preroll_pose(obj, frame=-1)
 
         # Create the event collection
         event_collection_name = f"HVE: {filename}"
