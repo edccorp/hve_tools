@@ -225,6 +225,7 @@ def test_adjust_animation_does_not_insert_synthetic_preroll_keys():
             self.co = type("co", (), {"x": frame, "y": value})()
             self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
             self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+            self.interpolation = "LINEAR"
 
     class FCurve:
         def __init__(self):
@@ -257,6 +258,45 @@ def test_adjust_animation_does_not_insert_synthetic_preroll_keys():
     assert obj.inserted == []
 
 
+
+
+def test_adjust_animation_can_skip_x_rotation_offset():
+    class KeyPoint:
+        def __init__(self, frame, value):
+            self.co = type("co", (), {"x": frame, "y": value})()
+            self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
+            self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+            self.interpolation = "LINEAR"
+
+    class KeyframeCollection(list):
+        def insert(self, frame, value, options=None):
+            key = KeyPoint(frame, value)
+            self.append(key)
+            return key
+
+    class FCurve:
+        def __init__(self):
+            self.data_path = "rotation_euler"
+            self.array_index = 0
+            self.keyframe_points = KeyframeCollection([KeyPoint(0, 0.5)])
+
+    class Action:
+        def __init__(self):
+            self.fcurves = [FCurve()]
+
+    class ObjWithAnimation:
+        def __init__(self):
+            self.animation_data = type("anim", (), {"action": Action()})()
+            self.scale = type("scale", (), {"y": 1.0, "z": 1.0})()
+
+    obj = ObjWithAnimation()
+    ns["math"] = __import__("math")
+
+    adjust_animation(obj, apply_x_rotation_offset=False)
+
+    assert obj.animation_data.action.fcurves[0].keyframe_points[0].co.y == 0.5
+    assert obj.scale.y == -1.0
+    assert obj.scale.z == -1.0
 
 def test_zero_main_vehicle_empty_transform_at_preroll_only_root_empties():
     class StubObj:
@@ -295,6 +335,7 @@ def test_ensure_preroll_keys_duplicates_first_pose_at_minus_one():
             self.co = type("co", (), {"x": frame, "y": value})()
             self.handle_left = type("co", (), {"x": frame - 0.1, "y": value})()
             self.handle_right = type("co", (), {"x": frame + 0.1, "y": value})()
+            self.interpolation = "LINEAR"
             self.interpolation = "BEZIER"
 
     class KeyframeCollection(list):

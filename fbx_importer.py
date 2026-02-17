@@ -268,9 +268,9 @@ def force_zero_preroll_pose(obj, frame=-1):
     obj.location = loc0
     obj.rotation_euler = rot0
 
-def adjust_animation(obj):
+def adjust_animation(obj, apply_x_rotation_offset=True):
     """Adjusts animation for selected objects:
-       - Subtracts 180° from X rotation
+       - Optionally subtracts 180° from X rotation
        - Scales Y and Z by -1
     """
 
@@ -280,7 +280,11 @@ def adjust_animation(obj):
         #print(obj)           
         for fcurve in iter_action_fcurves(action):
             # Adjust X rotation (Euler)
-            if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
+            if (
+                apply_x_rotation_offset
+                and fcurve.data_path.endswith("rotation_euler")
+                and fcurve.array_index == 0
+            ):  # X Rotation
                 for keyframe in fcurve.keyframe_points:
                     keyframe.co.y += math.radians(-180)  # Convert degrees to radians
                     keyframe.handle_left.y += math.radians(-180)
@@ -1062,13 +1066,18 @@ def import_fbx(context, fbx_file_path):
         exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed     
        
         # Loop through imported objects
+        is_blender_4x = bpy.app.version < (5, 0, 0)
         for obj in imported_objects:
             # Check if none of the exclude keywords are in the object name
             if not any(keyword in obj.name for keyword in exclude_keywords):
                 obj.select_set(True)  # Select the object
 
+                skip_x_rotation_offset = (
+                    is_blender_4x and obj.type == "EMPTY" and obj.parent is None
+                )
+
                 # Run function to adjust X rotation and scale for selected objects
-                adjust_animation(obj)      
+                adjust_animation(obj, apply_x_rotation_offset=not skip_x_rotation_offset)
                 
                 
         # Derive keywords used for rotation helpers so they aren't processed as wheels
