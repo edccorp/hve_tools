@@ -268,41 +268,67 @@ def force_zero_preroll_pose(obj, frame=-1):
     obj.location = loc0
     obj.rotation_euler = rot0
 
-def adjust_animation(obj, apply_x_rotation_offset=True):
+def adjust_animation(obj):
     """Adjusts animation for selected objects:
-       - Optionally subtracts 180° from X rotation
+       - Subtracts 180° from X rotation
        - Scales Y and Z by -1
     """
-
-    if obj.animation_data and obj.animation_data.action:
-        action = obj.animation_data.action
-        action_fcurves = get_action_fcurve_collection(action)
-        #print(obj)           
-        for fcurve in iter_action_fcurves(action):
-            # Adjust X rotation (Euler)
-            if (
-                apply_x_rotation_offset
-                and fcurve.data_path.endswith("rotation_euler")
-                and fcurve.array_index == 0
-            ):  # X Rotation
-                for keyframe in fcurve.keyframe_points:
-                    keyframe.co.y += math.radians(-180)  # Convert degrees to radians
-                    keyframe.handle_left.y += math.radians(-180)
-                    keyframe.handle_right.y += math.radians(-180)
-        
-        # Remove Scale Animation
-        if action_fcurves is not None:
-            scale_fcurves = [fcurve for fcurve in action_fcurves if fcurve.data_path.endswith("scale")]
-            for fcurve in scale_fcurves:
-                action_fcurves.remove(fcurve)  # Delete scale animation
+    if (4, 5, 0) <= bpy.app.version < (5, 0, 0):
+        if obj.animation_data and obj.animation_data.action:
+            action = obj.animation_data.action
+            #print(obj)           
+            for fcurve in action.fcurves:
+                # Adjust X rotation (Euler)
+                if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
+                    for keyframe in fcurve.keyframe_points:
+                        keyframe.co.y += math.radians(-180)  # Convert degrees to radians
+                        keyframe.handle_left.y += math.radians(-180)
+                        keyframe.handle_right.y += math.radians(-180)
             
-        obj.scale.y *= -1
-        obj.scale.z *= -1
-         
-        # Preserve a pre-roll frame by duplicating the first imported pose at
-        # frame ``-1`` without forcing zero transforms.
-        ensure_preroll_keys(action, target_frame=-1)
-       
+            # Remove Scale Animation
+            scale_fcurves = [fcurve for fcurve in action.fcurves if fcurve.data_path.endswith("scale")]
+            for fcurve in scale_fcurves:
+                action.fcurves.remove(fcurve)  # Delete scale animation
+                
+            obj.scale.y *= -1
+            obj.scale.z *= -1
+             
+            obj.location = (0, 0, 0)
+            obj.rotation_euler = (0, 0, 0)
+
+            obj.keyframe_insert(data_path="location", frame=-1)
+            obj.keyframe_insert(data_path="rotation_euler", frame=-1)
+    else:
+        if obj.animation_data and obj.animation_data.action:
+            action = obj.animation_data.action
+            print(obj.name, "rot_mode:", obj.rotation_mode)
+            print("has quat fcurves:", any(fc.data_path.endswith("rotation_quaternion") for fc in iter_action_fcurves(action)))
+            print("has euler fcurves:", any(fc.data_path.endswith("rotation_euler") for fc in iter_action_fcurves(action)))
+            action_fcurves = get_action_fcurve_collection(action)
+            for fcurve in iter_action_fcurves(action):
+                # Adjust X rotation (Euler)
+                if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
+                    for keyframe in fcurve.keyframe_points:
+                        keyframe.co.y += math.radians(-180)  # Convert degrees to radians
+                        keyframe.handle_left.y += math.radians(-180)
+                        keyframe.handle_right.y += math.radians(-180)
+           
+            # Remove Scale Animation
+            if action_fcurves is not None:
+                scale_fcurves = [fcurve for fcurve in action_fcurves if fcurve.data_path.endswith("scale")]
+                for fcurve in scale_fcurves:
+                    action_fcurves.remove(fcurve)  # Delete scale animation
+                
+            obj.scale.y *= -1
+            obj.scale.z *= -1
+             
+            # Preserve a pre-roll frame by duplicating the first imported pose at
+            # frame ``-1`` without forcing zero transforms.
+            ensure_preroll_keys(action, target_frame=-1)
+        
+
+        
+        
 def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
 
@@ -836,6 +862,22 @@ def collapse_material_slots(obj):
         if not any(p.material_index == i for p in mesh.polygons):
             obj.active_material_index = i
             bpy.ops.object.material_slot_remove()
+
+def add_x_rotation_offset_from_frame(obj, start_frame=0, degrees=180.0):
+    """Add degrees to X rotation keyframes at/after start_frame, leaving earlier keys (e.g. -1) untouched."""
+    if not obj or not obj.animation_data or not obj.animation_data.action:
+        return
+
+    action = obj.animation_data.action
+    delta = math.radians(degrees)
+
+    for fcurve in iter_action_fcurves(action):
+        if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:
+            for kp in fcurve.keyframe_points:
+                if kp.co.x >= start_frame - 1e-6:
+                    kp.co.y += delta
+                    kp.handle_left.y += delta
+                    kp.handle_right.y += delta
     
 def import_fbx(context, fbx_file_path):
     # Store the current frame rate settings
@@ -1066,18 +1108,13 @@ def import_fbx(context, fbx_file_path):
         exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed     
        
         # Loop through imported objects
-        is_blender_4x = bpy.app.version < (5, 0, 0)
         for obj in imported_objects:
             # Check if none of the exclude keywords are in the object name
             if not any(keyword in obj.name for keyword in exclude_keywords):
                 obj.select_set(True)  # Select the object
 
-                skip_x_rotation_offset = (
-                    is_blender_4x and obj.type == "EMPTY" and obj.parent is None
-                )
-
                 # Run function to adjust X rotation and scale for selected objects
-                adjust_animation(obj, apply_x_rotation_offset=not skip_x_rotation_offset)
+                adjust_animation(obj)      
                 
                 
         # Derive keywords used for rotation helpers so they aren't processed as wheels
@@ -1192,13 +1229,26 @@ def import_fbx(context, fbx_file_path):
                 if "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
 
-            target_name = clean_vehicle_name + ": FBX"  # Original name pattern
-            new_name = f"CG: {vehicle_name} {filename}: FBX"  # New name pattern
-
+                                                      
+            new_name = f"CG: {vehicle_name} {filename}: FBX"
+            for o in imported_objects:
+                if o.type == "EMPTY" and o.parent is None:
+                    print("TOP EMPTY:", o.name, "root:", normalize_root_name(o.name))
+            # Rename the top-level empty for this vehicle (robust across Blender versions)
+            renamed = False
             for obj in imported_objects:
-                if obj.name == target_name:
-                    obj.name = new_name
-                    print(f"Renamed: {target_name} → {new_name}")
+                if obj.type == "EMPTY" and obj.parent is None:
+                    if normalize_root_name(obj.name) == clean_vehicle_name:
+                        old = obj.name
+                        obj.name = new_name
+                        print(f"Renamed root empty: {old} → {new_name}")
+                        renamed = True
+                                                                        
+                        break
+
+            if not renamed:
+                      
+                print(f"WARNING: Could not find root empty for vehicle '{vehicle_name}' to rename to '{new_name}'")
 
         # Ensure any remaining imported objects follow their parent's collection
         for obj in imported_objects:
