@@ -505,6 +505,7 @@ def export_env(file, dirname,
                             try:
                                 me = obj_for_mesh.to_mesh()
                             except RuntimeError:
+                                print(f"Warning: could not convert '{obj.name}' ({obj_type}) to mesh; skipping.")
                                 me = None
                             # meshes created via to_mesh() are temporary and must be
                             # removed after export to avoid leaking datablocks
@@ -531,9 +532,8 @@ def export_env(file, dirname,
                             mesh_id_coords = mesh_id + 'coords_'
                             mesh_id_normals = mesh_id + 'normals_'
 
-                            me = obj.data 
                             bm = bmesh.new()
-                            bm.from_mesh(me)
+                            bm.from_mesh(mesh)
 
                             #NEED TO REVISIT USING NORMALS
                             for edge in bm.edges:
@@ -541,7 +541,7 @@ def export_env(file, dirname,
                                     use_normals_obj = False
                                 else:    
                                     use_normals_obj = False
-                            bm.to_mesh(me)
+                            bm.to_mesh(mesh)
                             bm.free()
                             
 
