@@ -55,7 +55,6 @@ class H3D_PT_export_environment_include(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, "use_selection")
-        layout.prop(operator, "use_hierarchy")
         layout.prop(operator, "name_decorations")
 
 
@@ -141,11 +140,6 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
             name="Compress",
             description="Compress the exported file",
             default=False,
-            )
-    use_hierarchy: BoolProperty(
-            name="Hierarchy",
-            description="Export parent child relationships",
-            default=True,
             )
     name_decorations: BoolProperty(
             name="Name decorations",
