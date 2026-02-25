@@ -819,7 +819,7 @@ def export_env(file, dirname,
                                                 if image:
                                                     shine = 0.0
                                                     
-                                                transp = principledAlpha.default_value * principledTransmissionWeight.default_value
+                                                transp = 1-principledAlpha.default_value * (1-principledTransmissionWeight.default_value)
                                             else:
                                                 diffColor = 1.0, 1.0, 1.0
                                                 specColor = 0, 0, 0
