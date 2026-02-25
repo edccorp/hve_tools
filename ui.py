@@ -371,9 +371,9 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
                 self.draw_collapsible_section(
                     terrain_box,
                     env_props.set_env_props,
-                    "hve_setup_show_forces",
-                    "Forces",
-                    ["poForceConst", "poForceLinear", "poForceQuad", "poForceCubic", "poForceUnload", "poRateDamping"],
+                    "hve_setup_show_water",
+                    "Water",
+                    ["poWaterDepth", "poStaticWater"],
                 )
 
                 self.draw_collapsible_section(
@@ -387,9 +387,9 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
                 self.draw_collapsible_section(
                     terrain_box,
                     env_props.set_env_props,
-                    "hve_setup_show_water",
-                    "Water",
-                    ["poWaterDepth", "poStaticWater"],
+                    "hve_setup_show_forces",
+                    "Forces",
+                    ["poForceConst", "poForceLinear", "poForceQuad", "poForceCubic", "poForceUnload", "poRateDamping"],
                 )
        
             c.separator()
