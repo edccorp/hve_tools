@@ -205,7 +205,6 @@ def export_env(file, dirname,
            use_mesh_modifiers=True,
            use_selection=True,
            use_normals=False,
-           use_hierarchy=True,
            path_mode='AUTO',
            name_decorations=True,
            ):
@@ -271,6 +270,8 @@ def export_env(file, dirname,
     filename_strip = os.path.splitext(os.path.basename(file.name))[0]
     gpu_shader_cache = {}
 
+    # Hierarchy export is always enabled for H3D output.
+    use_hierarchy = True
 
     def writeMaterial(ident, material, material_id_index, world, image):
         print("MATERIAL_DEF")
@@ -434,7 +435,6 @@ def export_env(file, dirname,
 
         objects_hierarchy = ((obj, []) for obj in objects)              
 
-        use_hierarchy = True
         for obj_main, obj_main_children in objects_hierarchy:
     # -------------------------------------------------------------------------
     #  Export Object Function
@@ -1163,7 +1163,6 @@ def save(context,
          use_mesh_modifiers=False,
          use_normals=False,
          use_compress=False,
-         use_hierarchy=True,
          global_matrix=None,
          path_mode='AUTO',
          name_decorations=True
@@ -1189,7 +1188,6 @@ def save(context,
                use_mesh_modifiers=use_mesh_modifiers,
                use_selection=use_selection,
                use_normals=use_normals,
-               use_hierarchy=use_hierarchy,
                path_mode=path_mode,
                name_decorations=name_decorations,
                )
@@ -1203,7 +1201,6 @@ def save(context,
                use_mesh_modifiers=use_mesh_modifiers,
                use_selection=use_selection,
                use_normals=use_normals,
-               use_hierarchy=use_hierarchy,
                path_mode=path_mode,
                name_decorations=name_decorations,
                )
