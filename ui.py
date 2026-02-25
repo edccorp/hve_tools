@@ -131,6 +131,39 @@ def update_panel_bl_category(self, context):
     except Exception as e:
         print('HVE setting tab name failed ({})'.format(str(e)))
 
+
+class HVETOOLS_OT_copy_surface_to_selected(bpy.types.Operator):
+    bl_idname = "hvetools.copy_surface_to_selected"
+    bl_label = "Copy Type + Overlay to Selected"
+    bl_description = "Copy poSurfaceType and polabel from the active object to the other selected objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        src = context.active_object
+        if not src or not hasattr(src, "hve_env_props"):
+            self.report({'ERROR'}, "Active object missing hve_env_props")
+            return {'CANCELLED'}
+
+        src_env = src.hve_env_props.set_env_props
+
+        copied = 0
+        for obj in context.selected_objects:
+            if obj == src:
+                continue
+            if not hasattr(obj, "hve_env_props"):
+                continue
+
+            dst_env = obj.hve_env_props.set_env_props
+
+            # 👇 copy the two properties you asked for
+            dst_env.poSurfaceType = src_env.poSurfaceType
+            dst_env.polabel = src_env.polabel
+
+            copied += 1
+
+        self.report({'INFO'}, f"Copied to {copied} object(s)")
+        return {'FINISHED'}
+
 class HVE_PT_mechanist_base(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -321,13 +354,20 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
                 c, scene, "hve_setup_show_terrain", "Terrain Properties", icon='WORLD'
             )
             if terrain_box:
-                self.draw_collapsible_section(
-                    terrain_box,
-                    env_props.set_env_props,
-                    "hve_setup_show_surface",
-                    "Surface",
-                    ["poSurfaceType", "polabel", "poName", "poFriction", "poRateDamping"],
+                surface_box = self.draw_collapsible_panel(
+                    terrain_box, scene, "hve_setup_show_surface", "Surface"
                 )
+
+                if surface_box:
+                    surface_box.prop(env_props.set_env_props, "poSurfaceType")
+                    surface_box.prop(env_props.set_env_props, "polabel")
+
+                    # 👇 your copy button goes HERE (between polabel and poName/material)
+                    surface_box.operator("hvetools.copy_surface_to_selected", icon='DUPLICATE')
+
+                    surface_box.prop(env_props.set_env_props, "poName")
+                    surface_box.prop(env_props.set_env_props, "poFriction")
+                    surface_box.prop(env_props.set_env_props, "poRateDamping")
 
                 self.draw_collapsible_section(
                     terrain_box,
@@ -696,7 +736,7 @@ classes = (
     HVE_PT_race_render_exporter,
     HVE_OT_save_preset,
     HVE_OT_load_preset, 
-
+    HVETOOLS_OT_copy_surface_to_selected,
     
     )
 
