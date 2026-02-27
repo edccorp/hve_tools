@@ -28,6 +28,7 @@ for node in module_ast.body:
         "remove_unused_materials",
         "merge_duplicate_materials_per_vehicle",
         "belongs_to_vehicle",
+        "set_new_materials_metallic_zero",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
@@ -38,6 +39,7 @@ replace_materials_for_vehicle = ns["replace_materials_for_vehicle"]
 remove_unused_materials = ns["remove_unused_materials"]
 merge_duplicate_materials_per_vehicle = ns["merge_duplicate_materials_per_vehicle"]
 belongs_to_vehicle = ns["belongs_to_vehicle"]
+set_new_materials_metallic_zero = ns["set_new_materials_metallic_zero"]
 
 
 class Image:
@@ -246,3 +248,25 @@ def test_deduplicate_material_slots_within_object():
 
     assert len(obj.material_slots) == 1
     assert len(bpy.data.materials) == 1
+
+
+def test_set_new_materials_metallic_zero_updates_principled_nodes_only():
+    metallic_socket = types.SimpleNamespace(default_value=0.73)
+    roughness_socket = types.SimpleNamespace(default_value=0.42)
+    principled = Node(
+        "BSDF_PRINCIPLED",
+        inputs={
+            "Metallic": metallic_socket,
+            "Roughness": roughness_socket,
+        },
+    )
+    non_principled = Node("EMISSION", inputs={"Metallic": types.SimpleNamespace(default_value=0.99)})
+
+    mat_with_principled = Material("meshMaterial0", (1, 1, 1, 1), [principled, non_principled])
+    mat_without_tree = types.SimpleNamespace(node_tree=None)
+
+    set_new_materials_metallic_zero([mat_with_principled, mat_without_tree])
+
+    assert metallic_socket.default_value == 0.0
+    assert roughness_socket.default_value == 0.42
+    assert non_principled.inputs["Metallic"].default_value == 0.99
