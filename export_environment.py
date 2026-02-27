@@ -273,8 +273,18 @@ def export_env(file, dirname,
     # Hierarchy export is always enabled for H3D output.
     use_hierarchy = True
 
+    def get_default_material():
+        material = bpy.data.materials.get("HVE_Default_Material")
+        if material is None:
+            material = bpy.data.materials.new(name="HVE_Default_Material")
+        return material
+
     def writeMaterial(ident, material, material_id_index, world, image):
         print("MATERIAL_DEF")
+
+        if material is None:
+            material = get_default_material()
+            print("Warning: missing material reference in environment export; using '%s'." % material.name)
         
         material_id = clean_def(material.name)
         print("materialid " + material_id)
@@ -555,8 +565,12 @@ def export_env(file, dirname,
                             is_coords_written = False
 
                             mesh_materials = mesh.materials[:]
+                            default_material = get_default_material()
                             if not mesh_materials:
-                                mesh_materials = [None]
+                                print("Warning: object '%s' has no material slots; using '%s'." % (obj.name, default_material.name))
+                                mesh_materials = [default_material]
+                            else:
+                                mesh_materials = [m if m is not None else default_material for m in mesh_materials]
                             mesh_material_tex = [None] * len(mesh_materials)
                             mesh_material_mtex = [None] * len(mesh_materials)
                             mesh_material_images = [None] * len(mesh_materials)
