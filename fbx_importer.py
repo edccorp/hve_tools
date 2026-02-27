@@ -878,6 +878,21 @@ def add_x_rotation_offset_from_frame(obj, start_frame=0, degrees=180.0):
                     kp.co.y += delta
                     kp.handle_left.y += delta
                     kp.handle_right.y += delta
+
+
+def set_new_materials_metallic_zero(new_materials):
+    """Set Principled BSDF metallic to zero for a sequence of imported materials."""
+    for mat in new_materials:
+        node_tree = getattr(mat, "node_tree", None)
+        if not node_tree:
+            continue
+
+        for node in node_tree.nodes:
+            if getattr(node, "type", None) != 'BSDF_PRINCIPLED':
+                continue
+            metallic_input = node.inputs.get('Metallic')
+            if metallic_input is not None:
+                metallic_input.default_value = 0.0
     
 def import_fbx(context, fbx_file_path):
     # Store the current frame rate settings
@@ -891,8 +906,16 @@ def import_fbx(context, fbx_file_path):
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
         pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
+        pre_import_material_ids = {mat.as_pointer() for mat in bpy.data.materials}
         bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
+
+        # Set metallic to zero for any materials created by this import.
+        new_materials = [
+            mat for mat in bpy.data.materials
+            if mat.as_pointer() not in pre_import_material_ids
+        ]
+        set_new_materials_metallic_zero(new_materials)
 
         # Determine which objects were added by the import
         post_import_objects = list(bpy.context.scene.objects)
