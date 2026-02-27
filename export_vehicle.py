@@ -271,6 +271,12 @@ def export(file, dirname,
     filename_strip = os.path.splitext(os.path.basename(file.name))[0]
     gpu_shader_cache = {}
 
+    def get_default_material():
+        material = bpy.data.materials.get("HVE_Default_Material")
+        if material is None:
+            material = bpy.data.materials.new(name="HVE_Default_Material")
+        return material
+
     # -------------------------------------------------------------------------
     # File Writing Functions
     # -------------------------------------------------------------------------
@@ -305,6 +311,9 @@ def export(file, dirname,
             material_slots = obj.material_slots
             for m in material_slots:
                 material = m.material
+                if material is None:
+                    material = get_default_material()
+                    print("Warning: object '%s' has an empty material slot; using '%s'." % (obj.name, material.name))
                 if material not in materials2write:
                     materials2write.append(material)
 
@@ -414,8 +423,12 @@ def export(file, dirname,
             is_coords_written = False
 
             mesh_materials = mesh.materials[:]
+            default_material = get_default_material()
             if not mesh_materials:
-                mesh_materials = [None]
+                print("Warning: object '%s' has no material slots; using '%s'." % (obj.name, default_material.name))
+                mesh_materials = [default_material]
+            else:
+                mesh_materials = [m if m is not None else default_material for m in mesh_materials]
             mesh_material_tex = [None] * len(mesh_materials)
             mesh_material_mtex = [None] * len(mesh_materials)
             mesh_material_images = [None] * len(mesh_materials)
@@ -679,7 +692,11 @@ def export(file, dirname,
 
     def writeMaterial(ident, material, material_id_index, world, image, material_def_name=None):
         print("MATERIAL_DEF")
-        
+
+        if material is None:
+            material = get_default_material()
+            print("Warning: material reference '%s' is empty; using '%s'." % (material_def_name or "<unnamed-material>", material.name))
+
         material_id = material_def_name or clean_def(material.name)
         print("materialid " + material_id)
         
