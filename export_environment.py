@@ -204,7 +204,7 @@ def export_env(file, dirname,
            view_layer,
            use_mesh_modifiers=True,
            use_selection=True,
-           use_normals=True,
+           use_normals=False,
            path_mode='AUTO',
            name_decorations=True,
            ):
@@ -349,14 +349,10 @@ def export_env(file, dirname,
                     transp = 0
                 #IF NODES ARE THERE FOR HVE
                 
-                diffuseColor_node = nodes.get("diffuseColor", None)
-                if diffuseColor_node is not None:
-                    diffuseColor = diffuseColor_node.outputs[0].default_value
+                diffuseColor = nodes.get("diffuseColor", None)
+                if diffuseColor is not None:
+                    diffuseColor = nodes.get("diffuseColor", None).outputs[0].default_value
                     diffuseColor = diffuseColor[0], diffuseColor[1], diffuseColor[2]
-                elif image:
-                    # H3D multiplies texture by diffuseColor. Keep texture-driven
-                    # materials from turning black when Principled base color is linked.
-                    diffuseColor = 1.0, 1.0, 1.0
                 else:
                     diffuseColor = diffColor
                 ambientColor = nodes.get("ambientColor", None)
@@ -546,7 +542,17 @@ def export_env(file, dirname,
                             mesh_id_coords = mesh_id + 'coords_'
                             mesh_id_normals = mesh_id + 'normals_'
 
-                            use_normals_obj = any(getattr(edge, 'use_edge_sharp', not getattr(edge, 'smooth', True)) for edge in mesh.edges)
+                            bm = bmesh.new()
+                            bm.from_mesh(mesh)
+
+                            #NEED TO REVISIT USING NORMALS
+                            for edge in bm.edges:
+                                if not edge.smooth:
+                                    use_normals_obj = False
+                                else:    
+                                    use_normals_obj = False
+                            bm.to_mesh(mesh)
+                            bm.free()
                             
 
 
@@ -633,8 +639,6 @@ def export_env(file, dirname,
                                 is_col_per_vertex, vert_color = calc_vertex_color()
                                 del calc_vertex_color
                                 
-
-                            reverse_winding = obj_matrix.to_3x3().determinant() < 0.0
 
                             for (material_index, image), polygons_group in polygons_groups.items():
                                 if polygons_group:
@@ -839,14 +843,10 @@ def export_env(file, dirname,
                                                 transp = 0
                                             #IF NODES ARE THERE FOR HVE
                                             
-                                            diffuseColor_node = nodes.get("diffuseColor", None)
-                                            if diffuseColor_node is not None:
-                                                diffuseColor = diffuseColor_node.outputs[0].default_value
+                                            diffuseColor = nodes.get("diffuseColor", None)
+                                            if diffuseColor is not None:
+                                                diffuseColor = nodes.get("diffuseColor", None).outputs[0].default_value
                                                 diffuseColor = diffuseColor[0], diffuseColor[1], diffuseColor[2]
-                                            elif image:
-                                                # H3D multiplies texture by diffuseColor. Keep texture-driven
-                                                # materials from turning black when Principled base color is linked.
-                                                diffuseColor = 1.0, 1.0, 1.0
                                             else:
                                                 diffuseColor = diffColor
                                             ambientColor = nodes.get("ambientColor", None)
@@ -930,19 +930,18 @@ def export_env(file, dirname,
                                         fw('		  rotation %.6f\n' % rot)
                                         fw('		  } #endTexture2Transform\n')
                                         mesh_loops_uv = mesh.uv_layers.active.data if is_uv else None			
-
                                         if is_uv:
                                             fw('		 textureCoordinate2 \n')                                  
                                             fw('		  TextureCoordinate2 { #beginTextureCoordinate2\n')
                                             fw('          point [ ')
                                             j = 0
                                             for i in polygons_group:
-                                                for lidx in polygon_loop_indices(i):
+                                                for lidx in mesh_polygons[i].loop_indices: 
                                                     j +=1
                                             fw('%s , \n' % j)
                                             
                                             for i in polygons_group:
-                                                for lidx in polygon_loop_indices(i):
+                                                for lidx in mesh_polygons[i].loop_indices:
                                                     fw('		  %.4f %.4f ,\n' % mesh_loops_uv[lidx].uv[:])
                                             fw('		  ]\n')
                                             fw('		  } #endTextureCoordinate2\n')
@@ -954,10 +953,6 @@ def export_env(file, dirname,
                                     #-- IndexedFaceSet                   
                                     
                                     # --- Write IndexedFaceSet
-
-                                    def polygon_loop_indices(poly_index):
-                                        loop_indices = list(mesh_polygons[poly_index].loop_indices)
-                                        return list(reversed(loop_indices)) if reverse_winding else loop_indices
 
                                     #if is_smooth:
                                         # use Auto-Smooth angle, if enabled. Otherwise make
@@ -983,42 +978,14 @@ def export_env(file, dirname,
                                         fw('		  ]\n')
                                         fw('		  } #endCoordinate3\n')
                                         is_coords_written = True
-                                        loop_normals = []
-                                        normal_index_faces = []
                                         if use_normals or use_normals_obj:
-                                            mesh_corner_normals = getattr(mesh, "corner_normals", None)
-
-                                            def get_loop_normal(loop_idx, poly):
-                                                n = None
-                                                if mesh_corner_normals is not None:
-                                                    cn = mesh_corner_normals[loop_idx]
-                                                    n = getattr(cn, "vector", None) or getattr(cn, "normal", None)
-                                                if n is None:
-                                                    loop = mesh_loops[loop_idx]
-                                                    n = getattr(loop, "normal", None)
-                                                if n is None:
-                                                    n = poly.normal
-                                                return (n.x, n.y, n.z)
-
-                                            for poly_i in polygons_group:
-                                                p = mesh_polygons[poly_i]
-                                                face_nidx = []
-                                                for lidx in polygon_loop_indices(poly_i):
-                                                    nx, ny, nz = get_loop_normal(lidx, p)
-                                                    if reverse_winding:
-                                                        loop_normals.append((-nx, -ny, -nz))
-                                                    else:
-                                                        loop_normals.append((nx, ny, nz))
-                                                    face_nidx.append(len(loop_normals) - 1)
-                                                normal_index_faces.append(face_nidx)
-
-                                            fw('\t\t  normal\n')
-                                            fw('\t\t  Normal { #beginNormal\n' )
-                                            fw('\t\t  vector [\n')
-                                            for nx, ny, nz in loop_normals:
-                                                fw('\t\t  %.6f %.6f %.6f,\n' % (nx, ny, nz))
-                                            fw('\t\t  ]\n')
-                                            fw('\t\t  } #endNormal\n')
+                                            fw('		  normal\n')
+                                            fw('		  Normal { #beginNormal\n' )
+                                            fw('		  vector [')
+                                            for v in mesh.vertices:
+                                                fw('%.6f %.6f %.6f,\n ' % v.normal[:])
+                                            fw('		  ]\n')
+                                            fw('		  } #endNormal\n')									
                                     if True:
                                         fw('		 shape \n')
                                         fw('		  IndexedFaceSet { #beginIndexedFaceSet\n' )
@@ -1036,10 +1003,7 @@ def export_env(file, dirname,
                                             j = 0
                                             for i in polygons_group:   
                                                 num_poly_verts = len(mesh_polygons_vertices[i])                                        
-                                                texture_face_indices = list(range(j, j + num_poly_verts))
-                                                if reverse_winding:
-                                                    texture_face_indices.reverse()
-                                                fw('\t\t  %s, -1 ' % ', '.join(str(idx) for idx in texture_face_indices))
+                                                fw('		  %s, -1 ' % ', '.join((str(i) for i in range(j, j + num_poly_verts))))
                                                 j += num_poly_verts
                                                 fw('         ,\n')
                                             fw('            ]\n')
@@ -1055,17 +1019,10 @@ def export_env(file, dirname,
                                         fw('%s ,\n' % k)
                                         j = 0 
                                         for i in polygons_group:
-                                            poly_verts = list(mesh_polygons_vertices[i])
-                                            if reverse_winding:
-                                                poly_verts.reverse()
+                                            poly_verts = mesh_polygons_vertices[i]
                                             fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
                                             fw('         ,\n')
                                         fw( '          ]\n')
-                                        if use_normals or use_normals_obj:
-                                            fw('          normalIndex [\n')
-                                            for face_nidx in normal_index_faces:
-                                                fw('          %s, -1,\n' % ', '.join(str(n) for n in face_nidx))
-                                            fw('          ]\n')
                                         fw('        } #endIndexedFaceSet\n')							
                                         # --- end coordIndex
                                     fw('    \n' )
@@ -1218,7 +1175,7 @@ def save(context,
          *,
          use_selection=True,
          use_mesh_modifiers=False,
-         use_normals=True,
+         use_normals=False,
          use_compress=False,
          global_matrix=None,
          path_mode='AUTO',
