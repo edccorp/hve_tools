@@ -542,7 +542,7 @@ def export_env(file, dirname,
                             mesh_id_coords = mesh_id + 'coords_'
                             mesh_id_normals = mesh_id + 'normals_'
 
-                            use_normals_obj = any(not edge.smooth for edge in mesh.edges)
+                            use_normals_obj = any(getattr(edge, 'use_edge_sharp', not getattr(edge, 'smooth', True)) for edge in mesh.edges)
                             
 
 
