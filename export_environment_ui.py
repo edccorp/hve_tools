@@ -134,7 +134,7 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
     use_normals: BoolProperty(
             name="Normals",
             description="Write normals with geometry",
-            default=True,
+            default=False,
             )
     use_compress: BoolProperty(
             name="Compress",
