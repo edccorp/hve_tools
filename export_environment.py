@@ -542,16 +542,7 @@ def export_env(file, dirname,
                             mesh_id_coords = mesh_id + 'coords_'
                             mesh_id_normals = mesh_id + 'normals_'
 
-                            bm = bmesh.new()
-                            bm.from_mesh(mesh)
-
-                            use_normals_obj = False
-                            for edge in bm.edges:
-                                if not edge.smooth:
-                                    use_normals_obj = True
-                                    break
-                            bm.to_mesh(mesh)
-                            bm.free()
+                            use_normals_obj = any(not edge.smooth for edge in mesh.edges)
                             
 
 
@@ -984,8 +975,13 @@ def export_env(file, dirname,
                                                 p = mesh_polygons[poly_i]
                                                 face_nidx = []
                                                 for lidx in p.loop_indices:
-                                                    cn = mesh.corner_normals[lidx]
-                                                    n = getattr(cn, "vector", None) or getattr(cn, "normal")
+                                                    loop = mesh_loops[lidx]
+                                                    n = getattr(loop, "normal", None)
+                                                    if n is None:
+                                                        cn = mesh.corner_normals[lidx]
+                                                        n = getattr(cn, "vector", None) or getattr(cn, "normal", None)
+                                                    if n is None:
+                                                        n = p.normal
                                                     loop_normals.append((n.x, n.y, n.z))
                                                     face_nidx.append(len(loop_normals) - 1)
                                                 normal_index_faces.append(face_nidx)
