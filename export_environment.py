@@ -545,12 +545,11 @@ def export_env(file, dirname,
                             bm = bmesh.new()
                             bm.from_mesh(mesh)
 
-                            #NEED TO REVISIT USING NORMALS
+                            use_normals_obj = False
                             for edge in bm.edges:
                                 if not edge.smooth:
-                                    use_normals_obj = False
-                                else:    
-                                    use_normals_obj = False
+                                    use_normals_obj = True
+                                    break
                             bm.to_mesh(mesh)
                             bm.free()
                             
@@ -978,14 +977,26 @@ def export_env(file, dirname,
                                         fw('		  ]\n')
                                         fw('		  } #endCoordinate3\n')
                                         is_coords_written = True
+                                        loop_normals = []
+                                        normal_index_faces = []
                                         if use_normals or use_normals_obj:
-                                            fw('		  normal\n')
-                                            fw('		  Normal { #beginNormal\n' )
-                                            fw('		  vector [')
-                                            for v in mesh.vertices:
-                                                fw('%.6f %.6f %.6f,\n ' % v.normal[:])
-                                            fw('		  ]\n')
-                                            fw('		  } #endNormal\n')									
+                                            for poly_i in polygons_group:
+                                                p = mesh_polygons[poly_i]
+                                                face_nidx = []
+                                                for lidx in p.loop_indices:
+                                                    cn = mesh.corner_normals[lidx]
+                                                    n = getattr(cn, "vector", None) or getattr(cn, "normal")
+                                                    loop_normals.append((n.x, n.y, n.z))
+                                                    face_nidx.append(len(loop_normals) - 1)
+                                                normal_index_faces.append(face_nidx)
+
+                                            fw('\t\t  normal\n')
+                                            fw('\t\t  Normal { #beginNormal\n' )
+                                            fw('\t\t  vector [\n')
+                                            for nx, ny, nz in loop_normals:
+                                                fw('\t\t  %.6f %.6f %.6f,\n' % (nx, ny, nz))
+                                            fw('\t\t  ]\n')
+                                            fw('\t\t  } #endNormal\n')
                                     if True:
                                         fw('		 shape \n')
                                         fw('		  IndexedFaceSet { #beginIndexedFaceSet\n' )
@@ -1023,6 +1034,11 @@ def export_env(file, dirname,
                                             fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
                                             fw('         ,\n')
                                         fw( '          ]\n')
+                                        if use_normals or use_normals_obj:
+                                            fw('          normalIndex [\n')
+                                            for face_nidx in normal_index_faces:
+                                                fw('          %s, -1,\n' % ', '.join(str(n) for n in face_nidx))
+                                            fw('          ]\n')
                                         fw('        } #endIndexedFaceSet\n')							
                                         # --- end coordIndex
                                     fw('    \n' )
