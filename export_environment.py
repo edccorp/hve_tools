@@ -931,10 +931,6 @@ def export_env(file, dirname,
                                         fw('		  } #endTexture2Transform\n')
                                         mesh_loops_uv = mesh.uv_layers.active.data if is_uv else None			
 
-                                        def polygon_loop_indices(poly_index):
-                                            loop_indices = list(mesh_polygons[poly_index].loop_indices)
-                                            return list(reversed(loop_indices)) if reverse_winding else loop_indices
-
                                         if is_uv:
                                             fw('		 textureCoordinate2 \n')                                  
                                             fw('		  TextureCoordinate2 { #beginTextureCoordinate2\n')
@@ -958,6 +954,10 @@ def export_env(file, dirname,
                                     #-- IndexedFaceSet                   
                                     
                                     # --- Write IndexedFaceSet
+
+                                    def polygon_loop_indices(poly_index):
+                                        loop_indices = list(mesh_polygons[poly_index].loop_indices)
+                                        return list(reversed(loop_indices)) if reverse_winding else loop_indices
 
                                     #if is_smooth:
                                         # use Auto-Smooth angle, if enabled. Otherwise make
