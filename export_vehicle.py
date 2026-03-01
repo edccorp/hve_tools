@@ -399,12 +399,12 @@ def export(file, dirname,
         bm = bmesh.new()
         bm.from_mesh(me)
 
+        use_normals_obj = False
         for edge in bm.edges:
             if not edge.smooth:
                 use_normals_obj = True
-            else:    
-                use_normals_obj = False
-        bm.to_mesh(me)
+                break
+
         bm.free()
         
         ident = writeTransform_begin(ident, matrix, obj_id + '_ifs' + _TRANSFORM)
@@ -465,6 +465,7 @@ def export(file, dirname,
             mesh_vertices = mesh.vertices[:]
             mesh_loops = mesh.loops[:]
             mesh_polygons = mesh.polygons[:]
+
             mesh_polygons_materials = [p.material_index for p in mesh_polygons]
             mesh_polygons_vertices = [p.vertices[:] for p in mesh_polygons]
 
@@ -504,6 +505,7 @@ def export(file, dirname,
                 del calc_vertex_color
             for (material_index, image), polygons_group in polygons_groups.items():
                 if polygons_group:
+
                     material = mesh_materials[material_index]
                     fw('%sSeparator{ #beginMaterialIndex\n' % ident)
                     ident += '\t'
@@ -638,8 +640,7 @@ def export(file, dirname,
                     if True:
                         if is_coords_written:
                             fw('%sUSE %s \n' % (ident, mesh_id_coords))
-                            if use_normals or use_normals_obj:
-                                fw('%sUSE %s \n' % (ident, mesh_id_normals))
+                            # don't USE mesh_id_normals anymore (we'll write per-face-corner normals per group)
                         else:
                             ident_step = ident + (' ' * (-len(ident) + \
                             fw('DEF %s\n' % mesh_id_coords)))
@@ -650,16 +651,30 @@ def export(file, dirname,
                             fw(ident_step +']\n')
                             fw(ident_step + '} #endCoordinate3\n')
                             is_coords_written = True
-                            if use_normals or use_normals_obj:
-                                ident_step = ident + (' ' * (-len(ident) + \
-                                fw('DEF %s' % mesh_id_normals)))
-                                fw('%sNormal { #beginNormal\n' % ident)
-                                fw(ident_step + 'vector [')
-                                for v in mesh.vertices:
-                                    fw('%.6f %.6f %.6f,\n ' % v.normal[:])
-                                fw(ident_step +']\n')
-                                fw(ident_step + '} #endNormal\n')									
+									
                     if True:
+                        loop_normals = []
+                        normal_index_faces = []  # list of lists, one per face
+
+                        if use_normals or use_normals_obj:
+                            # Build normals in the SAME order as we'll output coordIndex corners
+                            for poly_i in polygons_group:
+                                p = mesh_polygons[poly_i]
+                                face_nidx = []
+                                for lidx in p.loop_indices:
+                                    cn = mesh.corner_normals[lidx]
+                                    n = getattr(cn, "vector", None) or getattr(cn, "normal")
+                                    loop_normals.append((n.x, n.y, n.z))
+                                    face_nidx.append(len(loop_normals) - 1)
+                                normal_index_faces.append(face_nidx)
+
+
+                            fw('%sNormal { #beginNormal\n' % ident)
+                            fw(ident_step + 'vector [\n')
+                            for nx, ny, nz in loop_normals:
+                                fw(ident_step + '%.6f %.6f %.6f,\n' % (nx, ny, nz))
+                            fw(ident_step + ']\n')
+                            fw(ident_step + '} #endNormal\n')
                         fw('%sIndexedFaceSet { #beginIndexedFaceSet\n' % ident)
                     # # for IndexedTriangleSet we use a uv per vertex so this isn't needed.
                         if is_uv:
@@ -673,11 +688,16 @@ def export(file, dirname,
                             fw(ident_step +']\n')
                         # --- end textureCoordIndex							
                         fw(ident_step + 'coordIndex [\n')
-                        for i in polygons_group:
-                            poly_verts = mesh_polygons_vertices[i]
-                            fw(ident_step +'%s , -1 ' % ', '.join((str(i) for i in poly_verts)))
-                            fw('  ,\n')
-                        fw(ident_step +']\n')
+                        for poly_i in polygons_group:
+                            p = mesh_polygons[poly_i]
+                            verts = [str(mesh_loops[lidx].vertex_index) for lidx in p.loop_indices]
+                            fw(ident_step + '%s, -1,\n' % ', '.join(verts))
+                        fw(ident_step + ']\n')
+                        if use_normals or use_normals_obj:
+                            fw(ident_step + 'normalIndex [\n')
+                            for face_nidx in normal_index_faces:
+                                fw(ident_step + '%s, -1,\n' % ', '.join(str(n) for n in face_nidx))
+                            fw(ident_step + ']\n')
                         fw(ident_step +'} #endIndexedFaceSet\n')							
                         # --- end coordIndex
                     ident += '\t'
