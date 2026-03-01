@@ -349,10 +349,14 @@ def export_env(file, dirname,
                     transp = 0
                 #IF NODES ARE THERE FOR HVE
                 
-                diffuseColor = nodes.get("diffuseColor", None)
-                if diffuseColor is not None:
-                    diffuseColor = nodes.get("diffuseColor", None).outputs[0].default_value
+                diffuseColor_node = nodes.get("diffuseColor", None)
+                if diffuseColor_node is not None:
+                    diffuseColor = diffuseColor_node.outputs[0].default_value
                     diffuseColor = diffuseColor[0], diffuseColor[1], diffuseColor[2]
+                elif image:
+                    # H3D multiplies texture by diffuseColor. Keep texture-driven
+                    # materials from turning black when Principled base color is linked.
+                    diffuseColor = 1.0, 1.0, 1.0
                 else:
                     diffuseColor = diffColor
                 ambientColor = nodes.get("ambientColor", None)
@@ -630,6 +634,8 @@ def export_env(file, dirname,
                                 del calc_vertex_color
                                 
 
+                            reverse_winding = obj_matrix.to_3x3().determinant() < 0.0
+
                             for (material_index, image), polygons_group in polygons_groups.items():
                                 if polygons_group:
                                     material = mesh_materials[material_index]
@@ -833,10 +839,14 @@ def export_env(file, dirname,
                                                 transp = 0
                                             #IF NODES ARE THERE FOR HVE
                                             
-                                            diffuseColor = nodes.get("diffuseColor", None)
-                                            if diffuseColor is not None:
-                                                diffuseColor = nodes.get("diffuseColor", None).outputs[0].default_value
+                                            diffuseColor_node = nodes.get("diffuseColor", None)
+                                            if diffuseColor_node is not None:
+                                                diffuseColor = diffuseColor_node.outputs[0].default_value
                                                 diffuseColor = diffuseColor[0], diffuseColor[1], diffuseColor[2]
+                                            elif image:
+                                                # H3D multiplies texture by diffuseColor. Keep texture-driven
+                                                # materials from turning black when Principled base color is linked.
+                                                diffuseColor = 1.0, 1.0, 1.0
                                             else:
                                                 diffuseColor = diffColor
                                             ambientColor = nodes.get("ambientColor", None)
@@ -920,18 +930,23 @@ def export_env(file, dirname,
                                         fw('		  rotation %.6f\n' % rot)
                                         fw('		  } #endTexture2Transform\n')
                                         mesh_loops_uv = mesh.uv_layers.active.data if is_uv else None			
+
+                                        def polygon_loop_indices(poly_index):
+                                            loop_indices = list(mesh_polygons[poly_index].loop_indices)
+                                            return list(reversed(loop_indices)) if reverse_winding else loop_indices
+
                                         if is_uv:
                                             fw('		 textureCoordinate2 \n')                                  
                                             fw('		  TextureCoordinate2 { #beginTextureCoordinate2\n')
                                             fw('          point [ ')
                                             j = 0
                                             for i in polygons_group:
-                                                for lidx in mesh_polygons[i].loop_indices: 
+                                                for lidx in polygon_loop_indices(i):
                                                     j +=1
                                             fw('%s , \n' % j)
                                             
                                             for i in polygons_group:
-                                                for lidx in mesh_polygons[i].loop_indices:
+                                                for lidx in polygon_loop_indices(i):
                                                     fw('		  %.4f %.4f ,\n' % mesh_loops_uv[lidx].uv[:])
                                             fw('		  ]\n')
                                             fw('		  } #endTextureCoordinate2\n')
@@ -974,7 +989,7 @@ def export_env(file, dirname,
                                             for poly_i in polygons_group:
                                                 p = mesh_polygons[poly_i]
                                                 face_nidx = []
-                                                for lidx in p.loop_indices:
+                                                for lidx in polygon_loop_indices(poly_i):
                                                     loop = mesh_loops[lidx]
                                                     n = getattr(loop, "normal", None)
                                                     if n is None:
@@ -982,7 +997,10 @@ def export_env(file, dirname,
                                                         n = getattr(cn, "vector", None) or getattr(cn, "normal", None)
                                                     if n is None:
                                                         n = p.normal
-                                                    loop_normals.append((n.x, n.y, n.z))
+                                                    if reverse_winding:
+                                                        loop_normals.append((-n.x, -n.y, -n.z))
+                                                    else:
+                                                        loop_normals.append((n.x, n.y, n.z))
                                                     face_nidx.append(len(loop_normals) - 1)
                                                 normal_index_faces.append(face_nidx)
 
@@ -1010,7 +1028,10 @@ def export_env(file, dirname,
                                             j = 0
                                             for i in polygons_group:   
                                                 num_poly_verts = len(mesh_polygons_vertices[i])                                        
-                                                fw('		  %s, -1 ' % ', '.join((str(i) for i in range(j, j + num_poly_verts))))
+                                                texture_face_indices = list(range(j, j + num_poly_verts))
+                                                if reverse_winding:
+                                                    texture_face_indices.reverse()
+                                                fw('\t\t  %s, -1 ' % ', '.join(str(idx) for idx in texture_face_indices))
                                                 j += num_poly_verts
                                                 fw('         ,\n')
                                             fw('            ]\n')
@@ -1026,7 +1047,9 @@ def export_env(file, dirname,
                                         fw('%s ,\n' % k)
                                         j = 0 
                                         for i in polygons_group:
-                                            poly_verts = mesh_polygons_vertices[i]
+                                            poly_verts = list(mesh_polygons_vertices[i])
+                                            if reverse_winding:
+                                                poly_verts.reverse()
                                             fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
                                             fw('         ,\n')
                                         fw( '          ]\n')
