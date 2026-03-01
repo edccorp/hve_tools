@@ -986,21 +986,29 @@ def export_env(file, dirname,
                                         loop_normals = []
                                         normal_index_faces = []
                                         if use_normals or use_normals_obj:
+                                            mesh_corner_normals = getattr(mesh, "corner_normals", None)
+
+                                            def get_loop_normal(loop_idx, poly):
+                                                n = None
+                                                if mesh_corner_normals is not None:
+                                                    cn = mesh_corner_normals[loop_idx]
+                                                    n = getattr(cn, "vector", None) or getattr(cn, "normal", None)
+                                                if n is None:
+                                                    loop = mesh_loops[loop_idx]
+                                                    n = getattr(loop, "normal", None)
+                                                if n is None:
+                                                    n = poly.normal
+                                                return (n.x, n.y, n.z)
+
                                             for poly_i in polygons_group:
                                                 p = mesh_polygons[poly_i]
                                                 face_nidx = []
                                                 for lidx in polygon_loop_indices(poly_i):
-                                                    loop = mesh_loops[lidx]
-                                                    n = getattr(loop, "normal", None)
-                                                    if n is None:
-                                                        cn = mesh.corner_normals[lidx]
-                                                        n = getattr(cn, "vector", None) or getattr(cn, "normal", None)
-                                                    if n is None:
-                                                        n = p.normal
+                                                    nx, ny, nz = get_loop_normal(lidx, p)
                                                     if reverse_winding:
-                                                        loop_normals.append((-n.x, -n.y, -n.z))
+                                                        loop_normals.append((-nx, -ny, -nz))
                                                     else:
-                                                        loop_normals.append((n.x, n.y, n.z))
+                                                        loop_normals.append((nx, ny, nz))
                                                     face_nidx.append(len(loop_normals) - 1)
                                                 normal_index_faces.append(face_nidx)
 
