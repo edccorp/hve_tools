@@ -954,13 +954,6 @@ def export_env(file, dirname,
                                     
                                     # --- Write IndexedFaceSet
 
-                                    if not (use_normals or use_normals_obj):
-                                        # When normals are not exported, use a large crease angle
-                                        # so lighting remains smooth.
-                                        fw('		  ShapeHints { #beginShapeHints\n')
-                                        fw('		  creaseAngle %.4f\n' % 3.14159)
-                                        fw('		  } #endShapeHints\n')
-                                        
                                     if use_normals or use_normals_obj:
                                         # use normals binding, if enabled.  
                                         fw('		  normalbinding\n')                           
