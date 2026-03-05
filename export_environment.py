@@ -954,12 +954,12 @@ def export_env(file, dirname,
                                     
                                     # --- Write IndexedFaceSet
 
-                                    #if is_smooth:
-                                        # use Auto-Smooth angle, if enabled. Otherwise make
-                                        # the mesh perfectly smooth by creaseAngle > pi.
-                                        #fw('		  ShapeHints { #beginShapeHints\n')
-                                        #fw('		  creaseAngle %.4f\n' % ( 2.0))
-                                        #fw('		  } #endShapeHints\n')
+                                    if not (use_normals or use_normals_obj):
+                                        # When normals are not exported, use a large crease angle
+                                        # so lighting remains smooth.
+                                        fw('		  ShapeHints { #beginShapeHints\n')
+                                        fw('		  creaseAngle %.4f\n' % 3.14159)
+                                        fw('		  } #endShapeHints\n')
                                         
                                     if use_normals or use_normals_obj:
                                         # use normals binding, if enabled.  
@@ -981,9 +981,9 @@ def export_env(file, dirname,
                                         if use_normals or use_normals_obj:
                                             fw('		  normal\n')
                                             fw('		  Normal { #beginNormal\n' )
-                                            fw('		  vector [')
+                                            fw('		  vector [ %s,\n' % len(mesh.vertices))
                                             for v in mesh.vertices:
-                                                fw('%.6f %.6f %.6f,\n ' % v.normal[:])
+                                                fw('		  %.6f %.6f %.6f ,\n' % v.normal[:])
                                             fw('		  ]\n')
                                             fw('		  } #endNormal\n')									
                                     if True:
@@ -1023,6 +1023,20 @@ def export_env(file, dirname,
                                             fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
                                             fw('         ,\n')
                                         fw( '          ]\n')
+                                        if use_normals or use_normals_obj:
+                                            fw('          normalIndex [ ')
+                                            k = 0
+                                            for i in polygons_group:
+                                                k += 1
+                                                poly_verts = mesh_polygons_vertices[i]
+                                                for i in poly_verts:
+                                                    k += 1
+                                            fw('%s ,\n' % k)
+                                            for i in polygons_group:
+                                                poly_verts = mesh_polygons_vertices[i]
+                                                fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
+                                                fw('         ,\n')
+                                            fw('          ]\n')
                                         fw('        } #endIndexedFaceSet\n')							
                                         # --- end coordIndex
                                     fw('    \n' )
