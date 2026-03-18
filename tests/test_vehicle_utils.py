@@ -28,6 +28,10 @@ for node in module_ast.body:
         "ensure_preroll_keys",
         "zero_main_vehicle_empty_transform_at_preroll",
         "adjust_animation",
+        "_iter_collection_tree",
+        "strip_blender_numeric_suffix",
+        "get_existing_fbx_collections",
+        "overwrite_existing_fbx_objects",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
@@ -441,6 +445,116 @@ def test_offset_selected_animation_auto_aligns_first_key_to_frame_zero():
 
     assert curve.keyframe_points[0].co.x == 0.0
     assert curve.keyframe_points[1].co.x == 9.0
+
+
+def test_overwrite_existing_fbx_objects_removes_same_named_prior_fbx_objects_only():
+    class ObjectStore:
+        def __init__(self, by_name):
+            self.by_name = by_name
+            self.removed = []
+
+        def get(self, name):
+            return self.by_name.get(name)
+
+        def remove(self, obj, do_unlink=True):
+            self.removed.append((obj.name, do_unlink))
+            self.by_name.pop(obj.name, None)
+            for collection in all_collections.values():
+                if obj in collection.objects:
+                    collection.objects.remove(obj)
+
+    class CollectionStore(dict):
+        def __iter__(self):
+            return iter(self.values())
+
+        def remove(self, collection):
+            self.pop(collection.name, None)
+
+    class Collection:
+        def __init__(self, name, objects=None, children=None):
+            self.name = name
+            self.objects = objects or []
+            self.children = children or []
+
+    old_match = Obj('Mesh: Car: Body', type='MESH')
+    old_other = Obj('Mesh: Car: Mirror', type='MESH')
+    variable_output = Obj('CG: Car: demo', type='EMPTY')
+    imported = Obj('Mesh: Car: Body.001', type='MESH')
+
+    fbx_collection = Collection('HVE: demo: Car: FBX', objects=[old_match, old_other])
+    wheels_collection = Collection('Wheels: Car: demo: FBX', objects=[])
+    shared_root = Collection('HVE: demo', objects=[variable_output], children=[fbx_collection, wheels_collection])
+    other = Collection('Other', objects=[])
+
+    global all_collections
+    all_collections = CollectionStore({
+        shared_root.name: shared_root,
+        fbx_collection.name: fbx_collection,
+        wheels_collection.name: wheels_collection,
+        other.name: other,
+    })
+    objects_by_name = {
+        old_match.name: old_match,
+        old_other.name: old_other,
+        variable_output.name: variable_output,
+        imported.name: imported,
+    }
+    objects = ObjectStore(objects_by_name)
+
+    bpy_stub = type('bpy', (), {'data': type('data', (), {'collections': all_collections, 'objects': objects})()})()
+    ns.update({'bpy': bpy_stub})
+
+    overwritten = ns['overwrite_existing_fbx_objects']('demo', [imported])
+
+    assert overwritten is True
+    assert objects.removed == [('Mesh: Car: Body', True)]
+    assert imported.name == 'Mesh: Car: Body'
+    assert variable_output in shared_root.objects
+    assert old_other in fbx_collection.objects
+    assert shared_root.name in all_collections
+    assert fbx_collection.name in all_collections
+
+
+def test_overwrite_existing_fbx_objects_noop_without_same_name_match():
+    class ObjectStore:
+        def __init__(self, by_name):
+            self.by_name = by_name
+            self.removed = []
+
+        def get(self, name):
+            return self.by_name.get(name)
+
+        def remove(self, obj, do_unlink=True):
+            self.removed.append((obj.name, do_unlink))
+
+    class CollectionStore(dict):
+        def __iter__(self):
+            return iter(self.values())
+
+        def remove(self, collection):
+            self.pop(collection.name, None)
+
+    class Collection:
+        def __init__(self, name, objects=None, children=None):
+            self.name = name
+            self.objects = objects or []
+            self.children = children or []
+
+    old_obj = Obj('Mesh: Car: Mirror', type='MESH')
+    imported = Obj('Mesh: Car: Body', type='MESH')
+    fbx_collection = Collection('HVE: demo: Car: FBX', objects=[old_obj])
+    shared_root = Collection('HVE: demo', children=[fbx_collection])
+
+    collections = CollectionStore({shared_root.name: shared_root, fbx_collection.name: fbx_collection})
+    objects = ObjectStore({old_obj.name: old_obj, imported.name: imported})
+    bpy_stub = type('bpy', (), {'data': type('data', (), {'collections': collections, 'objects': objects})()})()
+    ns.update({'bpy': bpy_stub})
+
+    overwritten = ns['overwrite_existing_fbx_objects']('demo', [imported])
+
+    assert overwritten is False
+    assert objects.removed == []
+    assert imported.name == 'Mesh: Car: Body'
 
 
 if __name__ == "__main__":
