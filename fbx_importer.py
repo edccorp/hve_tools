@@ -573,6 +573,66 @@ def ensure_collection_exists(collection_name, parent_collection=None, hide=False
     
     return collection
 
+
+
+def _iter_collection_tree(collection):
+    """Yield ``collection`` and all nested child collections depth-first."""
+    if collection is None:
+        return
+
+    yield collection
+    for child in list(getattr(collection, "children", [])):
+        yield from _iter_collection_tree(child)
+
+
+def strip_blender_numeric_suffix(name: str) -> str:
+    """Remove Blender's trailing numeric suffix (e.g. ``.001``) from ``name``."""
+    return re.sub(r"\.\d+$", "", name)
+
+
+def get_existing_fbx_collections(filename):
+    """Return FBX-specific collections for ``filename`` without touching the shared HVE root."""
+    filename_token = f": {filename}:"
+    return [
+        collection
+        for collection in bpy.data.collections
+        if collection.name.endswith(": FBX") and filename_token in collection.name
+    ]
+
+
+def overwrite_existing_fbx_objects(filename, imported_objects):
+    """Remove same-named objects from prior FBX imports and reuse their original names."""
+    collections_to_check = get_existing_fbx_collections(filename)
+    imported_name_map = {}
+    for obj in imported_objects:
+        imported_name_map.setdefault(strip_blender_numeric_suffix(obj.name), []).append(obj)
+
+    removed_names = set()
+    for collection in collections_to_check:
+        for obj in list(getattr(collection, "objects", [])):
+            base_name = strip_blender_numeric_suffix(obj.name)
+            if base_name not in imported_name_map:
+                continue
+            bpy.data.objects.remove(obj, do_unlink=True)
+            removed_names.add(base_name)
+
+    for obj in imported_objects:
+        desired_name = strip_blender_numeric_suffix(obj.name)
+        if desired_name in removed_names and obj.name != desired_name and bpy.data.objects.get(desired_name) is None:
+            obj.name = desired_name
+
+    for collection in sorted(collections_to_check, key=lambda col: col.name.count(":"), reverse=True):
+        if list(getattr(collection, "objects", [])) or list(getattr(collection, "children", [])):
+            continue
+        bpy.data.collections.remove(collection)
+
+    if removed_names:
+        print(f"♻️ Overwrote {len(removed_names)} existing FBX objects for '{filename}'.")
+        return True
+
+    return False
+
+
 def bake_shape_keys_to_keyframes(obj):
     """Bakes shape key animations into keyframes only if the object has shape keys."""
     if not obj.data.shape_keys or not obj.data.shape_keys.animation_data:
@@ -1180,6 +1240,8 @@ def import_fbx(context, fbx_file_path):
                 root = normalize_root_name(obj.name)
                 if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
                     force_zero_preroll_pose(obj, frame=-1)
+
+        overwrite_existing_fbx_objects(filename, imported_objects)
 
         # Create the event collection
         event_collection_name = f"HVE: {filename}"
