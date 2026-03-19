@@ -4,6 +4,7 @@ import re
 import math
 import threading
 import struct
+from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
     "name": "HVE FBX Import",
@@ -702,6 +703,24 @@ def write_mdd_file(filepath, frame_times, frame_vertex_positions):
             handle.write(struct.pack(f">{len(flattened)}f", *flattened))
 
 
+@contextmanager
+def temporarily_disable_modifiers(obj):
+    """Temporarily disable object modifiers while sampling raw shape-key deformation."""
+    modifier_states = []
+    for modifier in getattr(obj, "modifiers", []):
+        modifier_states.append((modifier, modifier.show_viewport, modifier.show_render))
+        modifier.show_viewport = False
+        modifier.show_render = False
+
+    try:
+        yield
+    finally:
+        for modifier, show_viewport, show_render in modifier_states:
+            modifier.show_viewport = show_viewport
+            modifier.show_render = show_render
+
+
+
 def sample_mesh_deformation_frames(obj, frame_start, frame_end):
     """Sample evaluated vertex positions for ``obj`` across the frame range."""
     scene = bpy.context.scene
@@ -713,27 +732,27 @@ def sample_mesh_deformation_frames(obj, frame_start, frame_end):
 
     frame_times = []
     frame_vertex_positions = []
-    expected_vertex_count = None
+    expected_vertex_count = len(getattr(obj.data, "vertices", []))
 
     try:
-        for frame in range(frame_start, frame_end + 1):
-            scene.frame_set(frame)
-            eval_obj = obj.evaluated_get(depsgraph)
-            mesh = eval_obj.to_mesh()
-            try:
-                vertex_positions = [tuple(vertex.co) for vertex in mesh.vertices]
-            finally:
-                eval_obj.to_mesh_clear()
+        with temporarily_disable_modifiers(obj):
+            for frame in range(frame_start, frame_end + 1):
+                scene.frame_set(frame)
+                depsgraph.update()
+                eval_obj = obj.evaluated_get(depsgraph)
+                mesh = eval_obj.to_mesh()
+                try:
+                    vertex_positions = [tuple(vertex.co) for vertex in mesh.vertices]
+                finally:
+                    eval_obj.to_mesh_clear()
 
-            if expected_vertex_count is None:
-                expected_vertex_count = len(vertex_positions)
-            elif len(vertex_positions) != expected_vertex_count:
-                raise ValueError(
-                    f"Vertex count changed while sampling point cache for {obj.name}."
-                )
+                if len(vertex_positions) != expected_vertex_count:
+                    raise ValueError(
+                        f"Vertex count changed while sampling shape keys for {obj.name}."
+                    )
 
-            frame_times.append((frame - frame_start) / fps)
-            frame_vertex_positions.append(vertex_positions)
+                frame_times.append((frame - frame_start) / fps)
+                frame_vertex_positions.append(vertex_positions)
     finally:
         scene.frame_set(original_frame)
 
