@@ -3,6 +3,7 @@ import os
 import re
 import math
 import threading
+import struct
 import mathutils  # Blender's math utilities library
 bl_info = {
     "name": "HVE FBX Import",
@@ -671,6 +672,183 @@ def bake_shape_keys_threaded(obj_list):
 
     for thread in threads:
         thread.join()  # Wait for all threads to complete
+
+
+def sanitize_cache_name(name):
+    """Return a filesystem-safe cache stem for ``name``."""
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._")
+    return sanitized or "mesh_cache"
+
+
+def write_mdd_file(filepath, frame_times, frame_vertex_positions):
+    """Write mesh deformation samples to an MDD point-cache file."""
+    if not frame_times or not frame_vertex_positions:
+        raise ValueError("MDD export requires at least one sampled frame.")
+
+    frame_count = len(frame_times)
+    if frame_count != len(frame_vertex_positions):
+        raise ValueError("Frame time count must match sampled frame count.")
+
+    point_count = len(frame_vertex_positions[0])
+    for sample in frame_vertex_positions:
+        if len(sample) != point_count:
+            raise ValueError("All sampled frames must have the same vertex count.")
+
+    with open(filepath, "wb") as handle:
+        handle.write(struct.pack(">2i", frame_count, point_count))
+        handle.write(struct.pack(f">{frame_count}f", *frame_times))
+        for sample in frame_vertex_positions:
+            flattened = [coord for vertex in sample for coord in vertex]
+            handle.write(struct.pack(f">{len(flattened)}f", *flattened))
+
+
+def sample_mesh_deformation_frames(obj, frame_start, frame_end):
+    """Sample evaluated vertex positions for ``obj`` across the frame range."""
+    scene = bpy.context.scene
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    original_frame = scene.frame_current
+    fps_base = scene.render.fps_base or 1.0
+    fps = scene.render.fps / fps_base if fps_base else scene.render.fps
+    fps = fps or 24.0
+
+    frame_times = []
+    frame_vertex_positions = []
+    expected_vertex_count = None
+
+    try:
+        for frame in range(frame_start, frame_end + 1):
+            scene.frame_set(frame)
+            eval_obj = obj.evaluated_get(depsgraph)
+            mesh = eval_obj.to_mesh()
+            try:
+                vertex_positions = [tuple(vertex.co) for vertex in mesh.vertices]
+            finally:
+                eval_obj.to_mesh_clear()
+
+            if expected_vertex_count is None:
+                expected_vertex_count = len(vertex_positions)
+            elif len(vertex_positions) != expected_vertex_count:
+                raise ValueError(
+                    f"Vertex count changed while sampling point cache for {obj.name}."
+                )
+
+            frame_times.append((frame - frame_start) / fps)
+            frame_vertex_positions.append(vertex_positions)
+    finally:
+        scene.frame_set(original_frame)
+
+    return frame_times, frame_vertex_positions
+
+
+def clear_object_shape_keys(obj):
+    """Remove all shape keys from ``obj`` if present."""
+    if not getattr(getattr(obj, "data", None), "shape_keys", None):
+        return
+
+    clear_method = getattr(obj, "shape_key_clear", None)
+    if callable(clear_method):
+        clear_method()
+        return
+
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.shape_key_remove(all=True, apply_mix=False)
+
+
+def attach_mdd_point_cache_modifier(obj, cache_filepath, frame_start):
+    """Attach or update a Mesh Cache modifier for ``cache_filepath``."""
+    modifier = next(
+        (
+            mod for mod in getattr(obj, "modifiers", [])
+            if getattr(mod, "type", None) == "MESH_CACHE"
+            and getattr(mod, "name", "") == "HVE Point Cache"
+        ),
+        None,
+    )
+    if modifier is None:
+        modifier = obj.modifiers.new(name="HVE Point Cache", type="MESH_CACHE")
+
+    resolved_path = cache_filepath
+    if getattr(getattr(bpy, "data", None), "is_saved", False):
+        try:
+            resolved_path = bpy.path.relpath(cache_filepath)
+        except Exception:
+            resolved_path = cache_filepath
+
+    for attr, value in (
+        ("cache_format", "MDD"),
+        ("filepath", resolved_path),
+        ("frame_start", frame_start),
+        ("factor", 1.0),
+        ("deform_mode", "OVERWRITE"),
+        ("play_mode", "SCENE"),
+    ):
+        if hasattr(modifier, attr):
+            setattr(modifier, attr, value)
+
+    return modifier
+
+
+def convert_shape_key_meshes_to_point_cache(vehicle_names, fbx_file_path):
+    """Bake joined vehicle meshes to MDD caches and remove imported shape keys."""
+    cache_root = os.path.join(
+        os.path.dirname(fbx_file_path),
+        f"{os.path.splitext(os.path.basename(fbx_file_path))[0]}_hve_pointcache",
+    )
+    os.makedirs(cache_root, exist_ok=True)
+
+    scene = bpy.context.scene
+    converted_objects = []
+    seen_pointers = set()
+
+    for vehicle_name in vehicle_names:
+        collection_prefix = f"Body Mesh: {vehicle_name}:"
+        body_mesh_collections = [
+            col for col in bpy.data.collections if col.name.startswith(collection_prefix)
+        ]
+
+        mesh_objects = []
+        for col in body_mesh_collections:
+            mesh_objects.extend(_gather_meshes(col))
+
+        if not mesh_objects:
+            clean_vehicle_name = re.sub(r"\.\d+$", "", vehicle_name)
+            mesh_objects = [
+                obj
+                for obj in bpy.context.scene.objects
+                if obj.type == "MESH" and belongs_to_vehicle(obj.name, clean_vehicle_name)
+            ]
+
+        for obj in mesh_objects:
+            pointer = obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)
+            if pointer in seen_pointers:
+                continue
+            seen_pointers.add(pointer)
+
+            if not getattr(getattr(obj, "data", None), "shape_keys", None):
+                continue
+
+            cache_filename = f"{sanitize_cache_name(obj.name)}.mdd"
+            cache_filepath = os.path.join(cache_root, cache_filename)
+            frame_times, frame_vertex_positions = sample_mesh_deformation_frames(
+                obj,
+                scene.frame_start,
+                scene.frame_end,
+            )
+            write_mdd_file(cache_filepath, frame_times, frame_vertex_positions)
+            clear_object_shape_keys(obj)
+            attach_mdd_point_cache_modifier(obj, cache_filepath, scene.frame_start)
+            converted_objects.append((obj.name, cache_filepath))
+
+    if converted_objects:
+        print(
+            f"✅ Converted {len(converted_objects)} mesh object(s) to MDD point cache in {cache_root}"
+        )
+    else:
+        print("ℹ️ No shape-keyed meshes found to convert to point cache.")
+
+    return converted_objects
 
 
 def _gather_meshes(collection):
@@ -1352,6 +1530,9 @@ def import_fbx(context, fbx_file_path):
                     
         # Join Mesh objects separately for each vehicle
         join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
+
+        # Convert joined shape-key meshes to compact point caches
+        convert_shape_key_meshes_to_point_cache(vehicle_names, fbx_file_path)
 
         # Replace duplicate materials
         merge_duplicate_materials_per_vehicle(vehicle_names)
