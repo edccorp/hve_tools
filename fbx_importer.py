@@ -3,6 +3,7 @@ import os
 import re
 import math
 import threading
+import struct
 import mathutils  # Blender's math utilities library
 bl_info = {
     "name": "HVE FBX Import",
@@ -671,6 +672,34 @@ def bake_shape_keys_threaded(obj_list):
 
     for thread in threads:
         thread.join()  # Wait for all threads to complete
+
+
+def sanitize_cache_name(name):
+    """Return a filesystem-safe cache stem for ``name``."""
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._")
+    return sanitized or "mesh_cache"
+
+
+def write_mdd_file(filepath, frame_times, frame_vertex_positions):
+    """Write mesh deformation samples to an MDD point-cache file."""
+    if not frame_times or not frame_vertex_positions:
+        raise ValueError("MDD export requires at least one sampled frame.")
+
+    frame_count = len(frame_times)
+    if frame_count != len(frame_vertex_positions):
+        raise ValueError("Frame time count must match sampled frame count.")
+
+    point_count = len(frame_vertex_positions[0])
+    for sample in frame_vertex_positions:
+        if len(sample) != point_count:
+            raise ValueError("All sampled frames must have the same vertex count.")
+
+    with open(filepath, "wb") as handle:
+        handle.write(struct.pack(">2i", frame_count, point_count))
+        handle.write(struct.pack(f">{frame_count}f", *frame_times))
+        for sample in frame_vertex_positions:
+            flattened = [coord for vertex in sample for coord in vertex]
+            handle.write(struct.pack(f">{len(flattened)}f", *flattened))
 
 
 def sample_mesh_deformation_frames(obj, frame_start, frame_end):
