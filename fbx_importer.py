@@ -655,7 +655,7 @@ def bake_shape_keys_to_keyframes(obj):
         )
 
         if fcurve:
-            for frame in range(frame_range[0], frame_range[1] + 1, 10):  # Process every 5 frames (speeds up baking)
+            for frame in range(frame_range[0], frame_range[1] + 1):  # Bake every frame before join/reduction.
                 shape_key.value = fcurve.evaluate(frame)
                 shape_key.keyframe_insert(data_path="value", frame=frame)
 
@@ -1326,7 +1326,7 @@ def import_fbx(context, fbx_file_path):
                 for fcurve in iter_action_fcurves(action):
                     fcurve_found = True
                     for keyframe in fcurve.keyframe_points:
-                        max_frame = max(max_frame, int(keyframe.co.x)) - 1 # Update max frame
+                        max_frame = max(max_frame, int(keyframe.co.x) - 1)  # Update max frame
 
                 if not fcurve_found:
                     frame_end = int(action.frame_range[1]) - 1
