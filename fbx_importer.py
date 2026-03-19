@@ -756,50 +756,189 @@ def clear_object_shape_keys(obj):
     bpy.ops.object.shape_key_remove(all=True, apply_mix=False)
 
 
-def attach_mdd_point_cache_modifier(obj, cache_filepath, frame_start):
-    """Attach or update a Mesh Cache modifier for ``cache_filepath``."""
-    modifier = next(
+def max_vertex_deviation(sample_a, sample_b):
+    """Return the maximum per-vertex Euclidean distance between two samples."""
+    if len(sample_a) != len(sample_b):
+        raise ValueError("Vertex samples must have matching lengths.")
+
+    max_distance = 0.0
+    for vertex_a, vertex_b in zip(sample_a, sample_b):
+        dx = vertex_a[0] - vertex_b[0]
+        dy = vertex_a[1] - vertex_b[1]
+        dz = vertex_a[2] - vertex_b[2]
+        max_distance = max(max_distance, math.sqrt(dx * dx + dy * dy + dz * dz))
+    return max_distance
+
+
+def interpolated_sample(sample_a, sample_b, factor):
+    """Linearly interpolate between two sampled vertex states."""
+    if len(sample_a) != len(sample_b):
+        raise ValueError("Vertex samples must have matching lengths.")
+
+    return [
         (
-            mod for mod in getattr(obj, "modifiers", [])
-            if getattr(mod, "type", None) == "MESH_CACHE"
-            and getattr(mod, "name", "") == "HVE Point Cache"
-        ),
-        None,
-    )
-    if modifier is None:
-        modifier = obj.modifiers.new(name="HVE Point Cache", type="MESH_CACHE")
-
-    resolved_path = cache_filepath
-    if getattr(getattr(bpy, "data", None), "is_saved", False):
-        try:
-            resolved_path = bpy.path.relpath(cache_filepath)
-        except Exception:
-            resolved_path = cache_filepath
-
-    for attr, value in (
-        ("cache_format", "MDD"),
-        ("filepath", resolved_path),
-        ("frame_start", frame_start),
-        ("factor", 1.0),
-        ("deform_mode", "OVERWRITE"),
-        ("play_mode", "SCENE"),
-    ):
-        if hasattr(modifier, attr):
-            setattr(modifier, attr, value)
-
-    return modifier
+            vertex_a[0] + (vertex_b[0] - vertex_a[0]) * factor,
+            vertex_a[1] + (vertex_b[1] - vertex_a[1]) * factor,
+            vertex_a[2] + (vertex_b[2] - vertex_a[2]) * factor,
+        )
+        for vertex_a, vertex_b in zip(sample_a, sample_b)
+    ]
 
 
-def convert_shape_key_meshes_to_point_cache(vehicle_names, fbx_file_path):
-    """Bake joined vehicle meshes to MDD caches and remove imported shape keys."""
-    cache_root = os.path.join(
-        os.path.dirname(fbx_file_path),
-        f"{os.path.splitext(os.path.basename(fbx_file_path))[0]}_hve_pointcache",
-    )
-    os.makedirs(cache_root, exist_ok=True)
+def select_adaptive_sample_indices(frame_numbers, frame_vertex_positions, tolerance=0.01):
+    """Select representative sample indices using recursive interpolation error."""
+    if not frame_numbers or not frame_vertex_positions:
+        return []
+    if len(frame_numbers) != len(frame_vertex_positions):
+        raise ValueError("Frame numbers must match sampled vertex positions.")
 
+    kept = {0, len(frame_numbers) - 1}
+
+    def subdivide(start_idx, end_idx):
+        if end_idx - start_idx <= 1:
+            return
+
+        start_frame = frame_numbers[start_idx]
+        end_frame = frame_numbers[end_idx]
+        frame_span = end_frame - start_frame
+        if frame_span <= 0:
+            return
+
+        worst_idx = None
+        worst_error = -1.0
+        start_sample = frame_vertex_positions[start_idx]
+        end_sample = frame_vertex_positions[end_idx]
+
+        for idx in range(start_idx + 1, end_idx):
+            factor = (frame_numbers[idx] - start_frame) / frame_span
+            estimated = interpolated_sample(start_sample, end_sample, factor)
+            error = max_vertex_deviation(frame_vertex_positions[idx], estimated)
+            if error > worst_error:
+                worst_error = error
+                worst_idx = idx
+
+        if worst_idx is not None and worst_error > tolerance:
+            kept.add(worst_idx)
+            subdivide(start_idx, worst_idx)
+            subdivide(worst_idx, end_idx)
+
+    subdivide(0, len(frame_numbers) - 1)
+    return sorted(kept)
+
+
+def set_shape_key_geometry(shape_key, vertex_positions):
+    """Copy sampled coordinates into ``shape_key`` data."""
+    if len(shape_key.data) != len(vertex_positions):
+        raise ValueError("Shape key vertex count does not match sampled positions.")
+
+    for point, coords in zip(shape_key.data, vertex_positions):
+        point.co = coords
+
+
+def set_mesh_vertex_positions(mesh, vertex_positions):
+    """Overwrite ``mesh`` vertices with sampled coordinates."""
+    if len(mesh.vertices) != len(vertex_positions):
+        raise ValueError("Mesh vertex count does not match sampled positions.")
+
+    for vertex, coords in zip(mesh.vertices, vertex_positions):
+        vertex.co = coords
+    update = getattr(mesh, "update", None)
+    if callable(update):
+        update()
+
+
+def keyframe_shape_key_sample(key_block, previous_frame, frame, next_frame):
+    """Animate a reduced sample key so it crossfades between neighbors."""
+    key_block.value = 0.0
+    key_block.keyframe_insert(data_path="value", frame=previous_frame)
+    key_block.value = 1.0
+    key_block.keyframe_insert(data_path="value", frame=frame)
+    if next_frame is not None:
+        key_block.value = 0.0
+        key_block.keyframe_insert(data_path="value", frame=next_frame)
+
+
+def set_shape_key_fcurve_interpolation(shape_keys, key_name, interpolation="LINEAR"):
+    """Set interpolation mode for all F-Curves driving ``key_name``."""
+    animation_data = getattr(shape_keys, "animation_data", None)
+    action = getattr(animation_data, "action", None)
+    if action is None:
+        return
+
+    action_fcurves = get_action_fcurve_collection(action)
+    if action_fcurves is None:
+        return
+
+    data_path = f'key_blocks["{key_name}"].value'
+    for fcurve in action_fcurves:
+        if getattr(fcurve, "data_path", None) != data_path:
+            continue
+        for keyframe in getattr(fcurve, "keyframe_points", []):
+            keyframe.interpolation = interpolation
+
+
+def trim_sample_indices(frame_numbers, frame_vertex_positions, selected_indices, max_samples):
+    """Trim adaptive samples while preserving endpoints."""
+    selected_indices = list(selected_indices)
+    while len(selected_indices) > max_samples and len(selected_indices) > 2:
+        removable = []
+        for pos in range(1, len(selected_indices) - 1):
+            current_idx = selected_indices[pos]
+            prev_idx = selected_indices[pos - 1]
+            next_idx = selected_indices[pos + 1]
+            frame_span = frame_numbers[next_idx] - frame_numbers[prev_idx]
+            if frame_span <= 0:
+                removable.append((float("inf"), current_idx))
+                continue
+
+            factor = (frame_numbers[current_idx] - frame_numbers[prev_idx]) / frame_span
+            estimated = interpolated_sample(
+                frame_vertex_positions[prev_idx],
+                frame_vertex_positions[next_idx],
+                factor,
+            )
+            error = max_vertex_deviation(frame_vertex_positions[current_idx], estimated)
+            removable.append((error, current_idx))
+
+        _, idx_to_remove = min(removable, key=lambda item: item[0])
+        selected_indices.remove(idx_to_remove)
+
+    return selected_indices
+
+
+def rebuild_shape_keys_from_samples(obj, sample_frames, sample_vertex_positions):
+    """Replace imported shape keys with a reduced, self-contained sampled set."""
+    if not sample_frames or not sample_vertex_positions:
+        return []
+    if len(sample_frames) != len(sample_vertex_positions):
+        raise ValueError("Sample frame count must match sampled vertex positions.")
+
+    clear_object_shape_keys(obj)
+    set_mesh_vertex_positions(obj.data, sample_vertex_positions[0])
+    obj.shape_key_add(name="Basis", from_mix=False)
+
+    reduced_keys = []
+    for idx, frame in enumerate(sample_frames[1:], start=1):
+        key_name = f"Baked_{frame:04d}"
+        key_block = obj.shape_key_add(name=key_name, from_mix=False)
+        set_shape_key_geometry(key_block, sample_vertex_positions[idx])
+        previous_frame = sample_frames[idx - 1]
+        next_frame = sample_frames[idx + 1] if idx + 1 < len(sample_frames) else None
+        keyframe_shape_key_sample(key_block, previous_frame, frame, next_frame)
+        set_shape_key_fcurve_interpolation(obj.data.shape_keys, key_name)
+        reduced_keys.append(key_name)
+
+    return reduced_keys
+
+
+def reduce_shape_key_meshes_with_adaptive_samples(
+    vehicle_names,
+    tolerance=0.01,
+    max_samples=24,
+):
+    """Rebuild joined meshes with a smaller self-contained shapekey set."""
     scene = bpy.context.scene
-    converted_objects = []
+    reduced_objects = []
     seen_pointers = set()
 
     for vehicle_name in vehicle_names:
@@ -829,26 +968,41 @@ def convert_shape_key_meshes_to_point_cache(vehicle_names, fbx_file_path):
             if not getattr(getattr(obj, "data", None), "shape_keys", None):
                 continue
 
-            cache_filename = f"{sanitize_cache_name(obj.name)}.mdd"
-            cache_filepath = os.path.join(cache_root, cache_filename)
-            frame_times, frame_vertex_positions = sample_mesh_deformation_frames(
+            frame_numbers = list(range(scene.frame_start, scene.frame_end + 1))
+            _, frame_vertex_positions = sample_mesh_deformation_frames(
                 obj,
                 scene.frame_start,
                 scene.frame_end,
             )
-            write_mdd_file(cache_filepath, frame_times, frame_vertex_positions)
-            clear_object_shape_keys(obj)
-            attach_mdd_point_cache_modifier(obj, cache_filepath, scene.frame_start)
-            converted_objects.append((obj.name, cache_filepath))
+            selected_indices = select_adaptive_sample_indices(
+                frame_numbers,
+                frame_vertex_positions,
+                tolerance=tolerance,
+            )
+            selected_indices = trim_sample_indices(
+                frame_numbers,
+                frame_vertex_positions,
+                selected_indices,
+                max_samples,
+            )
 
-    if converted_objects:
+            selected_frames = [frame_numbers[idx] for idx in selected_indices]
+            selected_positions = [frame_vertex_positions[idx] for idx in selected_indices]
+            reduced_keys = rebuild_shape_keys_from_samples(
+                obj,
+                selected_frames,
+                selected_positions,
+            )
+            reduced_objects.append((obj.name, selected_frames, reduced_keys))
+
+    if reduced_objects:
         print(
-            f"✅ Converted {len(converted_objects)} mesh object(s) to MDD point cache in {cache_root}"
+            f"✅ Reduced shapekeys on {len(reduced_objects)} mesh object(s) via adaptive sampling."
         )
     else:
-        print("ℹ️ No shape-keyed meshes found to convert to point cache.")
+        print("ℹ️ No shape-keyed meshes found to reduce.")
 
-    return converted_objects
+    return reduced_objects
 
 
 def _gather_meshes(collection):
@@ -1531,8 +1685,8 @@ def import_fbx(context, fbx_file_path):
         # Join Mesh objects separately for each vehicle
         join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
 
-        # Convert joined shape-key meshes to compact point caches
-        convert_shape_key_meshes_to_point_cache(vehicle_names, fbx_file_path)
+        # Rebuild joined shape-key meshes with a smaller self-contained sample set
+        reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
 
         # Replace duplicate materials
         merge_duplicate_materials_per_vehicle(vehicle_names)
