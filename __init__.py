@@ -19,7 +19,7 @@ try:
         racerender_exporter, racerender_exporter_ui,
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
-        edr_importer, scale_objects, import_xyzrpy,
+        edr_importer, scale_objects, speed_accel, import_xyzrpy,
 
     )
 
@@ -40,7 +40,7 @@ try:
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
         fbx_importer_ui, motionpaths, xyz_importer_ui, edr_importer, scale_objects,
-        import_xyzrpy,
+        import_xyzrpy, speed_accel,
     ]
 
     # Aggregate all classes from modules
@@ -62,6 +62,62 @@ try:
             description="Distance to scale the object to, based on scene units",
             default=1.0,
             min=0.001,
+        )
+        bpy.types.Scene.speed_accel_target_object = PointerProperty(
+            name="Source Object",
+            description="Animated object used to calculate speed and acceleration",
+            type=bpy.types.Object,
+        )
+        bpy.types.Scene.speed_accel_forward_axis = EnumProperty(
+            name="Forward Direction",
+            description="Local object axis treated as the object's forward direction",
+            items=[
+                ('LOCAL_X', "+X", "Use the object's local +X axis as forward"),
+                ('LOCAL_NEG_X', "-X", "Use the object's local -X axis as forward"),
+                ('LOCAL_Y', "+Y", "Use the object's local +Y axis as forward"),
+                ('LOCAL_NEG_Y', "-Y", "Use the object's local -Y axis as forward"),
+                ('LOCAL_Z', "+Z", "Use the object's local +Z axis as forward"),
+                ('LOCAL_NEG_Z', "-Z", "Use the object's local -Z axis as forward"),
+            ],
+            default='LOCAL_X',
+        )
+        bpy.types.Scene.speed_accel_forward_yaw_offset = FloatProperty(
+            name="Forward Yaw Offset (deg)",
+            description="Additional yaw offset applied to the selected forward direction in degrees",
+            default=0.0,
+            soft_min=-180.0,
+            soft_max=180.0,
+        )
+        bpy.types.Scene.speed_accel_window_frames = IntProperty(
+            name="Average Window (Frames)",
+            description="Number of frames used for the centered average velocity window",
+            default=3,
+            min=1,
+        )
+        bpy.types.Scene.speed_accel_unit_mode = EnumProperty(
+            name="Distance Units",
+            description="Units represented by object location values before conversion to mph and g",
+            items=[
+                ('AUTO', "Auto", "Use scene unit system: Imperial as feet, otherwise meters"),
+                ('METERS', "Meters", "Treat object location values as meters"),
+                ('FEET', "Feet", "Treat object location values as feet"),
+            ],
+            default='AUTO',
+        )
+        bpy.types.Scene.speed_accel_use_xy_only = bpy.props.BoolProperty(
+            name="Use XY Only",
+            description="Ignore vertical displacement when calculating speed",
+            default=True,
+        )
+        bpy.types.Scene.speed_accel_remove_old_curves = bpy.props.BoolProperty(
+            name="Replace Existing Curves",
+            description="Remove previously baked speed and acceleration curves from the helper before baking",
+            default=True,
+        )
+        bpy.types.Scene.speed_accel_parent_helper = bpy.props.BoolProperty(
+            name="Parent Helper to Source",
+            description="Parent the SpeedData helper empty to the source object after baking",
+            default=False,
         )
         bpy.types.Scene.hve_setup_show_surface = bpy.props.BoolProperty(
             name="Show Surface",
@@ -109,6 +165,14 @@ try:
 
     def unregister():
         del bpy.types.Scene.scale_target_distance
+        del bpy.types.Scene.speed_accel_target_object
+        del bpy.types.Scene.speed_accel_forward_axis
+        del bpy.types.Scene.speed_accel_forward_yaw_offset
+        del bpy.types.Scene.speed_accel_window_frames
+        del bpy.types.Scene.speed_accel_unit_mode
+        del bpy.types.Scene.speed_accel_use_xy_only
+        del bpy.types.Scene.speed_accel_remove_old_curves
+        del bpy.types.Scene.speed_accel_parent_helper
         del bpy.types.Scene.hve_setup_show_surface
         del bpy.types.Scene.hve_setup_show_materials
         del bpy.types.Scene.hve_setup_show_object_type
