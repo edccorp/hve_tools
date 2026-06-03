@@ -102,6 +102,7 @@ def update_panel_bl_category(self, context):
         HVE_PT_point_importer,
         HVE_PT_motion_paths,
         HVE_PT_scale_objects,
+        HVE_PT_speed_acceleration,
         HVE_PT_race_render_exporter,
     )
 
@@ -679,6 +680,34 @@ class HVE_PT_scale_objects(HVE_PT_mechanist_base):
         c.operator("object.scale_by_two_points", text="Scale Object")
 
 
+class HVE_PT_speed_acceleration(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Speed + Acceleration"
+    bl_parent_id = "HVE_PT_other_tools"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        scene = context.scene
+        l = self.layout
+        c = l.column()
+
+        c.label(text="Bake animated speed and acceleration", icon="FORCE_FORCE")
+        c.prop(scene, "speed_accel_target_object")
+        c.prop(scene, "speed_accel_forward_axis")
+        c.prop(scene, "speed_accel_forward_yaw_offset")
+        c.prop(scene, "speed_accel_window_frames")
+        c.prop(scene, "speed_accel_unit_mode")
+        c.prop(scene, "speed_accel_use_xy_only")
+        c.prop(scene, "speed_accel_remove_old_curves")
+        c.prop(scene, "speed_accel_parent_helper")
+        c.operator("object.calculate_speed_acceleration", text="Calculate Speed + Acceleration")
+
+
 class HVE_PT_point_importer(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -731,6 +760,7 @@ classes = (
     HVE_PT_xyzrpy_importer,
     HVE_PT_motion_paths,
     HVE_PT_scale_objects,
+    HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
     HVE_PT_race_render_exporter,
     HVE_OT_save_preset,
