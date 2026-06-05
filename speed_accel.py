@@ -12,6 +12,10 @@ PROP_FWD_A = "forward_accel_g"
 PROP_LAT_A = "lateral_accel_g"
 PROP_VERT_A = "vertical_accel_g"
 HELPER_NAME = "SpeedData"
+FEET_PER_SECOND_TO_MPH = 3600.0 / 5280.0
+METERS_PER_SECOND_TO_MPH = 2.2369362921
+METERS_PER_SECOND_SQUARED_TO_G = 1.0 / 9.80665
+FEET_PER_SECOND_SQUARED_TO_G = 1.0 / 32.174
 OUTPUT_PROPS = [
     PROP_AVG_V,
     PROP_AVG_U,
@@ -229,14 +233,21 @@ def get_window_for_frame(f, frame_start, frame_end, window_frames):
 
 
 def get_unit_conversions(scene, unit_mode):
+    unit_settings = scene.unit_settings
     resolved_mode = unit_mode
+
     if unit_mode == 'AUTO':
-        resolved_mode = 'FEET' if scene.unit_settings.system == 'IMPERIAL' else 'METERS'
+        scale_length = float(getattr(unit_settings, "scale_length", 1.0) or 1.0)
+        return (
+            scale_length * METERS_PER_SECOND_TO_MPH,
+            scale_length * METERS_PER_SECOND_SQUARED_TO_G,
+            'SCENE',
+        )
 
     if resolved_mode == 'FEET':
-        return 0.6818181818, 1.0 / 32.174, resolved_mode
+        return FEET_PER_SECOND_TO_MPH, FEET_PER_SECOND_SQUARED_TO_G, resolved_mode
     if resolved_mode == 'METERS':
-        return 2.2369362921, 1.0 / 9.80665, resolved_mode
+        return METERS_PER_SECOND_TO_MPH, METERS_PER_SECOND_SQUARED_TO_G, resolved_mode
 
     raise RuntimeError('Unit mode must be Auto, Feet, or Meters.')
 

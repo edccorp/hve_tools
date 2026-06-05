@@ -98,7 +98,7 @@ try:
             name="Distance Units",
             description="Units represented by object location values before conversion to mph and g",
             items=[
-                ('AUTO', "Auto", "Use scene unit system: Imperial as feet, otherwise meters"),
+                ('AUTO', "Auto", "Use the scene unit scale to convert Blender Units to mph and g"),
                 ('METERS', "Meters", "Treat object location values as meters"),
                 ('FEET', "Feet", "Treat object location values as feet"),
             ],
