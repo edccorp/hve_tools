@@ -56,11 +56,11 @@ class DummyMesh:
         self.calls.append(("update", None))
 
 
-def test_hve_global_scale_is_fixed_inches_conversion():
+def test_hve_global_scale_defaults_to_inches_conversion():
     assert HVE_GLOBAL_SCALE == 39.37
 
 
-def test_hve_global_scale_matrix_uses_fixed_inches_conversion(monkeypatch):
+def test_hve_global_scale_matrix_uses_default_inches_conversion(monkeypatch):
     monkeypatch.setitem(hve_global_scale_matrix.__globals__, "mathutils", DummyMatrixModule)
 
     assert hve_global_scale_matrix() == ("scale", 39.37, 4)

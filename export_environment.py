@@ -38,11 +38,10 @@ def hve_x_axis_flip_matrix():
 
 
 def hve_global_scale_matrix():
-    """Return the fixed Blender-to-HVE unit conversion matrix.
+    """Return the default Blender-to-HVE unit conversion matrix.
 
-    HVE environment files are written in inches.  The exporter deliberately
-    keeps this value fixed so saved presets or Python calls cannot accidentally
-    produce files in a different unit scale than HVE expects.
+    The exporter UI can override the scale, but direct calls that do not supply
+    a global matrix still get HVE's default inches conversion.
     """
     return mathutils.Matrix.Scale(HVE_GLOBAL_SCALE, 4)
 

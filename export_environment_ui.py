@@ -18,10 +18,13 @@ if "bpy" in locals():
 import bpy
 from bpy.props import (
         BoolProperty,
+        FloatProperty,
         StringProperty,
         )
 from bpy_extras.io_utils import (
         ExportHelper,
+        orientation_helper,
+        axis_conversion,
         path_reference_mode,
         )
 
@@ -54,6 +57,33 @@ class H3D_PT_export_environment_include(bpy.types.Panel):
 
 
 
+class H3D_PT_export_environment_transform(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Transform"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "EXPORT_ENVIRONMENT_OT_h3d"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "global_scale")
+        layout.prop(operator, "axis_forward")
+        layout.prop(operator, "axis_up")
+
+
+
 class H3D_PT_export_environment_geometry(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
@@ -79,6 +109,7 @@ class H3D_PT_export_environment_geometry(bpy.types.Panel):
         layout.prop(operator, "use_compress")
 
 
+@orientation_helper(axis_forward='Y', axis_up='Z')
 class ExportEnvironment(bpy.types.Operator, ExportHelper):
     """Export selection to OpenInventor 3D file (.h3d)"""
     bl_idname = "export_environment.h3d"
@@ -111,18 +142,30 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
             )
 
 
+    global_scale: FloatProperty(
+            name="Scale",
+            min=0.01, max=1000.0,
+            default=39.37,
+            )
+
     path_mode: path_reference_mode
 
     def execute(self, context):
         from . import export_environment
+        from mathutils import Matrix
 
-        keywords = self.as_keywords(ignore=("check_existing",
+        keywords = self.as_keywords(ignore=("axis_forward",
+                                            "axis_up",
+                                            "global_scale",
+                                            "check_existing",
                                             "filter_glob",
                                             ))
-        # HVE environment exports use a fixed inches conversion.  Axis changes
-        # are intentionally not exposed because the HVE coordinate conversion is
-        # baked by the mesh exporter itself.
-        keywords["global_matrix"] = export_environment.hve_global_scale_matrix()
+        # Apply the user's export scale and axis conversion to the matrix that
+        # is baked into mesh coordinates by export_environment.export_env().
+        global_matrix = axis_conversion(to_forward=self.axis_forward,
+                                        to_up=self.axis_up,
+                                        ).to_4x4() @ Matrix.Scale(self.global_scale, 4)
+        keywords["global_matrix"] = global_matrix
 
         return export_environment.save(context, **keywords)
 
@@ -139,5 +182,6 @@ def menu_func_export(self, context):
 classes = (
     ExportEnvironment,
     H3D_PT_export_environment_include,
+    H3D_PT_export_environment_transform,
     H3D_PT_export_environment_geometry,
 )
