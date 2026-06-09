@@ -22,6 +22,8 @@ from bpy_extras.node_shader_utils import PrincipledBSDFWrapper
 from bpy_extras.node_shader_utils import ShaderImageTextureWrapper
 
 
+HVE_GLOBAL_SCALE = 39.37
+
 HVE_X_AXIS_FLIP_VALUES = (
     (1.0, 0.0, 0.0, 0.0),
     (0.0, -1.0, 0.0, 0.0),
@@ -33,6 +35,16 @@ HVE_X_AXIS_FLIP_VALUES = (
 def hve_x_axis_flip_matrix():
     """Return the exact 180-degree X-axis flip used by HVE environment export."""
     return mathutils.Matrix(HVE_X_AXIS_FLIP_VALUES)
+
+
+def hve_global_scale_matrix():
+    """Return the fixed Blender-to-HVE unit conversion matrix.
+
+    HVE environment files are written in inches.  The exporter deliberately
+    keeps this value fixed so saved presets or Python calls cannot accidentally
+    produce files in a different unit scale than HVE expects.
+    """
+    return mathutils.Matrix.Scale(HVE_GLOBAL_SCALE, 4)
 
 
 def compose_environment_mesh_matrix(global_matrix, object_matrix, pre_transform=None):
@@ -1237,8 +1249,13 @@ def save(context,
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
+    # HVE environment exports always use evaluated mesh data.  Keeping this
+    # unconditional prevents old presets or direct Python calls from exporting
+    # unapplied/generated geometry differently than the in-viewport result.
+    use_mesh_modifiers = True
+
     if global_matrix is None:
-        global_matrix = mathutils.Matrix()
+        global_matrix = hve_global_scale_matrix()
 
     dirname = os.path.dirname(filepath)
 
