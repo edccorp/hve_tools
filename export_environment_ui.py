@@ -111,7 +111,7 @@ class H3D_PT_export_environment_geometry(bpy.types.Panel):
         layout.prop(operator, "use_compress")
 
 
-@orientation_helper(axis_forward='-Y', axis_up='-Z')
+@orientation_helper(axis_forward='Y', axis_up='Z')
 class ExportEnvironment(bpy.types.Operator, ExportHelper):
     """Export selection to OpenInventor 3D file (.h3d)"""
     bl_idname = "export_environment.h3d"
@@ -168,6 +168,9 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
                                             "check_existing",
                                             "filter_glob",
                                             ))
+        # HVE's 180-degree X-axis flip is baked directly into the mesh
+        # exporter before object transforms are applied.  The orientation
+        # controls here remain available for any additional user conversion.
         global_matrix = axis_conversion(to_forward=self.axis_forward,
                                         to_up=self.axis_up,
                                         ).to_4x4() @ Matrix.Scale(self.global_scale, 4)

@@ -21,6 +21,37 @@ from bpy_extras.io_utils import create_derived_objects #, free_derived_objects
 from bpy_extras.node_shader_utils import PrincipledBSDFWrapper
 from bpy_extras.node_shader_utils import ShaderImageTextureWrapper
 
+
+HVE_X_AXIS_FLIP_VALUES = (
+    (1.0, 0.0, 0.0, 0.0),
+    (0.0, -1.0, 0.0, 0.0),
+    (0.0, 0.0, -1.0, 0.0),
+    (0.0, 0.0, 0.0, 1.0),
+)
+
+
+def hve_x_axis_flip_matrix():
+    """Return the exact 180-degree X-axis flip used by HVE environment export."""
+    return mathutils.Matrix(HVE_X_AXIS_FLIP_VALUES)
+
+
+def compose_environment_mesh_matrix(global_matrix, object_matrix, pre_transform=None):
+    """Compose the matrix baked into exported environment mesh vertices.
+
+    Matrix multiplication is right-to-left for vertex coordinates, so the
+    pre-transform is applied to modifier-evaluated mesh data before the
+    object/global transforms are baked into the exported coordinates.
+    """
+    if pre_transform is None:
+        pre_transform = hve_x_axis_flip_matrix()
+    return global_matrix @ object_matrix @ pre_transform
+
+
+def apply_environment_mesh_transform(mesh, matrix):
+    """Bake the final environment export matrix into a mesh datablock."""
+    mesh.transform(matrix)
+    mesh.update()
+
 def clight_color(col):
     return tuple([max(min(c, 1.0), 0.0) for c in col])
 
@@ -510,6 +541,7 @@ def export_env(file, dirname,
                         print("CAMERA")
 
                     elif obj_type in {'MESH', 'CURVE', 'SURFACE', 'FONT'}:
+                        obj_for_mesh = None
                         if (obj_type != 'MESH') or (use_mesh_modifiers and obj.is_modified(scene, 'PREVIEW')):
                             obj_for_mesh = obj.evaluated_get(depsgraph) if use_mesh_modifiers else obj
                             try:
@@ -517,13 +549,18 @@ def export_env(file, dirname,
                             except RuntimeError:
                                 print(f"Warning: could not convert '{obj.name}' ({obj_type}) to mesh; skipping.")
                                 me = None
-                            # meshes created via to_mesh() are temporary and must be
-                            # removed after export to avoid leaking datablocks
+                            # Meshes created via to_mesh() are temporary and must be
+                            # removed after export to avoid leaking datablocks.
                             do_remove = True
                         else:
-                            me = obj.data
-                            do_remove = False
+                            # Export transforms are baked into mesh coordinates. Copy
+                            # original mesh datablocks before transforming so exporting
+                            # never mutates the open Blender scene.
+                            me = obj.data.copy()
+                            do_remove = True
                         if me is not None:
+                            mesh_export_matrix = compose_environment_mesh_matrix(global_matrix, obj_main_matrix)
+                            apply_environment_mesh_transform(me, mesh_export_matrix)
                             # Mesh names from to_mesh() are not reliable for
                             # generating stable identifiers.  We use the owning
                             # object's name when creating export IDs and remove
@@ -722,7 +759,10 @@ def export_env(file, dirname,
 
 
 
-                                    matrix = obj_main_matrix if obj_main_parent else global_matrix @ obj_main_matrix
+                                    # Object and global transforms are baked into the exported
+                                    # mesh coordinates after modifier evaluation, so keep the H3D
+                                    # ShapeKit transform as identity.
+                                    matrix = mathutils.Matrix()
                                     def_id = obj_main_id + _TRANSFORM
 
                                     loc, rot, sca = matrix.decompose()
@@ -1118,9 +1158,12 @@ def export_env(file, dirname,
                                     fw('    }   \n')    
                                     fw(' }   \n') 
                             
-                            # free mesh created with create_mesh()
-                            if do_remove:
-                                obj_for_mesh.to_mesh_clear()
+                            # Free temporary/copied mesh data after export.
+                            if do_remove and me is not None:
+                                if obj_for_mesh is not None:
+                                    obj_for_mesh.to_mesh_clear()
+                                else:
+                                    bpy.data.meshes.remove(me)
 
 
                     else:
@@ -1181,7 +1224,7 @@ def save(context,
          filepath,
          *,
          use_selection=True,
-         use_mesh_modifiers=False,
+         use_mesh_modifiers=True,
          use_normals=False,
          use_compress=False,
          global_matrix=None,
