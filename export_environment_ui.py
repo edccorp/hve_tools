@@ -18,12 +18,10 @@ if "bpy" in locals():
 import bpy
 from bpy.props import (
         BoolProperty,
-        EnumProperty,
         FloatProperty,
         StringProperty,
         )
 from bpy_extras.io_utils import (
-        ImportHelper,
         ExportHelper,
         orientation_helper,
         axis_conversion,
@@ -64,7 +62,7 @@ class H3D_PT_export_environment_transform(bpy.types.Panel):
     bl_region_type = 'TOOL_PROPS'
     bl_label = "Transform"
     bl_parent_id = "FILE_PT_operator"
-    
+
     @classmethod
     def poll(cls, context):
         sfile = context.space_data
@@ -83,6 +81,7 @@ class H3D_PT_export_environment_transform(bpy.types.Panel):
         layout.prop(operator, "global_scale")
         layout.prop(operator, "axis_forward")
         layout.prop(operator, "axis_up")
+
 
 
 class H3D_PT_export_environment_geometry(bpy.types.Panel):
@@ -106,7 +105,6 @@ class H3D_PT_export_environment_geometry(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        layout.prop(operator, "use_mesh_modifiers")
         layout.prop(operator, "use_normals")
         layout.prop(operator, "use_compress")
 
@@ -124,11 +122,6 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
     use_selection: BoolProperty(
             name="Selection Only",
             description="Export selected objects only",
-            default=True,
-            )
-    use_mesh_modifiers: BoolProperty(
-            name="Apply Modifiers",
-            description="Use transformed mesh data from each object",
             default=True,
             )
     use_normals: BoolProperty(
@@ -159,7 +152,6 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         from . import export_environment
-
         from mathutils import Matrix
 
         keywords = self.as_keywords(ignore=("axis_forward",
@@ -168,9 +160,8 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
                                             "check_existing",
                                             "filter_glob",
                                             ))
-        # HVE's 180-degree X-axis flip is baked directly into the mesh
-        # exporter before object transforms are applied.  The orientation
-        # controls here remain available for any additional user conversion.
+        # Apply the user's export scale and axis conversion to the matrix that
+        # is baked into mesh coordinates by export_environment.export_env().
         global_matrix = axis_conversion(to_forward=self.axis_forward,
                                         to_up=self.axis_up,
                                         ).to_4x4() @ Matrix.Scale(self.global_scale, 4)
