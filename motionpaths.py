@@ -21,7 +21,7 @@ FORWARD_AXIS_VECTORS = {
     'LOCAL_NEG_Z': (0.0, 0.0, -1.0),
 }
 
-OVERLAY_MARKERS_LABEL = "Overlay Markers"
+OVERLAY_MARKERS_LABEL = "Markers"
 MARKER_MATERIAL_NAME = "HVE_Overlay_Markers"
 TEXT_MATERIAL_NAME = "BLACK"
 MARKER_MATERIAL_COLOR = (1.0, 0.35, 0.0, 1.0)
@@ -226,9 +226,8 @@ def get_object_forward_direction(eval_obj, forward_axis, yaw_offset_deg):
     return fwd
 
 
-def build_triangle_marker_vertices(location, forward_direction, size):
-    """Return world-space vertices for a triangular direction marker."""
-    size = max(float(size), 0.001)
+def get_marker_lateral_direction(forward_direction):
+    """Return the marker's local right direction on the ground plane."""
     right = Vector((forward_direction.y, -forward_direction.x, 0.0))
 
     if right.length < 1e-8:
@@ -236,14 +235,40 @@ def build_triangle_marker_vertices(location, forward_direction, size):
     else:
         right.normalize()
 
-    tip = location + forward_direction * size
-    base_center = location - forward_direction * (size * 0.5)
-    half_width = size * 0.45
+    return right
+
+
+def build_triangle_marker_vertices(location, forward_direction, size):
+    """Return world-space vertices for the forward triangular direction marker."""
+    size = max(float(size), 0.001)
+    right = get_marker_lateral_direction(forward_direction)
+
+    tip = location + forward_direction * (size * 1.25)
+    base_center = location + forward_direction * (size * 0.45)
+    half_width = size * 0.35
 
     return (
         tip,
-        base_center + right * half_width,
         base_center - right * half_width,
+        base_center + right * half_width,
+    )
+
+
+def build_circle_marker_vertices(location, forward_direction, size, segments=16):
+    """Return world-space vertices for a circular center marker at the sampled location."""
+    size = max(float(size), 0.001)
+    segments = max(int(segments), 8)
+    right = get_marker_lateral_direction(forward_direction)
+    radius = size * 0.22
+
+    return tuple(
+        location
+        + (
+            right * math.cos((2.0 * math.pi * vertex_index) / segments)
+            + forward_direction * math.sin((2.0 * math.pi * vertex_index) / segments)
+        )
+        * radius
+        for vertex_index in range(segments)
     )
 
 
@@ -339,10 +364,15 @@ def create_timed_location_markers(
             eval_obj = ob.evaluated_get(depsgraph)
             location = eval_obj.matrix_world.translation.copy()
             forward = get_object_forward_direction(eval_obj, forward_axis, yaw_offset_deg)
+            circle_verts = build_circle_marker_vertices(location, forward, marker_size)
+            circle_start_index = len(verts)
+            verts.extend(circle_verts)
+            faces.append(tuple(range(circle_start_index, circle_start_index + len(circle_verts))))
+
             marker_verts = build_triangle_marker_vertices(location, forward, marker_size)
-            start_index = len(verts)
+            triangle_start_index = len(verts)
             verts.extend(marker_verts)
-            faces.append((start_index, start_index + 1, start_index + 2))
+            faces.append((triangle_start_index, triangle_start_index + 1, triangle_start_index + 2))
 
             if create_time_labels:
                 relative_seconds = get_marker_relative_seconds(frame_value, zero_frame, fps)
