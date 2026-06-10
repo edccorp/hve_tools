@@ -1,22 +1,241 @@
 # HVE Tools
 
-## Project Overview and Goals
-HVE Tools is a collection of Blender add-ons and scripts aimed at importing and exporting data related to Human Vehicle Environment (HVE) simulations. The tools help streamline workflows such as converting motion data, preparing vehicles or environments, and exchanging results with other applications.
+HVE Tools is a Blender add-on package for Human Vehicle Environment (HVE) workflows. It adds an **HVE** sidebar tab in the 3D View with pre-simulation setup tools, H3D exporters, post-simulation importers, animation utilities, data analysis helpers, and CSV conversion tools.
 
-## Installation and Dependencies
-1. Install [Blender](https://www.blender.org/) 4.x or later with its bundled Python interpreter.
-2. Clone or download this repository.
-3. In Blender, open **Edit → Preferences → Add-ons**, click **Install…**, and select this folder. Enable the desired tools from the add-on list.
+The add-on targets Blender 4.x and uses Blender's bundled Python modules plus standard Python libraries. No separate Python package installation is required for normal Blender use.
 
-These scripts rely on Blender's built‑in `bpy` module and standard Python libraries; no additional dependencies are required.
+## Capabilities
 
+### Pre-simulation setup
 
+- **Configurable HVE sidebar**: choose the default **HVE** tab, **Human Vehicle Environment** tab, or a custom tab name in add-on preferences.
+- **Object type assignment**: mark active objects as either **Vehicle** or **Environment** before export.
+- **Material creation**:
+  - Add a generic HVE material.
+  - Add standard HVE materials.
+  - Add HVE light materials.
+- **Vehicle lighting metadata**: tag vehicle objects as HVE light components, including headlights, reverse lights, fog lights, amber/turn lights, tail lights, brake/turn lights, brake lights, and center brake lights.
+- **Environment terrain metadata**:
+  - Surface type: Road, Friction Zone, Curb, Water, or Other.
+  - Overlay label, material name, and friction multiplier.
+  - Water depth and static-water flag.
+  - Soil parameters including Bekker exponent, frictional/cohesive soil modifiers, moisture content, and macrotexture.
+  - Force parameters including constant, linear, quadratic, cubic, unloading, and damping values.
+- **Surface-property copy helper**: copy surface type and overlay label from the active environment object to the other selected environment objects.
+- **Environment presets**: save, load, and apply terrain-property presets. Included presets are stored in `hve_presets/`.
 
-## Contribution Guidelines
-Contributions are welcome! To propose changes:
-1. Fork the repository and create a feature branch.
-2. Make your changes and ensure they are well documented.
-3. Submit a pull request with a clear description of the improvements.
+### H3D export
+
+- **Vehicle H3D export** (`.h3d`): export selected vehicle geometry for HVE with options for selection-only export, hierarchy export, name decorations, modifier application, normals, compression, axis conversion, and global scale.
+- **Environment H3D export** (`.h3d`): export selected environment geometry with options for selection-only export, name decorations, normals, compression, axis conversion, and global scale.
+- **Context-aware export button**: the **H3D Export** panel chooses the vehicle or environment exporter based on the active object's assigned HVE type.
+
+### Contact and surface-point export
+
+- **GATB surface/contact point export** (`.csv`): export contact-surface point data with a global scale setting. The UI labels this as **GATB Surface Points Exporter** and **Export Contact Surfaces**.
+
+### Post-simulation import and conversion
+
+- **HVE variable output importer** (`.hvo` / `.csv`): import HVE variable-output files containing time plus variable output columns.
+  - Choose feet or meters as the scale unit.
+  - Override the scale factor.
+  - Optionally save separate vehicle CSV files.
+- **HVE FBX importer** (`.fbx`): import HVE FBX motion and geometry data.
+  - Imports FBX files and updates the scene timeline to include imported animation.
+  - Renames imported HVE hierarchy components into cleaner labels.
+  - Organizes imported data into HVE collections by event, vehicle, wheels, and body mesh.
+  - Applies mesh cleanup support, joins body mesh objects per vehicle, reduces shape-key meshes with adaptive samples, and merges duplicate imported materials per vehicle.
+  - Sets newly imported material metallic values to zero and attempts to find missing files in the public HVE support-files path.
+- **RaceRender CSV exporter** (`.csv`): convert HVE variable-output data for RaceRender workflows.
+
+### EDR and motion animation tools
+
+- **EDR data importer / entry**:
+  - Import or manually enter rows of `Time, Speed, YawRate`.
+  - Import or manually enter rows of `Time, Speed, SteeringWheelAngle`.
+  - Select a target object to animate.
+  - Set frame rate from the panel.
+  - Configure wheelbase and steering gear ratio when steering-wheel-angle input is used.
+  - Optionally enable a slip-angle estimate with gain and maximum slip clamp.
+  - Animate the target object by integrating speed and yaw-rate / steering-derived yaw-rate over time.
+  - Add, remove, or clear table entries directly in Blender.
+- **Motion data importer** (`.csv`): import `Time,X,Y,Z,Roll,Pitch,Yaw` rows and animate a selected object.
+  - Choose a target object.
+  - Set the frame rate.
+  - Choose linear or constant extrapolation.
+  - Automatically stores imported motion rows on the animated object.
+  - Converts position units based on the Blender scene unit system.
+- **Example data files**: example CSV files are included for XYZ points, XYZ/RPY motion, steering-angle EDR data, and yaw-rate EDR data.
+
+### Point, path, scale, and analysis utilities
+
+- **XYZ point importer** (`.csv`): import `PointNumber,X,Y,Z,Description` rows.
+  - Creates circles at point locations.
+  - Adds point-number and description text.
+  - Places imported objects in an **Imported Points** collection.
+  - Uses a configurable scale factor.
+  - Creates a polyline when more than one point is imported.
+- **Motion path tools**:
+  - Generate motion paths for selected objects.
+  - Remove motion paths from selected objects.
+  - Convert selected motion paths to 3D curve objects in a **Motion Paths** collection.
+  - Toggle the motion-path overlay in the active 3D View.
+- **Scale objects by two points**:
+  - In Edit Mode, select exactly two vertices on a mesh.
+  - Enter a target distance in scene units.
+  - Scale the object so the selected vertex distance matches the target.
+- **Speed + acceleration baking**:
+  - Calculate speed and acceleration from an animated object.
+  - Bake results to a helper empty named `SpeedData_<object name>`.
+  - Outputs custom animated properties for average speed, forward speed, forward acceleration, lateral acceleration, and vertical acceleration.
+  - Choose the local forward axis and yaw offset.
+  - Choose the averaging window in frames.
+  - Use scene units automatically, or force meters or feet.
+  - Optionally ignore vertical displacement, replace prior curves, and parent the helper to the source object.
+
+## Installation
+
+1. Install **Blender 4.x or later**.
+2. Download or clone this repository.
+3. In Blender, open **Edit → Preferences → Add-ons**.
+4. Click **Install…**.
+5. Select this add-on package. If you downloaded the repository as a folder, install the folder or a `.zip` of the folder, depending on your Blender version and add-on installation workflow.
+6. Enable **HVE Menu** in the add-ons list.
+7. Open the 3D View sidebar with **N**, then select the **HVE** tab.
+
+## Basic workflow
+
+### 1. Prepare objects for HVE export
+
+1. Select the object to configure.
+2. Open **3D View → Sidebar → HVE → Pre-Simulation Setup → H3D Setup**.
+3. Expand **Materials** and add any needed generic, standard, or light materials.
+4. Expand **Object Type** and choose **Vehicle** or **Environment**.
+5. For vehicles, expand **Vehicle Lighting** and tag light objects as needed.
+6. For environments, expand **Terrain Properties** and set surface, water, soil, and force properties.
+7. Optionally save an environment preset or apply one from the preset dropdown.
+
+### 2. Export H3D files
+
+1. Select the vehicle or environment object(s) you want to export.
+2. Make sure the active object has the correct HVE type in **H3D Setup**.
+3. Open **Pre-Simulation Setup → H3D Export**.
+4. Click **Export Vehicle** or **Export Environment**.
+5. In the file browser, review export options such as selection-only, hierarchy, normals, compression, axis conversion, and scale.
+6. Save the `.h3d` file.
+
+### 3. Export contact surfaces
+
+1. Select the surface/contact objects to export.
+2. Open **Pre-Simulation Setup → GATB Surface Points Exporter**.
+3. Click **Export Contact Surfaces**.
+4. Choose a destination `.csv` and global scale.
+
+### 4. Import HVE post-simulation files
+
+- For variable-output files, open **Post-Simulation Processing → Variable Output Importer**, choose the `.hvo` or `.csv`, set scale options, and import.
+- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, choose the `.fbx`, and import.
+- For RaceRender conversion, open **Post-Simulation Processing → Export HVE Variable Output to RaceRender** and export a RaceRender-ready `.csv`.
+
+### 5. Animate from EDR data
+
+1. Open **Other Tools → EDR Data Importer / Entry**.
+2. Select the target object.
+3. Choose **Yaw Rate** or **Steering Wheel Angle** input mode.
+4. If using steering angle, set wheelbase and steering gear ratio.
+5. Optionally enable slip estimate and tune slip gain / maximum slip.
+6. Set the frame rate.
+7. Click **Import CSV** or enter rows manually.
+8. Click **Animate Object**.
+
+CSV formats:
+
+```csv
+Time,Speed,YawRate
+```
+
+or:
+
+```csv
+Time,Speed,SteeringWheelAngle
+```
+
+In Imperial scenes, speeds are treated as mph and converted internally. In Metric scenes, speeds are treated as m/s.
+
+### 6. Animate from XYZ/RPY motion data
+
+1. Open **Other Tools → Motion Data Importer**.
+2. Select the motion target object.
+3. Set frame rate and extrapolation mode.
+4. Click **Import and Animate Object**.
+5. Choose a CSV with this row format:
+
+```csv
+Time,X,Y,Z,Roll,Pitch,Yaw
+```
+
+### 7. Import XYZ points
+
+1. Open **Other Tools → Point Importer**.
+2. Click **Import Points**.
+3. Choose a CSV with this row format:
+
+```csv
+PointNumber,X,Y,Z,Description
+```
+
+The importer creates point markers, labels, descriptions, and a polyline in the **Imported Points** collection.
+
+### 8. Create and convert motion paths
+
+1. Select animated objects.
+2. Open **Other Tools → Motion Path Tools**.
+3. Use **Generate Motion Paths** to create Blender motion paths.
+4. Use **Convert Motion Paths To Curve** to create editable curve objects.
+5. Use **Show/Hide Motion Paths** to toggle viewport display.
+
+### 9. Scale an object from two selected vertices
+
+1. Select a mesh object.
+2. Enter **Edit Mode**.
+3. Select exactly two vertices that represent a known distance.
+4. Open **Other Tools → Scale Objects**.
+5. Enter the target distance in scene units.
+6. Click **Scale Object**.
+
+### 10. Bake speed and acceleration data
+
+1. Select an animated object or assign one in **Other Tools → Speed + Acceleration**.
+2. Choose the object's forward axis and optional yaw offset.
+3. Set the averaging window and unit mode.
+4. Choose whether to use XY-only displacement and whether to replace existing output curves.
+5. Click **Calculate Speed + Acceleration**.
+6. Read the animated custom properties on the generated `SpeedData_<object name>` helper empty.
+
+## Included examples
+
+- `XYZ_Points_Example.csv` — sample point-import data.
+- `XYZRPY_Example.csv` — sample `Time,X,Y,Z,Roll,Pitch,Yaw` motion data.
+- `EDR_YawRate_Example.csv` — sample EDR yaw-rate data.
+- `EDR_SteeringAngle_Example.csv` — sample EDR steering-angle data.
+- `hve_presets/Asphalt_Normal.json` — environment preset.
+- `hve_presets/Asphalt_New.json` — environment preset.
+- `hve_presets/Asphalt_Well_Traveled.json` — environment preset.
+
+## Development and tests
+
+The repository includes pytest-based tests for core importer/exporter and utility behavior. From the repository root, run:
+
+```bash
+pytest
+```
+
+Useful development notes:
+
+- Keep Blender-specific imports (`bpy`, `mathutils`) at module scope where the add-on expects them; do not wrap imports in `try` / `except` blocks.
+- Many tests use Blender API stubs and can run outside Blender, but full add-on workflows should still be validated in Blender.
+- Prefer `rg` for repository searches.
 
 ## License
+
 These tools are distributed under the terms of the GNU General Public License, version 2 or later, as noted in the source headers.
