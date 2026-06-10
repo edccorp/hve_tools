@@ -133,6 +133,68 @@ def update_panel_bl_category(self, context):
         print('HVE setting tab name failed ({})'.format(str(e)))
 
 
+HVE_OBJECT_TYPES = {
+    "ENVIRONMENT": "Environment",
+    "VEHICLE": "Vehicle",
+    "GATB_SURFACE": "GATB Surface",
+}
+
+
+def get_object_hve_type(obj):
+    if not obj or not hasattr(obj, "hve_type") or not hasattr(obj.hve_type, "set_type"):
+        return None
+    return obj.hve_type.set_type.type
+
+
+def get_selected_hve_type_counts(context):
+    counts = {}
+    for obj in context.selected_objects:
+        obj_type = get_object_hve_type(obj)
+        if obj_type:
+            counts[obj_type] = counts.get(obj_type, 0) + 1
+    return counts
+
+
+def format_hve_type_counts(counts):
+    return ", ".join(
+        f"{count} {HVE_OBJECT_TYPES.get(obj_type, obj_type)}"
+        for obj_type, count in counts.items()
+    )
+
+
+class HVETOOLS_OT_set_selected_hve_type(bpy.types.Operator):
+    bl_idname = "hvetools.set_selected_hve_type"
+    bl_label = "Classify Selected Objects"
+    bl_description = "Set the HVE object type on all selected objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    object_type: bpy.props.EnumProperty(
+        name="Object Type",
+        items=(
+            ('ENVIRONMENT', "Environment", "Classify selected objects as HVE environment objects"),
+            ('VEHICLE', "Vehicle", "Classify selected objects as HVE vehicle objects"),
+            ('GATB_SURFACE', "GATB Surface", "Classify selected objects as GATB contact surfaces"),
+        ),
+        default='ENVIRONMENT',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.selected_objects)
+
+    def execute(self, context):
+        changed = 0
+        for obj in context.selected_objects:
+            if not hasattr(obj, "hve_type") or not hasattr(obj.hve_type, "set_type"):
+                continue
+            obj.hve_type.set_type.type = self.object_type
+            changed += 1
+
+        label = HVE_OBJECT_TYPES.get(self.object_type, self.object_type)
+        self.report({'INFO'}, f"Classified {changed} selected object(s) as {label}")
+        return {'FINISHED'}
+
+
 class HVETOOLS_OT_copy_surface_to_selected(bpy.types.Operator):
     bl_idname = "hvetools.copy_surface_to_selected"
     bl_label = "Copy Type + Overlay to Selected"
@@ -243,26 +305,45 @@ class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
         return True
 
     def draw(self, context):
-        o = context.active_object
-        if o is None:
-            self.layout.label(text='Select an object..', icon='ERROR')
+        l = self.layout
+        selected = list(context.selected_objects)
+        if not selected:
+            l.label(text='Select object(s) to export.', icon='ERROR')
             return
 
-        l = self.layout
-        # Check if the object has hve_type property and toggle buttons accordingly
-        if hasattr(o, "hve_type") and hasattr(o.hve_type, "set_type"):
-            obj_type = o.hve_type.set_type.type
+        counts = get_selected_hve_type_counts(context)
+        if not counts:
+            l.label(text="Selected object(s) do not have an HVE type", icon='ERROR')
+            l.label(text="Classify selected objects before exporting.", icon='INFO')
+            self.draw_classify_selected_buttons(l)
+            return
 
-            if obj_type == "VEHICLE":
-                l.operator("export_vehicle.h3d", text="Export Vehicle", icon='EXPORT')
-            elif obj_type == "ENVIRONMENT":
-                l.operator("export_environment.h3d", text="Export Environment", icon='EXPORT')
-            else:
-                l.label(text="Invalid HVE Type", icon='ERROR')
-                l.label(text="Set HVE Type in H3D Setup.", icon='INFO')
+        if len(counts) > 1 or sum(counts.values()) != len(selected):
+            l.label(text="Mixed HVE object types selected", icon='ERROR')
+            l.label(text=format_hve_type_counts(counts), icon='INFO')
+            l.label(text="Classify all selected objects as one type?", icon='QUESTION')
+            self.draw_classify_selected_buttons(l)
+            return
+
+        obj_type = next(iter(counts))
+        selected_count = counts[obj_type]
+        l.label(text=f"Selected: {selected_count} {HVE_OBJECT_TYPES.get(obj_type, obj_type)} object(s)", icon='INFO')
+
+        if obj_type == "VEHICLE":
+            l.operator("export_vehicle.h3d", text="Export Vehicle", icon='EXPORT')
+        elif obj_type == "ENVIRONMENT":
+            l.operator("export_environment.h3d", text="Export Environment", icon='EXPORT')
+        elif obj_type == "GATB_SURFACE":
+            l.operator("export_contacts.csv", text="Export GATB Contact Surfaces", icon='EXPORT')
         else:
-            l.label(text="HVE Type not set", icon='ERROR')
-            l.label(text="Open H3D Setup and choose Vehicle or Environment.", icon='INFO')
+            l.label(text="Invalid HVE Type", icon='ERROR')
+            l.label(text="Set HVE Type in Object Setup.", icon='INFO')
+
+    def draw_classify_selected_buttons(self, layout):
+        row = layout.row(align=True)
+        for object_type, label in HVE_OBJECT_TYPES.items():
+            op = row.operator("hvetools.set_selected_hve_type", text=label)
+            op.object_type = object_type
 
 
 
@@ -325,31 +406,39 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
 
         c.separator()
         materials_box = self.draw_collapsible_panel(
-            c, scene, "hve_setup_show_materials", "Materials", icon='MATERIAL'
+            c, scene, "hve_setup_show_materials", "Add Materials", icon='MATERIAL'
         )
         if materials_box:
-            materials_box.operator("hve_material.add_hve_material", text="Add HVE Material")
-            materials_box.separator()
-            materials_box.operator("hve_material.add_standard_materials", text="Add Standard Materials")
-            materials_box.separator()
-            materials_box.operator("hve_material.add_hve_light_materials", text="Add HVE Light Materials")
+            materials_box.operator("hve_material.add_all_materials", text="Add Materials", icon='MATERIAL')
 
         c.separator()
         object_type_box = self.draw_collapsible_panel(
             c, scene, "hve_setup_show_object_type", "Object Type", icon='OUTLINER_OB_EMPTY'
         )
+        selected_counts = get_selected_hve_type_counts(context)
+        has_mixed_selection = (
+            len(selected_counts) > 1
+            or sum(selected_counts.values()) != len(context.selected_objects)
+        )
         if object_type_box:
             object_type_box.prop(types.set_type, 'type')
+            if has_mixed_selection:
+                object_type_box.label(text="Mixed HVE object types selected", icon='ERROR')
+                object_type_box.label(text="Classify all selected objects as one type?", icon='QUESTION')
+                row = object_type_box.row(align=True)
+                for object_type, label in HVE_OBJECT_TYPES.items():
+                    op = row.operator("hvetools.set_selected_hve_type", text=label)
+                    op.object_type = object_type
 
         enum_value = getattr(getattr(types, "set_type", None), "type", None)
-        if enum_value == "VEHICLE":
+        if enum_value == "VEHICLE" and not has_mixed_selection:
             c.separator()
             vehicle_lighting_box = self.draw_collapsible_panel(
                 c, scene, "hve_setup_show_vehicle_lighting", "Vehicle Lighting", icon='LIGHT'
             )
             if vehicle_lighting_box:
                 vehicle_lighting_box.prop(lights.make_light, 'type')
-        elif enum_value == "ENVIRONMENT":
+        elif enum_value == "ENVIRONMENT" and not has_mixed_selection:
             c.separator()
             terrain_box = self.draw_collapsible_panel(
                 c, scene, "hve_setup_show_terrain", "Terrain Properties", icon='WORLD'
@@ -436,24 +525,30 @@ class HVE_PT_contacts_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "GATB Surface Points Exporter"
+    bl_label = "GATB Contact Surface Export"
     bl_parent_id = "HVE_PT_pre"
     @classmethod
     def poll(cls, context):
         return True
         
     def draw(self, context):
-        o = context.active_object
-        if o is None:
-            self.layout.label(text='Select an object..', icon='ERROR')
-            return
-        scene = context.scene
         l = self.layout
-        c = l.column()
-        
+        selected = list(context.selected_objects)
+        if not selected:
+            l.label(text='Select GATB surface object(s).', icon='ERROR')
+            return
 
-        # Contacts Exporter controls
-        l.operator("export_contacts.csv", text="Export Contact Surfaces", icon='EXPORT')
+        counts = get_selected_hve_type_counts(context)
+        if counts == {"GATB_SURFACE": len(selected)}:
+            l.operator("export_contacts.csv", text="Export GATB Contact Surfaces", icon='EXPORT')
+            return
+
+        l.label(text="GATB export needs only GATB Surface objects", icon='ERROR')
+        if counts:
+            l.label(text=format_hve_type_counts(counts), icon='INFO')
+        l.label(text="Classify all selected objects as GATB Surface?", icon='QUESTION')
+        op = l.operator("hvetools.set_selected_hve_type", text="Set Selected to GATB Surface")
+        op.object_type = "GATB_SURFACE"
 
 # === POST GROUP ===
 class HVE_PT_post(HVE_PT_mechanist_base):
@@ -757,7 +852,7 @@ class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "Export HVE Variable Output to RaceRender"
+    bl_label = "RaceRender Converter"
     bl_parent_id = "HVE_PT_post"    
     @classmethod
     def poll(cls, context):
@@ -768,8 +863,8 @@ class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
         l = self.layout
         c = l.column()
 
-        c.label(text="Export CSV for RaceRender", icon="TOOL_SETTINGS")  # Section title with an icon
-        c.operator("export_racerender.csv", text="Export RaceRender CSV", icon='EXPORT')
+        c.label(text="Convert HVE Variable Output to RaceRender CSV", icon="TOOL_SETTINGS")  # Section title with an icon
+        c.operator("export_racerender.csv", text="Convert to RaceRender CSV", icon='EXPORT')
 
 
 classes = (
@@ -790,6 +885,7 @@ classes = (
     HVE_PT_race_render_exporter,
     HVE_OT_save_preset,
     HVE_OT_load_preset, 
+    HVETOOLS_OT_set_selected_hve_type,
     HVETOOLS_OT_copy_surface_to_selected,
     
     )

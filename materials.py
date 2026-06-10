@@ -369,6 +369,24 @@ class HVE_OT_MakeLightMaterials(bpy.types.Operator):
         return{'FINISHED'}
         
 
+class HVE_OT_AddAllMaterials(bpy.types.Operator):
+    bl_idname = "hve_material.add_all_materials"
+    bl_label = "Add Materials"
+    bl_description = "Add generic, standard, and HVE light materials"
+    bl_options = {'UNDO'}
+
+    @classmethod
+    def poll(self, context):
+        ob = context.object
+        return (ob)
+
+    def execute(self, context):
+        buildGenericMaterial(context.object, context.scene)
+        buildStandardMaterials(context.object, context.scene)
+        buildLightMaterials(context.object, context.scene)
+        return{'FINISHED'}
+
+
         
 #----------------------------------------------------------
 #   Initialize
@@ -378,4 +396,5 @@ classes = (
     HVE_OT_AddHVEMaterial,
     HVE_OT_AddStandardMaterials,
     HVE_OT_MakeLightMaterials,
+    HVE_OT_AddAllMaterials,
 )

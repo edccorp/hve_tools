@@ -1,11 +1,11 @@
 
 bl_info = {
-    "name": "RaceRender Exporter",
+    "name": "RaceRender Converter",
     "author": "EDC",
     "version": (1, 1, 0),
     "blender": (2, 83, 0),
     "location": "File > Import-Export",
-    "description": "Export to csv for RaceRender",
+    "description": "Convert HVE variable output to RaceRender-ready CSV",
     "warning": "",    
     "category": "HVE",
 }
@@ -54,9 +54,9 @@ class CSV_PT_export_racerender_transform(bpy.types.Panel):
 
         
 class ExportRaceRender(bpy.types.Operator, ExportHelper):
-    """Import motion variables from CSV"""
+    """Convert HVE simulation variable output to RaceRender-ready CSV"""
     bl_idname = "export_racerender.csv"
-    bl_label = 'Export to csv for RaceRender'
+    bl_label = 'Convert HVE Output to RaceRender CSV'
     bl_options = {'PRESET'}
 
     filename_ext = ".csv"
@@ -89,7 +89,7 @@ class ExportRaceRender(bpy.types.Operator, ExportHelper):
 
 def menu_func_export(self, context):
     self.layout.operator(ExportRaceRender.bl_idname,  # Corrected class reference
-                         text="RaceRender (.csv)")
+                         text="HVE Variable Output to RaceRender CSV")
 
 
 classes = (
