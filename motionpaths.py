@@ -278,13 +278,16 @@ def remove_existing_marker_object(name):
         return
 
     old_data = old_obj.data
+    old_type = old_obj.type
     bpy.data.objects.remove(old_obj, do_unlink=True)
 
-    if old_data and old_data.users == 0:
-        if old_data.__class__.__name__ == "Curve":
-            bpy.data.curves.remove(old_data)
-        else:
-            bpy.data.meshes.remove(old_data)
+    if not old_data or old_data.users != 0:
+        return
+
+    if old_type == 'MESH':
+        bpy.data.meshes.remove(old_data)
+    elif old_type in {'CURVE', 'FONT'}:
+        bpy.data.curves.remove(old_data)
 
 
 def remove_existing_marker_labels(source_object_name):

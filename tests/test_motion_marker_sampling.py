@@ -155,3 +155,11 @@ def test_generated_markers_and_labels_receive_overlay_materials():
     assert 'TEXT_MATERIAL_NAME = "BLACK"' in source
     assert 'get_or_create_overlay_material(MARKER_MATERIAL_NAME, MARKER_MATERIAL_COLOR)' in source
     assert 'get_or_create_overlay_material(TEXT_MATERIAL_NAME, TEXT_MATERIAL_COLOR)' in source
+
+
+def test_marker_cleanup_removes_meshes_and_text_curves_from_matching_collections():
+    assert "old_type = old_obj.type" in source
+    assert "if old_type == 'MESH':" in source
+    assert "bpy.data.meshes.remove(old_data)" in source
+    assert "elif old_type in {'CURVE', 'FONT'}:" in source
+    assert "bpy.data.curves.remove(old_data)" in source
