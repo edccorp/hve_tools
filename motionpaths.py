@@ -97,15 +97,17 @@ def get_scene_fps(scene):
     return render.fps / fps_base
 
 
-def iter_marker_frame_times(frame_start, frame_end, fps, interval_seconds):
-    """Yield sample frame values from the start to end frame at a time interval."""
+def iter_marker_frame_times(frame_start, frame_end, fps, interval_seconds, zero_frame=None):
+    """Yield sample frame values at an interval, centered on a zero frame."""
     interval_seconds = max(float(interval_seconds), 1.0 / fps)
     frame_step = interval_seconds * fps
-    frame_value = float(frame_start)
+    zero_frame = float(frame_start if zero_frame is None else zero_frame)
 
-    while frame_value <= frame_end + 1e-6:
-        yield frame_value
-        frame_value += frame_step
+    first_step = math.ceil((float(frame_start) - zero_frame) / frame_step - 1e-9)
+    last_step = math.floor((float(frame_end) - zero_frame) / frame_step + 1e-9)
+
+    for step_index in range(first_step, last_step + 1):
+        yield zero_frame + (step_index * frame_step)
 
 
 def split_frame_value(frame_value):
@@ -113,6 +115,19 @@ def split_frame_value(frame_value):
     whole_frame = math.floor(frame_value)
     subframe = frame_value - whole_frame
     return whole_frame, subframe
+
+
+def get_marker_relative_seconds(frame_value, zero_frame, fps):
+    """Return marker time in seconds relative to the zero frame."""
+    return (float(frame_value) - float(zero_frame)) / float(fps)
+
+
+def format_marker_relative_time(relative_seconds):
+    """Format marker label text as signed seconds relative to zero."""
+    if math.isclose(relative_seconds, 0.0, abs_tol=1e-9):
+        relative_seconds = 0.0
+
+    return f"{relative_seconds:+.2f}s"
 
 
 def get_forward_axis_vector(axis_name):
@@ -172,11 +187,44 @@ def remove_existing_marker_object(name):
     if old_obj is None:
         return
 
-    old_mesh = old_obj.data
+    old_data = old_obj.data
     bpy.data.objects.remove(old_obj, do_unlink=True)
 
-    if old_mesh and old_mesh.users == 0:
-        bpy.data.meshes.remove(old_mesh)
+    if old_data and old_data.users == 0:
+        if old_data.__class__.__name__ == "Curve":
+            bpy.data.curves.remove(old_data)
+        else:
+            bpy.data.meshes.remove(old_data)
+
+
+def remove_existing_marker_labels(source_object_name):
+    """Remove previously generated time label text objects for a source object."""
+    for old_obj in list(bpy.data.objects):
+        if old_obj.get("source_object") != source_object_name:
+            continue
+        if old_obj.get("marker_type") != "time_label":
+            continue
+        remove_existing_marker_object(old_obj.name)
+
+
+def create_marker_time_label(collection, source_object_name, location, label_text, label_size, marker_index):
+    """Create a text object labeling a marker's time relative to the zero frame."""
+    curve = bpy.data.curves.new(
+        name=f"{source_object_name}_time_label_{marker_index:03d}",
+        type='FONT',
+    )
+    curve.body = label_text
+    curve.align_x = 'CENTER'
+    curve.align_y = 'CENTER'
+    curve.size = max(float(label_size), 0.001)
+
+    text_obj = bpy.data.objects.new(curve.name, curve)
+    text_obj.location = location
+    text_obj["source_object"] = source_object_name
+    text_obj["marker_type"] = "time_label"
+    text_obj["relative_time"] = label_text
+    collection.objects.link(text_obj)
+    return text_obj
 
 
 def create_timed_location_markers(
@@ -186,9 +234,12 @@ def create_timed_location_markers(
     marker_size,
     forward_axis,
     yaw_offset_deg,
+    zero_frame,
+    create_time_labels=True,
+    label_size=0.5,
     replace_existing=True,
 ):
-    """Create a mesh of triangular markers at the object's animated location over time."""
+    """Create triangular markers at an object's location, timed around a zero frame."""
     scene = context.scene
     depsgraph = context.evaluated_depsgraph_get()
     fps = get_scene_fps(scene)
@@ -196,11 +247,14 @@ def create_timed_location_markers(
 
     if replace_existing:
         remove_existing_marker_object(marker_name)
+        remove_existing_marker_labels(ob.name)
 
     original_frame = scene.frame_current
     original_subframe = getattr(scene, "frame_subframe", 0.0)
     verts = []
     faces = []
+    label_specs = []
+    zero_frame = float(zero_frame)
 
     try:
         for frame_value in iter_marker_frame_times(
@@ -208,6 +262,7 @@ def create_timed_location_markers(
             scene.frame_end,
             fps,
             interval_seconds,
+            zero_frame=zero_frame,
         ):
             frame, subframe = split_frame_value(frame_value)
             scene.frame_set(frame, subframe=subframe)
@@ -218,6 +273,12 @@ def create_timed_location_markers(
             start_index = len(verts)
             verts.extend(marker_verts)
             faces.append((start_index, start_index + 1, start_index + 2))
+
+            if create_time_labels:
+                relative_seconds = get_marker_relative_seconds(frame_value, zero_frame, fps)
+                label_text = format_marker_relative_time(relative_seconds)
+                label_location = location + Vector((0.0, 0.0, marker_size * 0.75))
+                label_specs.append((label_location.copy(), label_text))
     finally:
         scene.frame_set(original_frame, subframe=original_subframe)
 
@@ -231,11 +292,22 @@ def create_timed_location_markers(
     marker_obj = bpy.data.objects.new(marker_name, mesh)
     marker_obj["source_object"] = ob.name
     marker_obj["interval_seconds"] = interval_seconds
+    marker_obj["zero_frame"] = zero_frame
     marker_obj["forward_axis"] = forward_axis
     marker_obj["yaw_offset_deg"] = yaw_offset_deg
 
     motion_path_collection = get_or_create_motion_path_collection()
     motion_path_collection.objects.link(marker_obj)
+
+    for marker_index, (label_location, label_text) in enumerate(label_specs):
+        create_marker_time_label(
+            motion_path_collection,
+            ob.name,
+            label_location,
+            label_text,
+            label_size,
+            marker_index,
+        )
 
     return marker_obj
 
@@ -341,6 +413,9 @@ class CreateTimedLocationMarkersOperator(bpy.types.Operator):
                 marker_size=scene.motion_marker_size,
                 forward_axis=scene.motion_marker_forward_axis,
                 yaw_offset_deg=scene.motion_marker_yaw_offset,
+                zero_frame=scene.motion_marker_zero_frame,
+                create_time_labels=scene.motion_marker_create_time_labels,
+                label_size=scene.motion_marker_label_size,
                 replace_existing=scene.motion_marker_replace_existing,
             )
             if marker_obj is not None:
