@@ -655,6 +655,15 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
         c.operator("object.remove_motion_path", text="Remove Motion Paths")
         c.operator("object.convert_motion_path_selected", text="Convert Motion Paths To Curve")
         c.operator("object.toggle_motion_path_visibility", text="Show/Hide Motion Paths")
+
+        c.separator()
+        c.label(text="Timed Location Markers", icon="EMPTY_SINGLE_ARROW")
+        c.prop(scene, "motion_marker_interval_seconds")
+        c.prop(scene, "motion_marker_size")
+        c.prop(scene, "motion_marker_forward_axis")
+        c.prop(scene, "motion_marker_yaw_offset")
+        c.prop(scene, "motion_marker_replace_existing")
+        c.operator("object.create_timed_location_markers", text="Create Location Markers")
  
  
 class HVE_PT_scale_objects(HVE_PT_mechanist_base):

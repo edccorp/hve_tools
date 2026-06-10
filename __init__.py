@@ -119,6 +119,44 @@ try:
             description="Parent the SpeedData helper empty to the source object after baking",
             default=False,
         )
+
+        bpy.types.Scene.motion_marker_interval_seconds = FloatProperty(
+            name="Marker Interval (sec)",
+            description="Time spacing between generated object location markers",
+            default=1.0,
+            min=0.001,
+        )
+        bpy.types.Scene.motion_marker_size = FloatProperty(
+            name="Marker Size",
+            description="Triangle marker size in scene units",
+            default=1.0,
+            min=0.001,
+        )
+        bpy.types.Scene.motion_marker_forward_axis = EnumProperty(
+            name="Marker Forward Direction",
+            description="Local object axis that the triangle tip should point along",
+            items=[
+                ('LOCAL_X', "+X", "Use the object's local +X axis as forward"),
+                ('LOCAL_NEG_X', "-X", "Use the object's local -X axis as forward"),
+                ('LOCAL_Y', "+Y", "Use the object's local +Y axis as forward"),
+                ('LOCAL_NEG_Y', "-Y", "Use the object's local -Y axis as forward"),
+                ('LOCAL_Z', "+Z", "Use the object's local +Z axis as forward"),
+                ('LOCAL_NEG_Z', "-Z", "Use the object's local -Z axis as forward"),
+            ],
+            default='LOCAL_X',
+        )
+        bpy.types.Scene.motion_marker_yaw_offset = FloatProperty(
+            name="Marker Yaw Offset (deg)",
+            description="Additional yaw offset applied to marker direction in degrees",
+            default=0.0,
+            soft_min=-180.0,
+            soft_max=180.0,
+        )
+        bpy.types.Scene.motion_marker_replace_existing = bpy.props.BoolProperty(
+            name="Replace Existing Markers",
+            description="Remove the existing marker mesh for the object before creating a new one",
+            default=True,
+        )
         bpy.types.Scene.hve_setup_show_surface = bpy.props.BoolProperty(
             name="Show Surface",
             default=True,
@@ -173,6 +211,11 @@ try:
         del bpy.types.Scene.speed_accel_use_xy_only
         del bpy.types.Scene.speed_accel_remove_old_curves
         del bpy.types.Scene.speed_accel_parent_helper
+        del bpy.types.Scene.motion_marker_interval_seconds
+        del bpy.types.Scene.motion_marker_size
+        del bpy.types.Scene.motion_marker_forward_axis
+        del bpy.types.Scene.motion_marker_yaw_offset
+        del bpy.types.Scene.motion_marker_replace_existing
         del bpy.types.Scene.hve_setup_show_surface
         del bpy.types.Scene.hve_setup_show_materials
         del bpy.types.Scene.hve_setup_show_object_type
