@@ -234,14 +234,32 @@ def get_or_create_helper(scene, source_obj):
     return helper
 
 
+def normalize_window_frames(window_frames):
+    """Return the number of position samples to use for velocity averaging."""
+
+    return max(2, int(window_frames))
+
+
 def get_window_for_frame(f, frame_start, frame_end, window_frames):
-    """Return f0 and f1 for a centered constant-size frame window."""
+    """Return f0 and f1 for a centered constant-size sample window.
 
-    window_frames = max(1, int(window_frames))
-    half = window_frames // 2
+    ``window_frames`` is the number of sampled animation frames in the average.
+    A 3-frame window therefore compares frame ``f - 1`` to ``f + 1`` (two
+    frame intervals), not ``f - 1`` to ``f + 2`` (three frame intervals).
+    """
 
-    f0 = f - half
-    f1 = f0 + window_frames
+    window_frames = normalize_window_frames(window_frames)
+    frame_count = frame_end - frame_start + 1
+    if frame_count <= 1:
+        return frame_start, frame_end
+
+    window_frames = min(window_frames, frame_count)
+    intervals = window_frames - 1
+    before = intervals // 2
+    after = intervals - before
+
+    f0 = f - before
+    f1 = f + after
 
     if f0 < frame_start:
         shift = frame_start - f0
@@ -298,8 +316,8 @@ def bake_speed_acceleration(
     if fps <= 0.0:
         raise RuntimeError("Scene FPS must be greater than zero.")
 
-    window_frames = max(1, int(window_frames))
-    if frame_end - frame_start < window_frames:
+    window_frames = normalize_window_frames(window_frames)
+    if frame_end - frame_start + 1 < window_frames:
         raise RuntimeError("Scene frame range is shorter than the average window.")
 
     speed_to_mph, accel_to_g, resolved_unit_mode = get_unit_conversions(scene, unit_mode)
