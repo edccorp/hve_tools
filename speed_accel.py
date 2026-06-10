@@ -43,10 +43,13 @@ class SpeedAccelerationBakeOperator(bpy.types.Operator):
 
     def execute(self, context):
         scene = context.scene
-        source_obj = scene.speed_accel_target_object or context.active_object
+        source_obj = get_speed_accel_source_object(context)
 
         if source_obj is None:
-            self.report({'ERROR'}, "Select a source object for speed/acceleration calculation")
+            self.report(
+                {'ERROR'},
+                "Select an object in the viewport, or choose a Source Object in the panel.",
+            )
             return {'CANCELLED'}
 
         try:
@@ -71,6 +74,30 @@ class SpeedAccelerationBakeOperator(bpy.types.Operator):
             f"using {result['window_frames']} frame window",
         )
         return {'FINISHED'}
+
+
+def get_speed_accel_source_object(context):
+    """Return the selected object to bake, falling back to the panel picker.
+
+    A selected viewport object is always preferred so the bake source follows the
+    user's current selection. The explicit Source Object picker is only used when
+    nothing is selected.
+    """
+
+    selected_objects = list(getattr(context, "selected_objects", []) or [])
+    active_object = getattr(context, "active_object", None)
+
+    if active_object in selected_objects:
+        return active_object
+
+    if selected_objects:
+        return selected_objects[0]
+
+    scene = getattr(context, "scene", None)
+    if scene is None:
+        return None
+
+    return getattr(scene, "speed_accel_target_object", None)
 
 
 def iter_action_fcurves_for_object(obj):

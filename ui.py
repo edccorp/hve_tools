@@ -697,7 +697,19 @@ class HVE_PT_speed_acceleration(HVE_PT_mechanist_base):
         c = l.column()
 
         c.label(text="Bake animated speed and acceleration", icon="FORCE_FORCE")
-        c.prop(scene, "speed_accel_target_object")
+
+        if context.selected_objects:
+            active = context.active_object
+            source = (
+                active
+                if active in context.selected_objects
+                else context.selected_objects[0]
+            )
+            c.label(text=f"Source: {source.name} (selected)", icon="OBJECT_DATA")
+        else:
+            c.label(text="No object selected; choose a source below", icon="INFO")
+            c.prop(scene, "speed_accel_target_object")
+
         c.prop(scene, "speed_accel_forward_axis")
         c.prop(scene, "speed_accel_forward_yaw_offset")
         c.prop(scene, "speed_accel_window_frames")
