@@ -46,16 +46,18 @@ def hve_global_scale_matrix():
     return mathutils.Matrix.Scale(HVE_GLOBAL_SCALE, 4)
 
 
-def compose_environment_mesh_matrix(global_matrix, object_matrix, pre_transform=None):
+def compose_environment_mesh_matrix(global_matrix, object_matrix, coordinate_transform=None):
     """Compose the matrix baked into exported environment mesh vertices.
 
-    Matrix multiplication is right-to-left for vertex coordinates, so the
-    pre-transform is applied to modifier-evaluated mesh data before the
-    object/global transforms are baked into the exported coordinates.
+    HVE environment meshes need Blender object transforms baked before the
+    Blender-to-HVE coordinate conversion.  Applying the coordinate transform
+    first leaves object-space Z rotations in Blender's direction; converting
+    after the object matrix mirrors those rotations into HVE's coordinate
+    system instead.
     """
-    if pre_transform is None:
-        pre_transform = hve_x_axis_flip_matrix()
-    return global_matrix @ object_matrix @ pre_transform
+    if coordinate_transform is None:
+        coordinate_transform = hve_x_axis_flip_matrix()
+    return global_matrix @ coordinate_transform @ object_matrix
 
 
 def apply_environment_mesh_transform(mesh, matrix):

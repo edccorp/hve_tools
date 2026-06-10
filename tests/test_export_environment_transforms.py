@@ -1,5 +1,8 @@
 import ast
+import math
 import pathlib
+
+import pytest
 
 
 module_path = pathlib.Path(__file__).resolve().parents[1] / "export_environment.py"
@@ -45,6 +48,36 @@ class DummyMatrixModule:
             return ("scale", scale, size)
 
 
+class PlanarMatrix:
+    def __init__(self, values):
+        self.values = values
+
+    def __matmul__(self, other):
+        if isinstance(other, PlanarMatrix):
+            return PlanarMatrix(tuple(
+                tuple(
+                    sum(self.values[row][idx] * other.values[idx][col] for idx in range(2))
+                    for col in range(2)
+                )
+                for row in range(2)
+            ))
+        x, y = other
+        return (
+            self.values[0][0] * x + self.values[0][1] * y,
+            self.values[1][0] * x + self.values[1][1] * y,
+        )
+
+
+def planar_z_rotation(degrees):
+    radians = math.radians(degrees)
+    return PlanarMatrix(((math.cos(radians), -math.sin(radians)),
+                         (math.sin(radians), math.cos(radians))))
+
+
+def planar_x_axis_flip():
+    return PlanarMatrix(((1.0, 0.0), (0.0, -1.0)))
+
+
 class DummyMesh:
     def __init__(self):
         self.calls = []
@@ -75,14 +108,27 @@ def test_hve_x_axis_flip_is_exact_180_degree_x_rotation_values():
     )
 
 
-def test_compose_environment_mesh_matrix_applies_pre_transform_first():
+def test_compose_environment_mesh_matrix_applies_coordinate_transform_after_object():
     matrix = compose_environment_mesh_matrix(
         MatrixToken("global"),
         MatrixToken("object"),
-        pre_transform=MatrixToken("x_flip"),
+        coordinate_transform=MatrixToken("x_flip"),
     )
 
-    assert matrix.label == "((global @ object) @ x_flip)"
+    assert matrix.label == "((global @ x_flip) @ object)"
+
+
+def test_coordinate_transform_after_object_reverses_z_rotation_direction():
+    matrix = compose_environment_mesh_matrix(
+        PlanarMatrix(((1.0, 0.0), (0.0, 1.0))),
+        planar_z_rotation(16.0),
+        coordinate_transform=planar_x_axis_flip(),
+    )
+
+    x_axis = matrix @ (1.0, 0.0)
+    exported_angle = math.degrees(math.atan2(x_axis[1], x_axis[0]))
+
+    assert exported_angle == pytest.approx(-16.0)
 
 
 def test_apply_environment_mesh_transform_bakes_matrix_then_updates_mesh():
