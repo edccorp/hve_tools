@@ -132,6 +132,11 @@ try:
             default=1.0,
             min=0.001,
         )
+        bpy.types.Scene.motion_marker_zero_frame = FloatProperty(
+            name="Zero Frame",
+            description="Frame used as time zero; markers are generated forward and backward from this frame",
+            default=1.0,
+        )
         bpy.types.Scene.motion_marker_forward_axis = EnumProperty(
             name="Marker Forward Direction",
             description="Local object axis that the triangle tip should point along",
@@ -151,6 +156,17 @@ try:
             default=0.0,
             soft_min=-180.0,
             soft_max=180.0,
+        )
+        bpy.types.Scene.motion_marker_create_time_labels = bpy.props.BoolProperty(
+            name="Create Time Labels",
+            description="Add text labels showing each marker time relative to the zero frame",
+            default=True,
+        )
+        bpy.types.Scene.motion_marker_label_size = FloatProperty(
+            name="Time Label Size",
+            description="Text size for marker time labels in scene units",
+            default=0.5,
+            min=0.001,
         )
         bpy.types.Scene.motion_marker_replace_existing = bpy.props.BoolProperty(
             name="Replace Existing Markers",
@@ -213,8 +229,11 @@ try:
         del bpy.types.Scene.speed_accel_parent_helper
         del bpy.types.Scene.motion_marker_interval_seconds
         del bpy.types.Scene.motion_marker_size
+        del bpy.types.Scene.motion_marker_zero_frame
         del bpy.types.Scene.motion_marker_forward_axis
         del bpy.types.Scene.motion_marker_yaw_offset
+        del bpy.types.Scene.motion_marker_create_time_labels
+        del bpy.types.Scene.motion_marker_label_size
         del bpy.types.Scene.motion_marker_replace_existing
         del bpy.types.Scene.hve_setup_show_surface
         del bpy.types.Scene.hve_setup_show_materials

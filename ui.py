@@ -659,9 +659,13 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
         c.separator()
         c.label(text="Timed Location Markers", icon="EMPTY_SINGLE_ARROW")
         c.prop(scene, "motion_marker_interval_seconds")
+        c.prop(scene, "motion_marker_zero_frame")
         c.prop(scene, "motion_marker_size")
         c.prop(scene, "motion_marker_forward_axis")
         c.prop(scene, "motion_marker_yaw_offset")
+        c.prop(scene, "motion_marker_create_time_labels")
+        if scene.motion_marker_create_time_labels:
+            c.prop(scene, "motion_marker_label_size")
         c.prop(scene, "motion_marker_replace_existing")
         c.operator("object.create_timed_location_markers", text="Create Location Markers")
  
