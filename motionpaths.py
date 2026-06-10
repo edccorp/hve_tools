@@ -21,6 +21,71 @@ FORWARD_AXIS_VECTORS = {
     'LOCAL_NEG_Z': (0.0, 0.0, -1.0),
 }
 
+OVERLAY_MARKERS_LABEL = "Overlay Markers"
+MARKER_MATERIAL_NAME = "HVE_Overlay_Markers"
+TEXT_MATERIAL_NAME = "BLACK"
+MARKER_MATERIAL_COLOR = (1.0, 0.35, 0.0, 1.0)
+TEXT_MATERIAL_COLOR = (0.0, 0.0, 0.0, 1.0)
+
+
+def set_principled_material_color(material, color):
+    """Set a material's viewport and Principled BSDF colors when available."""
+    material.diffuse_color = color
+
+    if not material.use_nodes:
+        material.use_nodes = True
+
+    node_tree = getattr(material, "node_tree", None)
+    if node_tree is None:
+        return
+
+    principled = node_tree.nodes.get("Principled BSDF")
+    if principled is None:
+        return
+
+    base_color = principled.inputs.get("Base Color")
+    if base_color is not None:
+        base_color.default_value = color
+
+    alpha = principled.inputs.get("Alpha")
+    if alpha is not None:
+        alpha.default_value = color[3]
+
+
+def get_or_create_overlay_material(name, color):
+    """Return an HVE overlay material with the requested display color."""
+    material = bpy.data.materials.get(name)
+    if material is None:
+        material = bpy.data.materials.new(name=name)
+
+    set_principled_material_color(material, color)
+    return material
+
+
+def assign_hve_overlay_environment_props(obj):
+    """Tag generated marker objects as HVE environment overlay surfaces."""
+    hve_type = getattr(getattr(obj, "hve_type", None), "set_type", None)
+    if hve_type is not None and hasattr(hve_type, "type"):
+        hve_type.type = "ENVIRONMENT"
+
+    env_props = getattr(getattr(obj, "hve_env_props", None), "set_env_props", None)
+    if env_props is not None:
+        if hasattr(env_props, "poSurfaceType"):
+            env_props.poSurfaceType = "EdTypeOther"
+        if hasattr(env_props, "polabel"):
+            env_props.polabel = OVERLAY_MARKERS_LABEL
+
+
+def assign_single_material(obj, material):
+    """Replace an object's material list with a single material."""
+    materials = getattr(getattr(obj, "data", None), "materials", None)
+    if materials is None:
+        return
+
+    materials.clear()
+    materials.append(material)
+
+
 
 def get_or_create_motion_path_collection():
     """Creates a collection called 'Motion Paths' if it doesn't exist."""
@@ -223,6 +288,11 @@ def create_marker_time_label(collection, source_object_name, location, label_tex
     text_obj["source_object"] = source_object_name
     text_obj["marker_type"] = "time_label"
     text_obj["relative_time"] = label_text
+    assign_hve_overlay_environment_props(text_obj)
+    assign_single_material(
+        text_obj,
+        get_or_create_overlay_material(TEXT_MATERIAL_NAME, TEXT_MATERIAL_COLOR),
+    )
     collection.objects.link(text_obj)
     return text_obj
 
@@ -295,6 +365,11 @@ def create_timed_location_markers(
     marker_obj["zero_frame"] = zero_frame
     marker_obj["forward_axis"] = forward_axis
     marker_obj["yaw_offset_deg"] = yaw_offset_deg
+    assign_hve_overlay_environment_props(marker_obj)
+    assign_single_material(
+        marker_obj,
+        get_or_create_overlay_material(MARKER_MATERIAL_NAME, MARKER_MATERIAL_COLOR),
+    )
 
     motion_path_collection = get_or_create_motion_path_collection()
     motion_path_collection.objects.link(marker_obj)

@@ -65,3 +65,17 @@ def test_format_marker_relative_time_includes_sign_and_seconds():
     assert format_marker_relative_time(-1.5) == "-1.50s"
     assert format_marker_relative_time(0.0) == "+0.00s"
     assert format_marker_relative_time(1.5) == "+1.50s"
+
+
+def test_generated_markers_are_configured_as_overlay_environment_objects():
+    assert 'OVERLAY_MARKERS_LABEL = "Overlay Markers"' in source
+    assert 'hve_type.type = "ENVIRONMENT"' in source
+    assert 'env_props.poSurfaceType = "EdTypeOther"' in source
+    assert 'env_props.polabel = OVERLAY_MARKERS_LABEL' in source
+
+
+def test_generated_markers_and_labels_receive_overlay_materials():
+    assert 'MARKER_MATERIAL_NAME = "HVE_Overlay_Markers"' in source
+    assert 'TEXT_MATERIAL_NAME = "BLACK"' in source
+    assert 'get_or_create_overlay_material(MARKER_MATERIAL_NAME, MARKER_MATERIAL_COLOR)' in source
+    assert 'get_or_create_overlay_material(TEXT_MATERIAL_NAME, TEXT_MATERIAL_COLOR)' in source
