@@ -90,9 +90,9 @@ try:
         )
         bpy.types.Scene.speed_accel_window_frames = IntProperty(
             name="Average Window (Frames)",
-            description="Number of frames used for the centered average velocity window",
+            description="Number of sampled frames used for the centered average velocity window; 3 compares the previous and next frames",
             default=3,
-            min=1,
+            min=2,
         )
         bpy.types.Scene.speed_accel_unit_mode = EnumProperty(
             name="Distance Units",
