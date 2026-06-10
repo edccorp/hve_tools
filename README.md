@@ -9,11 +9,8 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### Pre-simulation setup
 
 - **Configurable HVE sidebar**: choose the default **HVE** tab, **Human Vehicle Environment** tab, or a custom tab name in add-on preferences.
-- **Object type assignment**: mark active objects as either **Vehicle** or **Environment** before export.
-- **Material creation**:
-  - Add a generic HVE material.
-  - Add standard HVE materials.
-  - Add HVE light materials.
+- **Object type assignment**: mark selected objects as **Environment**, **Vehicle**, or **GATB Surface** before export, with mixed-selection warnings and one-click reclassification.
+- **Material creation**: add generic, standard, and HVE light materials together with one **Add Materials** action.
 - **Vehicle lighting metadata**: tag vehicle objects as HVE light components, including headlights, reverse lights, fog lights, amber/turn lights, tail lights, brake/turn lights, brake lights, and center brake lights.
 - **Environment terrain metadata**:
   - Surface type: Road, Friction Zone, Curb, Water, or Other.
@@ -28,11 +25,11 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 
 - **Vehicle H3D export** (`.h3d`): export selected vehicle geometry for HVE with options for selection-only export, hierarchy export, name decorations, modifier application, normals, compression, axis conversion, and global scale.
 - **Environment H3D export** (`.h3d`): export selected environment geometry with options for selection-only export, name decorations, normals, compression, axis conversion, and global scale.
-- **Context-aware export button**: the **H3D Export** panel chooses the vehicle or environment exporter based on the active object's assigned HVE type.
+- **Context-aware export button**: the **H3D Export** panel chooses the vehicle, environment, or GATB contact-surface exporter based on the selected objects' assigned HVE types and warns before exporting mixed selections.
 
 ### Contact and surface-point export
 
-- **GATB surface/contact point export** (`.csv`): export contact-surface point data with a global scale setting. The UI labels this as **GATB Surface Points Exporter** and **Export Contact Surfaces**.
+- **GATB surface/contact point export** (`.csv`): classify selected meshes as **GATB Surface** and export contact-surface point data with a global scale setting.
 
 ### Post-simulation import and conversion
 
@@ -46,7 +43,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Organizes imported data into HVE collections by event, vehicle, wheels, and body mesh.
   - Applies mesh cleanup support, joins body mesh objects per vehicle, reduces shape-key meshes with adaptive samples, and merges duplicate imported materials per vehicle.
   - Sets newly imported material metallic values to zero and attempts to find missing files in the public HVE support-files path.
-- **RaceRender CSV exporter** (`.csv`): convert HVE variable-output data for RaceRender workflows.
+- **RaceRender converter** (`.csv`): convert HVE variable-output data into RaceRender-ready CSV files.
 
 ### EDR and motion animation tools
 
@@ -109,8 +106,8 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 
 1. Select the object to configure.
 2. Open **3D View → Sidebar → HVE → Pre-Simulation Setup → H3D Setup**.
-3. Expand **Materials** and add any needed generic, standard, or light materials.
-4. Expand **Object Type** and choose **Vehicle** or **Environment**.
+3. Expand **Add Materials** and click **Add Materials** to create the generic, standard, and light material sets.
+4. Expand **Object Type** and choose **Environment**, **Vehicle**, or **GATB Surface**.
 5. For vehicles, expand **Vehicle Lighting** and tag light objects as needed.
 6. For environments, expand **Terrain Properties** and set surface, water, soil, and force properties.
 7. Optionally save an environment preset or apply one from the preset dropdown.
@@ -118,24 +115,24 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### 2. Export H3D files
 
 1. Select the vehicle or environment object(s) you want to export.
-2. Make sure the active object has the correct HVE type in **H3D Setup**.
+2. Make sure the selected object(s) have the correct HVE type in **H3D Setup**. If mixed types are selected, use the warning controls to classify all selected objects as one type.
 3. Open **Pre-Simulation Setup → H3D Export**.
-4. Click **Export Vehicle** or **Export Environment**.
+4. Click **Export Vehicle**, **Export Environment**, or **Export GATB Contact Surfaces** based on the selected object type.
 5. In the file browser, review export options such as selection-only, hierarchy, normals, compression, axis conversion, and scale.
 6. Save the `.h3d` file.
 
 ### 3. Export contact surfaces
 
 1. Select the surface/contact objects to export.
-2. Open **Pre-Simulation Setup → GATB Surface Points Exporter**.
-3. Click **Export Contact Surfaces**.
+2. Classify those objects as **GATB Surface** in **Pre-Simulation Setup → H3D Setup**.
+3. Open **Pre-Simulation Setup → H3D Export** and click **Export GATB Contact Surfaces**.
 4. Choose a destination `.csv` and global scale.
 
 ### 4. Import HVE post-simulation files
 
 - For variable-output files, open **Post-Simulation Processing → Variable Output Importer**, choose the `.hvo` or `.csv`, set scale options, and import.
 - For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, choose the `.fbx`, and import.
-- For RaceRender conversion, open **Post-Simulation Processing → Export HVE Variable Output to RaceRender** and export a RaceRender-ready `.csv`.
+- For RaceRender conversion, open **Post-Simulation Processing → RaceRender Converter** and convert the HVE variable output into RaceRender-ready `.csv` files.
 
 ### 5. Animate from EDR data
 

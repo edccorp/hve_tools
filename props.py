@@ -40,10 +40,11 @@ class HVE_lights(PropertyGroup):
         
         
 class HVE_props_set_type(bpy.types.PropertyGroup):
-    type: EnumProperty(name="Type",items= [('VEHICLE', "Vehicle", ""),
-                                            ('ENVIRONMENT', "Environment", ""),],     
+    type: EnumProperty(name="Type",items= [('ENVIRONMENT', "Environment", ""),
+                                            ('VEHICLE', "Vehicle", ""),
+                                            ('GATB_SURFACE', "GATB Surface", ""),],     
                                    default = 'ENVIRONMENT',  
-                                   description = "HVE Vehicle or Environment",)          
+                                   description = "HVE object classification for export and setup workflows",)          
 
 
 class HVE_types(PropertyGroup):   

@@ -195,15 +195,15 @@ try:
         )
         bpy.types.Scene.hve_setup_show_forces = bpy.props.BoolProperty(
             name="Show Forces",
-            default=True,
+            default=False,
         )
         bpy.types.Scene.hve_setup_show_soil = bpy.props.BoolProperty(
             name="Show Soil",
-            default=True,
+            default=False,
         )
         bpy.types.Scene.hve_setup_show_water = bpy.props.BoolProperty(
             name="Show Water",
-            default=True,
+            default=False,
         )
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
