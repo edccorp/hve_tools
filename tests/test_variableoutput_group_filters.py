@@ -55,6 +55,7 @@ def test_variableoutput_disable_optional_also_disables_groups():
 def test_variableoutput_creation_toggles_are_exposed_and_passed_to_importer():
     for prop in (
         "create_tire_paths",
+        "create_skids",
         "create_paths",
         "create_velocities",
         "create_accelerations",
@@ -66,6 +67,7 @@ def test_variableoutput_creation_toggles_are_exposed_and_passed_to_importer():
         assert f"{prop}={prop}" in importer_source
 
     assert "if create_tire_paths:" in importer_source
+    assert "if create_skids:" in importer_source
     assert "if create_paths:" in importer_source
     assert "if create_velocities and 'VehKinematicVTotal'" in importer_source
     assert "if create_accelerations and 'VehKinematicAccTotal'" in importer_source
@@ -81,6 +83,7 @@ def test_add_vehicle_creation_toggle_defaults_are_import_safe():
 
     assert "create_tire_paths=create_tire_paths" not in add_vehicle_signature
     assert "create_tire_paths=True" in add_vehicle_signature
+    assert "create_skids=True" in add_vehicle_signature
     assert "create_paths=True" in add_vehicle_signature
     assert "create_velocities=True" in add_vehicle_signature
     assert "create_accelerations=True" in add_vehicle_signature
@@ -93,6 +96,23 @@ def test_variableoutput_group_toggle_cascades_to_variables():
     assert "if variable_item.group_id != group_item.group_id" in ui_source
     assert "variable_item.enabled = True if variable_item.required else group_item.enabled" in ui_source
 
+
+
+def test_variableoutput_selected_create_objects_make_variables_required():
+    assert "REQUIRED_CREATE_OBJECT_VARIABLES" in importer_source
+    assert '"create_skids"' in importer_source
+    assert '"VehTireSkidFlag"' in importer_source
+    assert '"create_forces"' in importer_source
+    for variable in (
+        "VehKineticFxImpact",
+        "VehKineticFyImpact",
+        "VehKineticFzImpact",
+    ):
+        assert f'"{variable}"' in importer_source
+    assert "def is_required_variable(object_name_variable, **create_options):" in importer_source
+    assert "inspect_variable_columns(scan_filepath, **_selected_create_options(self))" in ui_source
+    assert "update=_create_object_option_updated" in ui_source
+    assert "variable_item.required = variableoutput_importer.is_required_variable" in ui_source
 
 def test_variableoutput_scan_requires_selected_file():
     assert "def _variable_scan_path" in ui_source

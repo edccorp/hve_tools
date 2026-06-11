@@ -53,6 +53,43 @@ def _set_group_variables_enabled(group_item, context):
         variable_item.enabled = True if variable_item.required else group_item.enabled
 
 
+def _selected_create_options(operator):
+    return {
+        "create_tire_paths": operator.create_tire_paths,
+        "create_skids": operator.create_skids,
+        "create_paths": operator.create_paths,
+        "create_velocities": operator.create_velocities,
+        "create_accelerations": operator.create_accelerations,
+        "create_forces": operator.create_forces,
+    }
+
+
+def _update_required_variable_flags(operator, context):
+    if not getattr(operator, "variable_items", None):
+        return
+
+    from . import variableoutput_importer
+
+    create_options = _selected_create_options(operator)
+    required_count_by_group = {}
+    for variable_item in operator.variable_items:
+        variable_item.required = variableoutput_importer.is_required_variable(
+            variable_item.source_name,
+            **create_options,
+        )
+        if variable_item.required:
+            variable_item.enabled = True
+            required_count_by_group[variable_item.group_id] = required_count_by_group.get(variable_item.group_id, 0) + 1
+
+    for group_item in operator.group_items:
+        required_count = required_count_by_group.get(group_item.group_id, 0)
+        group_item.required_count = str(required_count) if required_count else ""
+
+
+def _create_object_option_updated(operator, context):
+    _update_required_variable_flags(operator, context)
+
+
 def _variable_scan_path(operator):
     filepath = getattr(operator, "filepath", "")
     if filepath:
@@ -165,6 +202,7 @@ class CSV_PT_variableoutput_importer_include(bpy.types.Panel):
         creation_box = layout.box()
         creation_box.label(text="Create Objects")
         creation_box.prop(operator, "create_tire_paths")
+        creation_box.prop(operator, "create_skids")
         creation_box.prop(operator, "create_paths")
         creation_box.prop(operator, "create_velocities")
         creation_box.prop(operator, "create_accelerations")
@@ -293,32 +331,44 @@ class ImportVariables(bpy.types.Operator, ExportHelper):
 
     create_tire_paths: BoolProperty(
         name="Tire Paths",
-        description="Create tire path and skid trace objects",
+        description="Create tire path objects",
         default=True,
+        update=_create_object_option_updated,
+    )
+
+    create_skids: BoolProperty(
+        name="Skids",
+        description="Create skid trace objects",
+        default=True,
+        update=_create_object_option_updated,
     )
 
     create_paths: BoolProperty(
         name="Paths",
         description="Create vehicle CG and accelerometer path curve objects",
         default=True,
+        update=_create_object_option_updated,
     )
 
     create_velocities: BoolProperty(
         name="Velocities",
         description="Create velocity vector and component objects",
         default=True,
+        update=_create_object_option_updated,
     )
 
     create_accelerations: BoolProperty(
         name="Accelerations",
         description="Create acceleration vector and component objects",
         default=True,
+        update=_create_object_option_updated,
     )
 
     create_forces: BoolProperty(
         name="Forces",
         description="Create force vector objects",
         default=True,
+        update=_create_object_option_updated,
     )
 
     variable_items: CollectionProperty(type=VariableOutputVariableItem)
@@ -368,7 +418,7 @@ class ImportVariables(bpy.types.Operator, ExportHelper):
         self.clear_variable_list()
         self.variable_scan_filepath = scan_filepath
 
-        variables = variableoutput_importer.inspect_variable_columns(scan_filepath)
+        variables = variableoutput_importer.inspect_variable_columns(scan_filepath, **_selected_create_options(self))
         vehicle_names = []
         group_data = {}
         for variable in variables:
