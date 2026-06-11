@@ -6,6 +6,8 @@ props_source = (repo / "props.py").read_text()
 init_source = (repo / "__init__.py").read_text()
 materials_source = (repo / "materials.py").read_text()
 racerender_ui_source = (repo / "racerender_exporter_ui.py").read_text()
+fbx_ui_source = (repo / "fbx_importer_ui.py").read_text()
+fbx_importer_source = (repo / "fbx_importer.py").read_text()
 
 
 def test_object_type_enum_includes_gatb_surface():
@@ -51,3 +53,12 @@ def test_racerender_ui_uses_converter_language():
     assert "RaceRender Converter" in ui_source
     assert "Convert HVE Output to RaceRender CSV" in racerender_ui_source
     assert "Convert HVE Variable Output to RaceRender CSV" in ui_source
+
+
+def test_fbx_importer_exposes_body_merge_and_deformation_storage_options():
+    assert "merge_body_mesh: BoolProperty" in fbx_ui_source
+    assert "deformation_storage: EnumProperty" in fbx_ui_source
+    assert '(\'SHAPE_KEYS\', "Shape Keys"' in fbx_ui_source
+    assert '(\'MDD\', "External MDD File"' in fbx_ui_source
+    assert "merge_body_mesh=merge_body_mesh" in fbx_importer_source
+    assert "export_body_shape_key_animations_to_mdd" in fbx_importer_source

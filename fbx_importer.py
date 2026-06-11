@@ -270,67 +270,61 @@ def force_zero_preroll_pose(obj, frame=-1):
     obj.location = loc0
     obj.rotation_euler = rot0
 
-def adjust_animation(obj):
-    """Adjusts animation for selected objects:
-       - Subtracts 180° from X rotation
-       - Scales Y and Z by -1
-    """
-    if (4, 5, 0) <= bpy.app.version < (5, 0, 0):
-        if obj.animation_data and obj.animation_data.action:
-            action = obj.animation_data.action
-            #print(obj)           
-            for fcurve in action.fcurves:
-                # Adjust X rotation (Euler)
-                if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
-                    for keyframe in fcurve.keyframe_points:
-                        keyframe.co.y += math.radians(-180)  # Convert degrees to radians
-                        keyframe.handle_left.y += math.radians(-180)
-                        keyframe.handle_right.y += math.radians(-180)
-            
-            # Remove Scale Animation
-            scale_fcurves = [fcurve for fcurve in action.fcurves if fcurve.data_path.endswith("scale")]
-            for fcurve in scale_fcurves:
-                action.fcurves.remove(fcurve)  # Delete scale animation
-                
-            obj.scale.y *= -1
-            obj.scale.z *= -1
-             
-            obj.location = (0, 0, 0)
-            obj.rotation_euler = (0, 0, 0)
+def adjust_animation(obj, apply_x_rotation_offset=True):
+    """Adjust imported animation orientation and strip scale animation."""
+    animation_data = getattr(obj, "animation_data", None)
+    action = getattr(animation_data, "action", None)
+    if not action:
+        return
 
-            obj.keyframe_insert(data_path="location", frame=-1)
-            obj.keyframe_insert(data_path="rotation_euler", frame=-1)
+    app_version = getattr(getattr(bpy, "app", None), "version", (5, 0, 0))
+    action_fcurves = get_action_fcurve_collection(action)
+    fcurves_to_edit = getattr(action, "fcurves", None) if (4, 5, 0) <= app_version < (5, 0, 0) else action_fcurves
+
+    if apply_x_rotation_offset:
+        for fcurve in iter_action_fcurves(action):
+            if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:
+                for keyframe in fcurve.keyframe_points:
+                    keyframe.co.y += math.radians(-180)
+                    keyframe.handle_left.y += math.radians(-180)
+                    keyframe.handle_right.y += math.radians(-180)
+
+    if fcurves_to_edit is not None:
+        scale_fcurves = [
+            fcurve for fcurve in fcurves_to_edit if fcurve.data_path.endswith("scale")
+        ]
+        for fcurve in scale_fcurves:
+            fcurves_to_edit.remove(fcurve)
+
+    obj.scale.y *= -1
+    obj.scale.z *= -1
+
+    if (4, 5, 0) <= app_version < (5, 0, 0):
+        obj.location = (0, 0, 0)
+        obj.rotation_euler = (0, 0, 0)
+        obj.keyframe_insert(data_path="location", frame=-1)
+        obj.keyframe_insert(data_path="rotation_euler", frame=-1)
     else:
-        if obj.animation_data and obj.animation_data.action:
-            action = obj.animation_data.action
-            print(obj.name, "rot_mode:", obj.rotation_mode)
-            print("has quat fcurves:", any(fc.data_path.endswith("rotation_quaternion") for fc in iter_action_fcurves(action)))
-            print("has euler fcurves:", any(fc.data_path.endswith("rotation_euler") for fc in iter_action_fcurves(action)))
-            action_fcurves = get_action_fcurve_collection(action)
-            for fcurve in iter_action_fcurves(action):
-                # Adjust X rotation (Euler)
-                if fcurve.data_path.endswith("rotation_euler") and fcurve.array_index == 0:  # X Rotation
-                    for keyframe in fcurve.keyframe_points:
-                        keyframe.co.y += math.radians(-180)  # Convert degrees to radians
-                        keyframe.handle_left.y += math.radians(-180)
-                        keyframe.handle_right.y += math.radians(-180)
-           
-            # Remove Scale Animation
-            if action_fcurves is not None:
-                scale_fcurves = [fcurve for fcurve in action_fcurves if fcurve.data_path.endswith("scale")]
-                for fcurve in scale_fcurves:
-                    action_fcurves.remove(fcurve)  # Delete scale animation
-                
-            obj.scale.y *= -1
-            obj.scale.z *= -1
-             
-            # Preserve a pre-roll frame by duplicating the first imported pose at
-            # frame ``-1`` without forcing zero transforms.
-            ensure_preroll_keys(action, target_frame=-1)
-        
+        ensure_preroll_keys(action, target_frame=-1)
 
-        
-        
+
+def zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1):
+    """Zero only top-level animated EMPTY objects at the pre-roll frame."""
+    for obj in imported_objects:
+        if not (
+            getattr(obj, "type", None) == "EMPTY"
+            and getattr(obj, "parent", None) is None
+            and getattr(obj, "animation_data", None)
+        ):
+            continue
+
+        obj.location = (0.0, 0.0, 0.0)
+        obj.rotation_euler = (0.0, 0.0, 0.0)
+        obj.keyframe_insert(data_path="location", frame=frame)
+        obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+
+
 def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
 
@@ -1032,11 +1026,14 @@ def _gather_meshes(collection):
     return meshes
 
 
-def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported_pointer_set=None):
-    """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
+def object_pointer(obj):
+    """Return a stable pointer value for Blender objects and test doubles."""
+    return obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)
 
-    def object_pointer(obj):
-        return obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)
+
+def get_body_mesh_objects_for_vehicle(vehicle_name, imported_objects=None, imported_pointer_set=None):
+    """Collect imported non-wheel body mesh objects for ``vehicle_name``."""
+    clean_vehicle_name = re.sub(r"\.\d+$", "", vehicle_name)
 
     if imported_objects is None:
         imported_objects = list(getattr(getattr(bpy.context, "scene", None), "objects", []))
@@ -1046,42 +1043,155 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
     else:
         imported_pointer_set = set(imported_pointer_set)
 
-    for vehicle_name in vehicle_names:
-        clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
-        # Collect all mesh objects for this vehicle. Search for collections that
-        # begin with "Body Mesh: {vehicle_name}:". If found, use objects from
-        # those collections. Otherwise fall back to scanning the entire scene.
-        collection_prefix = f"Body Mesh: {vehicle_name}:"
-        body_mesh_collections = [
-            col for col in bpy.data.collections if col.name.startswith(collection_prefix)
-        ]
+    collection_prefix = f"Body Mesh: {vehicle_name}:"
+    body_mesh_collections = [
+        col for col in bpy.data.collections if col.name.startswith(collection_prefix)
+    ]
 
-        mesh_objects = []
-        for col in body_mesh_collections:
-            mesh_objects.extend(_gather_meshes(col))
+    mesh_objects = []
+    for col in body_mesh_collections:
+        mesh_objects.extend(_gather_meshes(col))
 
+    mesh_objects = [
+        obj for obj in mesh_objects if object_pointer(obj) in imported_pointer_set
+    ]
+
+    if not mesh_objects:
         mesh_objects = [
-            obj for obj in mesh_objects if object_pointer(obj) in imported_pointer_set
-        ]
-
-        if not mesh_objects:
-            mesh_objects = [
-                obj
-                for obj in imported_objects
-                if (
-                    obj.type == "MESH"
-                    and object_pointer(obj) in imported_pointer_set
-                    and belongs_to_vehicle(obj.name, clean_vehicle_name)
-                    and not (
-                        re.search(r"wheel", obj.name, re.IGNORECASE)
-                        or any(
-                            "Wheels" in col.name
-                            for col in getattr(obj, "users_collection", [])
-                        )
+            obj
+            for obj in imported_objects
+            if (
+                obj.type == "MESH"
+                and object_pointer(obj) in imported_pointer_set
+                and belongs_to_vehicle(obj.name, clean_vehicle_name)
+                and not (
+                    re.search(r"wheel", obj.name, re.IGNORECASE)
+                    or any(
+                        "Wheels" in col.name
+                        for col in getattr(obj, "users_collection", [])
                     )
                 )
-            ]
+            )
+        ]
 
+    # Preserve order but remove duplicates that can appear through nested collections.
+    unique_mesh_objects = []
+    seen = set()
+    for obj in mesh_objects:
+        pointer = object_pointer(obj)
+        if pointer in seen:
+            continue
+        seen.add(pointer)
+        unique_mesh_objects.append(obj)
+
+    return unique_mesh_objects
+
+
+def has_shape_key_animation(obj):
+    """Return whether ``obj`` contains shape keys that may need storage conversion."""
+    shape_keys = getattr(getattr(obj, "data", None), "shape_keys", None)
+    if not shape_keys:
+        return False
+    key_blocks = getattr(shape_keys, "key_blocks", [])
+    return any(getattr(key_block, "name", "") != "Basis" for key_block in key_blocks)
+
+
+def create_mesh_cache_directory(source_fbx_path):
+    """Create and return the directory used for exported point-cache files."""
+    fbx_dir = os.path.dirname(source_fbx_path) or os.getcwd()
+    fbx_name = os.path.splitext(os.path.basename(source_fbx_path))[0] or "fbx_import"
+    cache_dir = os.path.join(fbx_dir, f"{sanitize_cache_name(fbx_name)}_mesh_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
+
+
+def attach_mdd_mesh_cache_modifier(obj, mdd_filepath, frame_start):
+    """Attach an MDD Mesh Cache modifier to ``obj`` for the exported cache file."""
+    modifier = obj.modifiers.new(name="HVE MDD Mesh Cache", type="MESH_CACHE")
+
+    if hasattr(modifier, "cache_format"):
+        modifier.cache_format = "MDD"
+
+    path_value = mdd_filepath
+    relpath = getattr(getattr(bpy, "path", None), "relpath", None)
+    if callable(relpath):
+        path_value = relpath(mdd_filepath)
+
+    if hasattr(modifier, "filepath"):
+        modifier.filepath = path_value
+    if hasattr(modifier, "frame_start"):
+        modifier.frame_start = frame_start
+    if hasattr(modifier, "frame_scale"):
+        modifier.frame_scale = 1.0
+    if hasattr(modifier, "eval_factor"):
+        modifier.eval_factor = 1.0
+
+    return modifier
+
+
+def export_shape_key_animation_to_mdd(obj, cache_dir, frame_start, frame_end):
+    """Bake ``obj`` shape-key deformation to an external MDD file and attach it."""
+    if not has_shape_key_animation(obj):
+        return None
+
+    frame_times, frame_vertex_positions = sample_mesh_deformation_frames(
+        obj,
+        frame_start,
+        frame_end,
+    )
+    cache_name = f"{sanitize_cache_name(obj.name)}.mdd"
+    cache_path = os.path.join(cache_dir, cache_name)
+    write_mdd_file(cache_path, frame_times, frame_vertex_positions)
+    clear_object_shape_keys(obj)
+    attach_mdd_mesh_cache_modifier(obj, cache_path, frame_start)
+    print(f"✅ Exported MDD mesh cache for {obj.name}: {cache_path}")
+    return cache_path
+
+
+def export_body_shape_key_animations_to_mdd(
+    vehicle_names,
+    source_fbx_path,
+    imported_objects=None,
+    imported_pointer_set=None,
+):
+    """Convert body mesh shape-key animation to external MDD files."""
+    scene = bpy.context.scene
+    cache_dir = create_mesh_cache_directory(source_fbx_path)
+    exported = []
+
+    for vehicle_name in vehicle_names:
+        for obj in get_body_mesh_objects_for_vehicle(
+            vehicle_name,
+            imported_objects,
+            imported_pointer_set,
+        ):
+            cache_path = export_shape_key_animation_to_mdd(
+                obj,
+                cache_dir,
+                scene.frame_start,
+                scene.frame_end,
+            )
+            if cache_path:
+                exported.append((obj.name, cache_path))
+
+    if exported:
+        print(f"✅ Exported {len(exported)} body mesh MDD cache file(s).")
+    else:
+        print("ℹ️ No body mesh shape-key animation found for MDD export.")
+
+    return exported
+
+
+def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported_pointer_set=None):
+    """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
+
+    for vehicle_name in vehicle_names:
+        clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
+        mesh_objects = get_body_mesh_objects_for_vehicle(
+            vehicle_name,
+            imported_objects,
+            imported_pointer_set,
+        )
 
         if len(mesh_objects) <= 1:
             if mesh_objects:
@@ -1160,6 +1270,52 @@ def materials_are_equal(mat1, mat2, tol=1e-4):
                     return rough_val, spec_val
         return None, None
 
+    def node_tree_signature(mat):
+        node_tree = getattr(mat, "node_tree", None)
+        if not node_tree:
+            return None
+
+        signature = []
+        for node in node_tree.nodes:
+            if getattr(node, "type", None) == 'BSDF_PRINCIPLED':
+                input_signature = []
+                for input_name, socket in sorted(getattr(node, "inputs", {}).items()):
+                    links = getattr(socket, "links", []) or []
+                    if links:
+                        link_signature = []
+                        for link in links:
+                            from_node = getattr(link, "from_node", None)
+                            image = getattr(from_node, "image", None)
+                            link_signature.append((
+                                getattr(from_node, "type", None),
+                                getattr(image, "filepath", None) if image else None,
+                                getattr(from_node, "interpolation", None),
+                                getattr(from_node, "projection", None),
+                                getattr(from_node, "extension", None),
+                                getattr(getattr(link, "from_socket", None), "name", None),
+                            ))
+                        input_signature.append((input_name, tuple(link_signature)))
+                    else:
+                        value = getattr(socket, "default_value", None)
+                        if isinstance(value, (list, tuple)):
+                            value = tuple(value)
+                        input_signature.append((input_name, value))
+                signature.append((getattr(node, "type", None), tuple(input_signature)))
+            elif getattr(node, "type", None) == 'TEX_IMAGE':
+                image = getattr(node, "image", None)
+                signature.append((
+                    getattr(node, "type", None),
+                    getattr(image, "filepath", None) if image else None,
+                    getattr(node, "interpolation", None),
+                    getattr(node, "projection", None),
+                    getattr(node, "extension", None),
+                ))
+
+        return tuple(signature)
+
+    if node_tree_signature(mat1) != node_tree_signature(mat2):
+        return False
+
     r1, s1 = principled_params(mat1)
     r2, s2 = principled_params(mat2)
 
@@ -1233,10 +1389,23 @@ def collapse_material_slots(obj):
     if obj.type != 'MESH':
         return
 
-    mesh = obj.data
+    mesh = getattr(obj, "data", None)
     slots = obj.material_slots
 
     if not slots:
+        return
+
+    if mesh is None or not hasattr(mesh, "polygons"):
+        seen_material_names = set()
+        for i in reversed(range(len(slots))):
+            mat = slots[i].material
+            mat_name = getattr(mat, "name", None)
+            if mat is None or mat_name in seen_material_names:
+                if mat is not None and hasattr(mat, "users"):
+                    mat.users -= 1
+                del slots[i]
+            else:
+                seen_material_names.add(mat_name)
         return
 
     # Build map: material -> first slot index
@@ -1305,7 +1474,11 @@ def set_new_materials_metallic_zero(new_materials):
             if metallic_input is not None:
                 metallic_input.default_value = 0.0
     
-def import_fbx(context, fbx_file_path):
+def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storage="SHAPE_KEYS"):
+    deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
+    if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
+        deformation_storage = "SHAPE_KEYS"
+
     # Store the current frame rate settings
     original_fps = context.scene.render.fps
     original_fps_base = context.scene.render.fps_base
@@ -1701,11 +1874,22 @@ def import_fbx(context, fbx_file_path):
             remove_from_all_collections(obj)
             target_collection.objects.link(obj)
                     
-        # Join Mesh objects separately for each vehicle
-        join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
+        if merge_body_mesh:
+            # Join body mesh objects separately for each vehicle only when requested.
+            join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
+        else:
+            print("ℹ️ Body mesh merge disabled; imported body geometry remains split for faster import.")
 
-        # Rebuild joined shape-key meshes with a smaller self-contained sample set
-        reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
+        if deformation_storage == "MDD":
+            export_body_shape_key_animations_to_mdd(
+                vehicle_names,
+                fbx_file_path,
+                imported_objects,
+                imported_pointer_set,
+            )
+        elif merge_body_mesh:
+            # Rebuild joined shape-key meshes with a smaller self-contained sample set.
+            reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
 
         # Replace duplicate materials
         merge_duplicate_materials_per_vehicle(vehicle_names)
@@ -1726,6 +1910,8 @@ def import_fbx(context, fbx_file_path):
     
 def load(context,
          filepath,
+         merge_body_mesh=False,
+         deformation_storage="SHAPE_KEYS",
          ):
 
 
@@ -1735,7 +1921,9 @@ def load(context,
     dirname = os.path.dirname(filepath)        
 
     import_fbx(context, 
-            filepath, 
+            filepath,
+            merge_body_mesh=merge_body_mesh,
+            deformation_storage=deformation_storage,
             )
 
     return {'FINISHED'}

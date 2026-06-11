@@ -41,7 +41,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        return operator.bl_idname == "IMPORT_FBX_OT_fbx"
+        return operator and operator.bl_idname == "IMPORT_HVE_OT_fbx"
 
     def draw(self, context):
         layout = self.layout
@@ -51,6 +51,8 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
+        layout.prop(operator, "merge_body_mesh")
+        layout.prop(operator, "deformation_storage")
 
 
 
@@ -68,16 +70,41 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             maxlen=255,  # Max internal buffer length, longer would be clamped.
             )
 
+    merge_body_mesh: BoolProperty(
+            name="Merge Body Mesh",
+            description="Join each vehicle's body mesh parts into one object after import",
+            default=False,
+            )
+
+    deformation_storage: EnumProperty(
+            name="Deformation Storage",
+            description="How imported body mesh deformation should be stored",
+            items=(
+                ('SHAPE_KEYS', "Shape Keys", "Keep deformation in Blender shape keys; merged meshes are rebuilt with reduced sampled shape keys"),
+                ('MDD', "External MDD File", "Bake deformation to external .mdd point-cache files and attach Mesh Cache modifiers"),
+            ),
+            default='SHAPE_KEYS',
+            )
+
 
     def execute(self, context):
         from . import fbx_importer
 
         from mathutils import Matrix
 
-        return fbx_importer.load(context, self.filepath)
+        return fbx_importer.load(
+            context,
+            self.filepath,
+            merge_body_mesh=self.merge_body_mesh,
+            deformation_storage=self.deformation_storage,
+        )
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.prop(self, "merge_body_mesh")
+        layout.prop(self, "deformation_storage")
 
 
 
