@@ -15,6 +15,7 @@ for node in module_ast.body:
     if isinstance(node, ast.FunctionDef) and node.name in {
         "sanitize_cache_name",
         "write_mdd_file",
+        "has_shape_key_animation",
     }:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
@@ -22,6 +23,7 @@ for node in module_ast.body:
 
 sanitize_cache_name = ns["sanitize_cache_name"]
 write_mdd_file = ns["write_mdd_file"]
+has_shape_key_animation = ns["has_shape_key_animation"]
 
 
 def test_sanitize_cache_name_replaces_unsafe_characters():
@@ -80,3 +82,25 @@ def test_write_mdd_file_rejects_inconsistent_vertex_counts():
             assert "vertex count" in str(exc).lower()
         else:
             raise AssertionError("Expected write_mdd_file to reject mismatched samples.")
+
+
+def test_has_shape_key_animation_detects_non_basis_keys():
+    class KeyBlock:
+        def __init__(self, name):
+            self.name = name
+
+    class ShapeKeys:
+        def __init__(self, names):
+            self.key_blocks = [KeyBlock(name) for name in names]
+
+    class Mesh:
+        def __init__(self, names):
+            self.shape_keys = ShapeKeys(names) if names is not None else None
+
+    class Obj:
+        def __init__(self, names):
+            self.data = Mesh(names)
+
+    assert has_shape_key_animation(Obj(["Basis", "Smile"])) is True
+    assert has_shape_key_animation(Obj(["Basis"])) is False
+    assert has_shape_key_animation(Obj(None)) is False

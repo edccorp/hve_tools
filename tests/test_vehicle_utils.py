@@ -19,6 +19,8 @@ for node in module_ast.body:
         "get_root_vehicle_names",
         "belongs_to_vehicle",
         "join_mesh_objects_per_vehicle",
+        "get_body_mesh_objects_for_vehicle",
+        "object_pointer",
         "normalize_name",
         "copy_animated_rotation",
         "get_action_fcurve_collection",

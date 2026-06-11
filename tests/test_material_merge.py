@@ -27,6 +27,7 @@ for node in module_ast.body:
         "replace_materials_for_vehicle",
         "remove_unused_materials",
         "merge_duplicate_materials_per_vehicle",
+        "collapse_material_slots",
         "belongs_to_vehicle",
         "set_new_materials_metallic_zero",
     }:
