@@ -68,6 +68,16 @@ REQUIRED_MOTION_VARIABLES = {
     ("KinematicOut", "VehKinematicYaw"),
 }
 
+REQUIRED_WHEEL_VARIABLES = {
+    "VehWheelx",
+    "VehWheely",
+    "VehWheelz",
+    "VehWheelSpin",
+    "VehWheelGamma",
+    "VehWheelSteerDelta",
+    "VehWheelDelta",
+}
+
 
 def make_variable_column_id(vehicle_name, object_name_variable):
     return f"{vehicle_name}||{object_name_variable}"
@@ -95,13 +105,16 @@ def split_variable_name(object_name_variable):
 
 def is_required_motion_variable(object_name_variable):
     object_name, _group_name, variable = split_variable_name(object_name_variable)
-    return (object_name, variable) in REQUIRED_MOTION_VARIABLES
+    return (
+        (object_name, variable) in REQUIRED_MOTION_VARIABLES
+        or variable in REQUIRED_WHEEL_VARIABLES
+    )
 
 
 def inspect_variable_columns(filepath):
     """Return VariableOutput column metadata without importing the animation data."""
     variables = []
-    if not filepath or not os.path.exists(filepath):
+    if not filepath or not os.path.isfile(filepath):
         return variables
 
     with open(filepath, newline="") as csvfile:
