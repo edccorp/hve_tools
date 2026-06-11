@@ -62,3 +62,11 @@ def test_fbx_importer_exposes_body_merge_and_deformation_storage_options():
     assert '(\'MDD\', "External MDD File"' in fbx_ui_source
     assert "merge_body_mesh=merge_body_mesh" in fbx_importer_source
     assert "export_body_shape_key_animations_to_mdd" in fbx_importer_source
+
+
+def test_fbx_importer_file_browser_options_are_drawn_only_by_panel():
+    assert 'layout.prop(operator, "merge_body_mesh")' in fbx_ui_source
+    assert 'layout.prop(operator, "deformation_storage")' in fbx_ui_source
+    assert 'def draw(self, context):\n        pass' in fbx_ui_source
+    assert 'layout.prop(self, "merge_body_mesh")' not in fbx_ui_source
+    assert 'layout.prop(self, "deformation_storage")' not in fbx_ui_source
