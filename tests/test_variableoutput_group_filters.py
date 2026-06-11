@@ -55,3 +55,18 @@ def test_variableoutput_creation_toggles_are_exposed_and_passed_to_importer():
     assert "if create_velocities and 'VehKinematicVTotal'" in importer_source
     assert "if create_accelerations and 'VehKinematicAccTotal'" in importer_source
     assert "if create_forces and 'VehKineticFxImpact'" in importer_source
+
+
+def test_add_vehicle_creation_toggle_defaults_are_import_safe():
+    add_vehicle_signature = importer_source[
+        importer_source.index("def add_vehicle(") : importer_source.index(
+            "):", importer_source.index("def add_vehicle(")
+        )
+    ]
+
+    assert "create_tire_paths=create_tire_paths" not in add_vehicle_signature
+    assert "create_tire_paths=True" in add_vehicle_signature
+    assert "create_paths=True" in add_vehicle_signature
+    assert "create_velocities=True" in add_vehicle_signature
+    assert "create_accelerations=True" in add_vehicle_signature
+    assert "create_forces=True" in add_vehicle_signature
