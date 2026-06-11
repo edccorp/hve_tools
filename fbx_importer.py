@@ -75,10 +75,29 @@ def normalize_root_name(name: str) -> str:
     return name.split(":")[0]
 
 
+def is_valid_blender_object(obj):
+    """Return ``False`` when a Blender object reference has been removed.
+
+    Blender keeps Python wrappers for removed RNA objects alive, but accessing
+    properties on those wrappers raises ``ReferenceError``. Import bookkeeping
+    lists can contain those stale wrappers after helper objects are deleted, so
+    callers should filter them before reading names, types, parents, or
+    animation data.
+    """
+    try:
+        # Accessing ``name`` is enough to validate the StructRNA wrapper.
+        obj.name
+    except ReferenceError:
+        return False
+    return True
+
+
 def get_root_vehicle_names(imported_objects):
     """Collect unique top-level empty names representing vehicles."""
     vehicle_names = []
     for obj in imported_objects:
+        if not is_valid_blender_object(obj):
+            continue
         if obj.type == "EMPTY" and obj.parent is None:
             root = normalize_root_name(obj.name)
             if root not in vehicle_names:
@@ -384,7 +403,7 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_ob
     Missing axes are skipped.
     """
 
-    if not parent or parent.type != 'EMPTY':
+    if not parent or not is_valid_blender_object(parent) or parent.type != 'EMPTY':
         print("❌ Error: Please select an empty object as the target parent.")
         return
 
@@ -395,7 +414,8 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_ob
     if debug:
         print(f"🛠 Normalized parent name: '{norm_parent}'")
 
-    candidates = list(candidate_objects) if candidate_objects is not None else list(bpy.context.selected_objects)
+    raw_candidates = candidate_objects if candidate_objects is not None else bpy.context.selected_objects
+    candidates = [obj for obj in raw_candidates if is_valid_blender_object(obj)]
 
     # Get helper objects and filter by conditions
     selected_objects = [
@@ -506,9 +526,16 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_ob
 
     #print(f"🎯 Finished replacing animated rotations for '{parent.name}'")
 
-    # 🚀 DELETE the source objects after copying animation
+    # 🚀 DELETE the source objects after copying animation and remove them from
+    # the import bookkeeping list so later passes don't touch stale StructRNA
+    # wrappers.
     for source in sources.values():
         if source:
+            if isinstance(candidate_objects, list):
+                try:
+                    candidate_objects.remove(source)
+                except ValueError:
+                    pass
             bpy.data.objects.remove(source, do_unlink=True)
 
 def remove_from_all_collections(obj):
@@ -1805,8 +1832,9 @@ def import_fbx(
             exclude_keywords += ["objects", "geometry"]
             include_keywords = ["wheel"]
 
-            # Loop through imported objects
-            for obj in imported_objects:
+            # Loop through a snapshot because copy_animated_rotation removes
+            # consumed helper sources from imported_objects.
+            for obj in list(imported_objects):
                 try:
                     name = obj.name
                 except ReferenceError:

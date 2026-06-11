@@ -17,6 +17,7 @@ for node in module_ast.body:
         "_iter_layered_fcurve_collections",
         "normalize_root_name",
         "get_root_vehicle_names",
+        "is_valid_blender_object",
         "belongs_to_vehicle",
         "join_mesh_objects_per_vehicle",
         "get_body_mesh_objects_for_vehicle",
@@ -44,6 +45,7 @@ belongs_to_vehicle = ns["belongs_to_vehicle"]
 join_mesh_objects_per_vehicle = ns["join_mesh_objects_per_vehicle"]
 normalize_name = ns["normalize_name"]
 copy_animated_rotation = ns["copy_animated_rotation"]
+is_valid_blender_object = ns["is_valid_blender_object"]
 adjust_animation = ns["adjust_animation"]
 offset_selected_animation = ns["offset_selected_animation"]
 ROTATION_AXIS_KEYWORDS = ns["ROTATION_AXIS_KEYWORDS"]
@@ -89,6 +91,56 @@ def test_belongs_to_vehicle_wheel_descriptors():
     for token in ['Wheel', 'Tire', 'Geometry', 'Steering']:
         name = f'Wheel_FL: Heil Rear {token}'
         assert belongs_to_vehicle(name, 'Heil_Rear')
+
+
+def test_get_root_vehicle_names_skips_removed_blender_objects():
+    class RemovedObj:
+        @property
+        def name(self):
+            raise ReferenceError("StructRNA of type Object has been removed")
+
+    root = Obj('Toyota')
+
+    assert get_root_vehicle_names([RemovedObj(), root]) == ['Toyota']
+
+
+def test_copy_animated_rotation_skips_removed_candidates_and_updates_candidate_list():
+    class Anim:
+        def __init__(self):
+            self.action = type('action', (), {'fcurves': []})()
+
+    class RemovedObj:
+        @property
+        def name(self):
+            raise ReferenceError("StructRNA of type Object has been removed")
+
+    parent = Obj('Wheel: Toyota')
+    parent.animation_data = Anim()
+
+    steering = Obj('Wheel: Toyota: Steering Objects')
+    steering.animation_data = Anim()
+    removed_candidate = RemovedObj()
+    candidates = [parent, removed_candidate, steering]
+    removed = []
+
+    class Objects:
+        def remove(self, obj, do_unlink=True):
+            removed.append(obj)
+
+    bpy_stub = type(
+        'bpy',
+        (),
+        {
+            'context': type('context', (), {'selected_objects': candidates})(),
+            'data': type('data', (), {'objects': Objects()})(),
+        },
+    )()
+
+    ns.update({'bpy': bpy_stub})
+    copy_animated_rotation(parent, candidate_objects=candidates)
+
+    assert removed == [steering]
+    assert candidates == [parent, removed_candidate]
 
 
 def test_join_mesh_objects_per_vehicle_with_colon_segments():
