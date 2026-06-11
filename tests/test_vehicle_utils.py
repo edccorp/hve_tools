@@ -143,6 +143,38 @@ def test_copy_animated_rotation_skips_removed_candidates_and_updates_candidate_l
     assert candidates == [parent, removed_candidate]
 
 
+def test_copy_animated_rotation_consumes_plain_axis_helpers_without_objects_suffix():
+    class Anim:
+        def __init__(self):
+            self.action = type('action', (), {'fcurves': []})()
+
+    parent = Obj('Wheel: Axle 1: Left: Ford')
+    parent.animation_data = Anim()
+
+    camber = Obj('Wheel: Axle 1: Left: Ford Camber')
+    camber.animation_data = Anim()
+    candidates = [parent, camber]
+    removed = []
+
+    class Objects:
+        def remove(self, obj, do_unlink=True):
+            removed.append(obj)
+
+    bpy_stub = type(
+        'bpy',
+        (),
+        {
+            'context': type('context', (), {'selected_objects': candidates})(),
+            'data': type('data', (), {'objects': Objects()})(),
+        },
+    )()
+
+    ns.update({'bpy': bpy_stub})
+    copy_animated_rotation(parent, candidate_objects=candidates)
+
+    assert removed == [camber]
+    assert candidates == [parent]
+
 def test_join_mesh_objects_per_vehicle_with_colon_segments():
     class Obj:
         def __init__(self, name, type='MESH'):

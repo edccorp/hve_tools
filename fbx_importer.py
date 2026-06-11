@@ -410,32 +410,30 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_ob
     axis_keywords = axis_keywords or ROTATION_AXIS_KEYWORDS
 
     norm_parent = normalize_name(parent.name)
-    vehicle_id = parent.name.split(":")[-1].strip()
     if debug:
         print(f"🛠 Normalized parent name: '{norm_parent}'")
 
     raw_candidates = candidate_objects if candidate_objects is not None else bpy.context.selected_objects
     candidates = [obj for obj in raw_candidates if is_valid_blender_object(obj)]
 
-    # Get helper objects and filter by conditions
-    selected_objects = [
+    # Parent legacy helper groups when present. Some HVE FBX files name
+    # rotation carriers simply as "... Camber"/"... Steering" rather than
+    # "... Camber Objects". Do not bail out when no "Objects" helpers exist;
+    # the broader source-selection pass below still needs to consume those
+    # axis helpers so they do not remain as origin empties in the import.
+    parent_helper_objects = [
         obj
         for obj in candidates
         if obj != parent
         and norm_parent in normalize_name(obj.name)
         and "objects" in obj.name.lower()
-        and belongs_to_vehicle(obj.name, vehicle_id)
     ]
 
-    if not selected_objects:
-        print(f"❌ No matching objects found to parent under '{parent.name}'.")
-        return
+    # Set parent for filtered legacy helper groups
+    for obj in parent_helper_objects:
+        obj.parent = parent
 
-    # Set parent for filtered objects
-    for obj in selected_objects:
-        obj.parent = parent  # Set the selected objects' parent
-
-    #print(f"✅ Parented {len(selected_objects)} objects to '{parent.name}': {[obj.name for obj in selected_objects]}")
+    #print(f"✅ Parented {len(parent_helper_objects)} objects to '{parent.name}': {[obj.name for obj in parent_helper_objects]}")
 
     # Get helper candidates (excluding the parent) and only keep objects that contain the parent's name
     selected_objects = [
@@ -443,8 +441,11 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_ob
         for obj in candidates
         if obj != parent
         and norm_parent in normalize_name(obj.name)
-        and belongs_to_vehicle(obj.name, vehicle_id)
     ]
+    if not selected_objects:
+        print(f"❌ No matching objects found to parent under '{parent.name}'.")
+        return
+
     if debug:
         print(f"🛠 Candidate helper objects: {[obj.name for obj in selected_objects]}")
 
