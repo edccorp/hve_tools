@@ -2,6 +2,8 @@ import bpy
 import csv
 import os
 import math
+import time
+from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
     "name": "HVE Motion Import",
@@ -9,6 +11,126 @@ bl_info = {
     "author": "EDC",
     "blender": (3, 1, 0),
 }
+
+
+class ImportTimingReport:
+    """Collect and print coarse timings for the HVE VariableOutput import pipeline."""
+
+    def __init__(self):
+        self._entries = []
+        self._started_at = time.perf_counter()
+
+    @contextmanager
+    def phase(self, name):
+        started_at = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.finish_phase((name, started_at))
+
+    def start_phase(self, name):
+        return name, time.perf_counter()
+
+    def finish_phase(self, phase):
+        name, started_at = phase
+        elapsed = time.perf_counter() - started_at
+        self._entries.append((name, elapsed))
+        print(f"⏱️ HVE VariableOutput timing | {name}: {elapsed:.2f}s")
+
+    def print_summary(self):
+        total_elapsed = time.perf_counter() - self._started_at
+        if not self._entries:
+            print(f"⏱️ HVE VariableOutput timing | total: {total_elapsed:.2f}s")
+            return
+
+        print("⏱️ HVE VariableOutput timing summary:")
+        for name, elapsed in sorted(self._entries, key=lambda entry: entry[1], reverse=True):
+            percent = (elapsed / total_elapsed * 100.0) if total_elapsed else 0.0
+            print(f"   {elapsed:7.2f}s ({percent:5.1f}%)  {name}")
+        print(f"   {total_elapsed:7.2f}s          total")
+
+
+REQUIRED_MOTION_VARIABLES = {
+    ("KinematicOut", "VehKinematicX"),
+    ("KinematicOut", "VehKinematicY"),
+    ("KinematicOut", "VehKinematicZ"),
+    ("KinematicOut", "VehKinematicRoll"),
+    ("KinematicOut", "VehKinematicPitch"),
+    ("KinematicOut", "VehKinematicYaw"),
+}
+
+
+def make_variable_column_id(vehicle_name, object_name_variable):
+    return f"{vehicle_name}||{object_name_variable}"
+
+
+def split_variable_name(object_name_variable):
+    if ":" in object_name_variable:
+        object_name = object_name_variable[:object_name_variable.rfind(":")]
+        group_name = object_name_variable.split(":")[0]
+        variable = object_name_variable.split(":")[-1]
+    else:
+        object_name = object_name_variable
+        group_name = object_name_variable
+        variable = object_name_variable
+    return object_name, group_name, variable
+
+
+def is_required_motion_variable(object_name_variable):
+    object_name, _group_name, variable = split_variable_name(object_name_variable)
+    return (object_name, variable) in REQUIRED_MOTION_VARIABLES
+
+
+def inspect_variable_columns(filepath):
+    """Return VariableOutput column metadata without importing the animation data."""
+    variables = []
+    if not filepath or not os.path.exists(filepath):
+        return variables
+
+    with open(filepath, newline="") as csvfile:
+        reader = csv.reader(csvfile, delimiter=',')
+        header_rows = []
+        for _ in range(4):
+            try:
+                row = next(reader)
+            except StopIteration:
+                break
+            header_rows.append([cell.strip(' ') for cell in row])
+
+    if len(header_rows) < 2:
+        return variables
+
+    vehicle_row = header_rows[0][1:]
+    variable_row = header_rows[1][1:]
+    translated_row = header_rows[2][1:] if len(header_rows) > 2 else []
+    unit_row = header_rows[3][1:] if len(header_rows) > 3 else []
+
+    for index, object_name_variable in enumerate(variable_row):
+        vehicle_name = vehicle_row[index] if index < len(vehicle_row) else ""
+        translated_name = translated_row[index] if index < len(translated_row) else object_name_variable
+        unit = unit_row[index] if index < len(unit_row) else ""
+        object_name, group_name, variable = split_variable_name(object_name_variable)
+        variables.append({
+            "column_index": index,
+            "id": make_variable_column_id(vehicle_name, object_name_variable),
+            "vehicle_name": vehicle_name,
+            "object_name": object_name,
+            "group_name": group_name,
+            "variable": variable,
+            "source_name": object_name_variable,
+            "translated_name": translated_name,
+            "unit": unit,
+            "required": is_required_motion_variable(object_name_variable),
+        })
+
+    return variables
+
+
+def parse_disabled_variable_ids(disabled_variables):
+    if not disabled_variables:
+        return set()
+    return {item for item in disabled_variables.split("\n") if item}
+
 def remove_from_all_collections(obj):
     """Remove an object from all Blender collections before reassigning it."""
     if not obj or obj.name not in bpy.data.objects:
@@ -125,11 +247,12 @@ def parent_keep_transform(child,parent):
         #child.matrix_world = matrix_world
     
     
-def read_some_data(context, filepath, scale_factor, save_separate_csv):
+def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, timing_report=None):
 
     """Do something with the selected file(s)."""
     filename = bpy.path.basename(filepath).split('.')[0] 
     # Format: {vehicle_name_0:{object_name_0: {variable_0:[data],variable_1:[data]...},objectname_1: {variable_0[data]...}},vehicle_name_1...
+    disabled_variable_ids = parse_disabled_variable_ids(disabled_variables)
     vehicles = {}
     name_mapping = {}  # Dictionary to map object_name to object_name_trans
     group_name_mapping = {}  # Dictionary to map object_name to object_name_trans
@@ -140,7 +263,7 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
         # strip all the white space
         for row in reader:
             row = [x.strip(' ') for x in row]
-            
+
             try:
                 time.append(float(row[0]))
             except ValueError:
@@ -183,7 +306,13 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
     # Column 1 is time in seconds
 
     # Scan the first row for vehicles
+    skipped_variable_count = 0
     for j, vehicle_name in enumerate(data[0]):
+        object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
+        variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
+        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
+            skipped_variable_count += 1
+            continue
         # Add the vehicle name if not in the dictionary
         if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
         object_name_variable = data[1][j]
@@ -224,6 +353,9 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
                 value = 0.0
             vehicles[vehicle_name][object_name][variable].append(value)
             
+    if skipped_variable_count:
+        print(f"Skipped {skipped_variable_count} disabled VariableOutput column(s).")
+
     if not vehicles:
         print("No vehicle data found in CSV.")
         return
@@ -233,7 +365,11 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
         return  # Stops execution without closing Blender
     for vehicle_name in vehicles.keys():
         if vehicle_name != '':
-            add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
+            if timing_report:
+                with timing_report.phase(f"build vehicle data for {vehicle_name}"):
+                    add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
+            else:
+                add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
         
         if save_separate_csv == True:
             ##Export data to separate CSV files
@@ -244,6 +380,10 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
             translated_headers = []
             for j, vehicle_col in enumerate(data[0]):
                 if vehicle_col == vehicle_name:
+                    object_name_variable = data[1][j] if j < len(data[1]) else ""
+                    variable_id = make_variable_column_id(vehicle_col, object_name_variable)
+                    if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                        continue
                     translated_name = data[2][j]  # Object name translated (Row 3)
                     unit = data[3][j] if j < len(data[3]) else ""  # Units (Row 4)
                     full_header = f"{translated_name} {unit}" if unit else translated_name
@@ -264,6 +404,9 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv):
                     for j, vehicle_col in enumerate(data[0]):
                         if vehicle_col == vehicle_name:
                             object_name_variable = data[1][j]
+                            variable_id = make_variable_column_id(vehicle_col, object_name_variable)
+                            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                                continue
                             object_name = object_name_variable[:object_name_variable.rfind(":")]  
                             variable = object_name_variable.split(":")[-1]  
                             try:
@@ -1773,20 +1916,26 @@ def load(context,
          filepath,
          scale_unit,
          scale_factor,
-         save_separate_csv
+         save_separate_csv,
+         disabled_variables=""
          ):
 
+    timing_report = ImportTimingReport()
+    try:
+        with timing_report.phase("prepare Blender scene"):
+            if bpy.ops.object.mode_set.poll():
+                bpy.ops.object.mode_set(mode='OBJECT')
 
-    if bpy.ops.object.mode_set.poll():
-        bpy.ops.object.mode_set(mode='OBJECT') 
-        
-    dirname = os.path.dirname(filepath)        
+        with timing_report.phase("read VariableOutput CSV and build import data"):
+            result = read_some_data(context,
+                    filepath,
+                    scale_factor,
+                    save_separate_csv,
+                    disabled_variables=disabled_variables,
+                    timing_report=timing_report
+                    )
+    finally:
+        timing_report.print_summary()
 
-    read_some_data(context, 
-            filepath, 
-            scale_factor,
-            save_separate_csv
-            )
-
-    return {'FINISHED'}
+    return result or {'FINISHED'}
 
