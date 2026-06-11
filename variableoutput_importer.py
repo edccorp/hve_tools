@@ -50,6 +50,15 @@ class ImportTimingReport:
         print(f"   {total_elapsed:7.2f}s          total")
 
 
+@contextmanager
+def timed_phase(timing_report, name):
+    if timing_report:
+        with timing_report.phase(name):
+            yield
+    else:
+        yield
+
+
 REQUIRED_MOTION_VARIABLES = {
     ("KinematicOut", "VehKinematicX"),
     ("KinematicOut", "VehKinematicY"),
@@ -256,46 +265,47 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
     vehicles = {}
     name_mapping = {}  # Dictionary to map object_name to object_name_trans
     group_name_mapping = {}  # Dictionary to map object_name to object_name_trans
-    with open(filepath) as csvfile:
-        reader = csv.reader(csvfile, delimiter=',')
-        data = []
-        time = []
-        # strip all the white space
-        for row in reader:
-            row = [x.strip(' ') for x in row]
+    with timed_phase(timing_report, "read VariableOutput CSV"):
+        with open(filepath) as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            data = []
+            time = []
+            # strip all the white space
+            for row in reader:
+                row = [x.strip(' ') for x in row]
 
-            try:
-                time.append(float(row[0]))
-            except ValueError:
-                # Handle non-numeric timestamps (e.g., header rows)
-                time.append(row[0])
-            data.append(row[1:])
-   
-   #Set the frame rate
-    if len(time) < 6:
-        print("Not enough data rows to determine frame rate.")
-        return
+                try:
+                    time.append(float(row[0]))
+                except ValueError:
+                    # Handle non-numeric timestamps (e.g., header rows)
+                    time.append(row[0])
+                data.append(row[1:])
 
-    try:
-        time_step = float(time[5]) - float(time[4])
-    except (TypeError, ValueError):
-        print("Unable to determine frame rate from the CSV timestamps.")
-        return
+    with timed_phase(timing_report, "configure VariableOutput timeline"):
+        # Set the frame rate
+        if len(time) < 6:
+            print("Not enough data rows to determine frame rate.")
+            return
 
-    if time_step == 0:
-        print("Invalid timestamp data: time step cannot be zero.")
-        return
+        try:
+            time_step = float(time[5]) - float(time[4])
+        except (TypeError, ValueError):
+            print("Unable to determine frame rate from the CSV timestamps.")
+            return
 
-    bpy.context.scene.render.fps = int(1.0/time_step)
-    # Setup timeline
-    numframes = len(time[4:])
-    context.scene.frame_start = 0
-    
+        if time_step == 0:
+            print("Invalid timestamp data: time step cannot be zero.")
+            return
 
-    # Get the current frame end in Blender's timeline
-    current_max_frame = context.scene.frame_end   
-    if numframes - 1 > current_max_frame:
-        context.scene.frame_end = numframes-1
+        bpy.context.scene.render.fps = int(1.0/time_step)
+        # Setup timeline
+        numframes = len(time[4:])
+        context.scene.frame_start = 0
+
+        # Get the current frame end in Blender's timeline
+        current_max_frame = context.scene.frame_end
+        if numframes - 1 > current_max_frame:
+            context.scene.frame_end = numframes-1
         
     # Line 0: Vehicle names
     # Line 1: Variable names
@@ -305,54 +315,55 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
     
     # Column 1 is time in seconds
 
-    # Scan the first row for vehicles
-    skipped_variable_count = 0
-    for j, vehicle_name in enumerate(data[0]):
-        object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
-        variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
-        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
-            skipped_variable_count += 1
-            continue
-        # Add the vehicle name if not in the dictionary
-        if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
-        object_name_variable = data[1][j]
-        object_name_translated = data[2][j]
-        
-        # Ensure object_name_variable contains ":"
-        if ":" in object_name_variable:
-            object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
-            group_name = object_name_variable.split(":")[0]  # Everything before the first colon
-            variable = object_name_variable.split(":")[-1]  # Everything after the last colon
-        else:
-            object_name = object_name_variable   
-            group_name =  object_name_variable
-            variable = object_name_variable  # Use the entire string as the variable
+    with timed_phase(timing_report, "build VariableOutput data arrays"):
+        # Scan the first row for vehicles
+        skipped_variable_count = 0
+        for j, vehicle_name in enumerate(data[0]):
+            object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
+            variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
+            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
+                skipped_variable_count += 1
+                continue
+            # Add the vehicle name if not in the dictionary
+            if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
+            object_name_variable = data[1][j]
+            object_name_translated = data[2][j]
 
-        # Ensure object_name_translated contains ":"
-        if ":" in object_name_translated:
-            object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
-            variable_name_trans = object_name_translated.split(":")[-1].lstrip()
-        else:
-            object_name_trans = None  # Indicate that there is no object name
-            variable_name_trans = object_name_translated  # Use the entire string as the variable name
+            # Ensure object_name_variable contains ":"
+            if ":" in object_name_variable:
+                object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
+                group_name = object_name_variable.split(":")[0]  # Everything before the first colon
+                variable = object_name_variable.split(":")[-1]  # Everything after the last colon
+            else:
+                object_name = object_name_variable
+                group_name =  object_name_variable
+                variable = object_name_variable  # Use the entire string as the variable
 
-        # Update name mapping
-        if object_name_trans is not None:
-            name_mapping[object_name] = object_name_trans  # Only map object names if they exist
-        name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
-        name_mapping[variable] = variable_name_trans
+            # Ensure object_name_translated contains ":"
+            if ":" in object_name_translated:
+                object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
+                variable_name_trans = object_name_translated.split(":")[-1].lstrip()
+            else:
+                object_name_trans = None  # Indicate that there is no object name
+                variable_name_trans = object_name_translated  # Use the entire string as the variable name
 
-        # Add the Object name if not in dictionary 
-        if object_name not in vehicles[vehicle_name].keys():
-            vehicles[vehicle_name].update({object_name:{}})
-        vehicles[vehicle_name][object_name].update({variable:[]})
-        for row in (data[4:]):
-            try:
-                value = float(row[j])
-            except (IndexError, TypeError, ValueError):
-                value = 0.0
-            vehicles[vehicle_name][object_name][variable].append(value)
-            
+            # Update name mapping
+            if object_name_trans is not None:
+                name_mapping[object_name] = object_name_trans  # Only map object names if they exist
+            name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
+            name_mapping[variable] = variable_name_trans
+
+            # Add the Object name if not in dictionary
+            if object_name not in vehicles[vehicle_name].keys():
+                vehicles[vehicle_name].update({object_name:{}})
+            vehicles[vehicle_name][object_name].update({variable:[]})
+            for row in (data[4:]):
+                try:
+                    value = float(row[j])
+                except (IndexError, TypeError, ValueError):
+                    value = 0.0
+                vehicles[vehicle_name][object_name][variable].append(value)
+
     if skipped_variable_count:
         print(f"Skipped {skipped_variable_count} disabled VariableOutput column(s).")
 
@@ -372,51 +383,53 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
                 add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
         
         if save_separate_csv == True:
-            ##Export data to separate CSV files
-            dirname = os.path.dirname(filepath)
-            csv_path = os.path.join(dirname, filename + "_" +vehicle_name + '.csv')
-            time_decimals=3
-            # Extract relevant translated headers for the current vehicle
-            translated_headers = []
-            for j, vehicle_col in enumerate(data[0]):
-                if vehicle_col == vehicle_name:
-                    object_name_variable = data[1][j] if j < len(data[1]) else ""
-                    variable_id = make_variable_column_id(vehicle_col, object_name_variable)
-                    if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
-                        continue
-                    translated_name = data[2][j]  # Object name translated (Row 3)
-                    unit = data[3][j] if j < len(data[3]) else ""  # Units (Row 4)
-                    full_header = f"{translated_name} {unit}" if unit else translated_name
-                    translated_headers.append(full_header)
-                    
-            # Open the CSV file for writing
-            with open(csv_path, "w", newline="") as csvfile:
-                writer = csv.writer(csvfile)
+            save_phase_name = f"save separate CSV for {vehicle_name}" if vehicle_name else "save separate CSV"
+            with timed_phase(timing_report, save_phase_name):
+                ##Export data to separate CSV files
+                dirname = os.path.dirname(filepath)
+                csv_path = os.path.join(dirname, filename + "_" +vehicle_name + '.csv')
+                time_decimals=3
+                # Extract relevant translated headers for the current vehicle
+                translated_headers = []
+                for j, vehicle_col in enumerate(data[0]):
+                    if vehicle_col == vehicle_name:
+                        object_name_variable = data[1][j] if j < len(data[1]) else ""
+                        variable_id = make_variable_column_id(vehicle_col, object_name_variable)
+                        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                            continue
+                        translated_name = data[2][j]  # Object name translated (Row 3)
+                        unit = data[3][j] if j < len(data[3]) else ""  # Units (Row 4)
+                        full_header = f"{translated_name} {unit}" if unit else translated_name
+                        translated_headers.append(full_header)
 
-                # Write header row (Frame, Time + translated headers for the specific vehicle)
-                header_row = ['Time (sec)'] + translated_headers  
-                writer.writerow(header_row)
+                # Open the CSV file for writing
+                with open(csv_path, "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
 
-                # Write data rows
-                num_rows = len(data) - 4  # Excluding header and metadata rows
-                for i in range(num_rows):
-                    row_values = [round(i * time_step,time_decimals)]   # Removing frame, keeping only time
-                    for j, vehicle_col in enumerate(data[0]):
-                        if vehicle_col == vehicle_name:
-                            object_name_variable = data[1][j]
-                            variable_id = make_variable_column_id(vehicle_col, object_name_variable)
-                            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
-                                continue
-                            object_name = object_name_variable[:object_name_variable.rfind(":")]  
-                            variable = object_name_variable.split(":")[-1]  
-                            try:
-                                value = float(vehicles[vehicle_name][object_name][variable][i])
-                            except (ValueError, TypeError):  # Handle non-numeric values
-                                value = 0.0  # Default to 0.0 if conversion fails
+                    # Write header row (Frame, Time + translated headers for the specific vehicle)
+                    header_row = ['Time (sec)'] + translated_headers
+                    writer.writerow(header_row)
 
-                            row_values.append(value)
-                            
-                    writer.writerow(row_values)
+                    # Write data rows
+                    num_rows = len(data) - 4  # Excluding header and metadata rows
+                    for i in range(num_rows):
+                        row_values = [round(i * time_step,time_decimals)]   # Removing frame, keeping only time
+                        for j, vehicle_col in enumerate(data[0]):
+                            if vehicle_col == vehicle_name:
+                                object_name_variable = data[1][j]
+                                variable_id = make_variable_column_id(vehicle_col, object_name_variable)
+                                if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                                    continue
+                                object_name = object_name_variable[:object_name_variable.rfind(":")]
+                                variable = object_name_variable.split(":")[-1]
+                                try:
+                                    value = float(vehicles[vehicle_name][object_name][variable][i])
+                                except (ValueError, TypeError):  # Handle non-numeric values
+                                    value = 0.0  # Default to 0.0 if conversion fails
+
+                                row_values.append(value)
+
+                        writer.writerow(row_values)
     return {'FINISHED'}
 
 # Calculate the unit vector and magnitude of a force
@@ -1926,14 +1939,13 @@ def load(context,
             if bpy.ops.object.mode_set.poll():
                 bpy.ops.object.mode_set(mode='OBJECT')
 
-        with timing_report.phase("read VariableOutput CSV and build import data"):
-            result = read_some_data(context,
-                    filepath,
-                    scale_factor,
-                    save_separate_csv,
-                    disabled_variables=disabled_variables,
-                    timing_report=timing_report
-                    )
+        result = read_some_data(context,
+                filepath,
+                scale_factor,
+                save_separate_csv,
+                disabled_variables=disabled_variables,
+                timing_report=timing_report
+                )
     finally:
         timing_report.print_summary()
 
