@@ -93,7 +93,6 @@ def update_panel_bl_category(self, context):
     sub_panels = (
         HVE_PT_mechanist_setup,
         HVE_PT_mechanist_export,
-        HVE_PT_contacts_exporter,
         HVE_PT_fbx_importer,
         HVE_PT_variableoutput_importer,
         HVE_PT_edr_importer,
@@ -291,13 +290,13 @@ class HVE_PT_pre(HVE_PT_mechanist_base):
         l = self.layout
         col = l.column(align=True)
         col.label(text="Configure scene objects before export.", icon='INFO')
-        col.label(text="Use h3d Setup, then run h3d Export.")
+        col.label(text="Use H3D Setup, then run Export to HVE.")
 
 class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "H3D Export"
+    bl_label = "Export to HVE"
     bl_parent_id = "HVE_PT_pre"
 
     @classmethod
@@ -334,7 +333,7 @@ class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
         elif obj_type == "ENVIRONMENT":
             l.operator("export_environment.h3d", text="Export Environment", icon='EXPORT')
         elif obj_type == "GATB_SURFACE":
-            l.operator("export_contacts.csv", text="Export GATB Contact Surfaces", icon='EXPORT')
+            l.operator("export_contacts.csv", text="Export GATB Surfaces", icon='EXPORT')
         else:
             l.label(text="Invalid HVE Type", icon='ERROR')
             l.label(text="Set HVE Type in Object Setup.", icon='INFO')
@@ -520,35 +519,6 @@ class HVE_OT_load_preset(bpy.types.Operator):
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-
-class HVE_PT_contacts_exporter(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "GATB Contact Surface Export"
-    bl_parent_id = "HVE_PT_pre"
-    @classmethod
-    def poll(cls, context):
-        return True
-        
-    def draw(self, context):
-        l = self.layout
-        selected = list(context.selected_objects)
-        if not selected:
-            l.label(text='Select GATB surface object(s).', icon='ERROR')
-            return
-
-        counts = get_selected_hve_type_counts(context)
-        if counts == {"GATB_SURFACE": len(selected)}:
-            l.operator("export_contacts.csv", text="Export GATB Contact Surfaces", icon='EXPORT')
-            return
-
-        l.label(text="GATB export needs only GATB Surface objects", icon='ERROR')
-        if counts:
-            l.label(text=format_hve_type_counts(counts), icon='INFO')
-        l.label(text="Classify all selected objects as GATB Surface?", icon='QUESTION')
-        op = l.operator("hvetools.set_selected_hve_type", text="Set Selected to GATB Surface")
-        op.object_type = "GATB_SURFACE"
 
 # === POST GROUP ===
 class HVE_PT_post(HVE_PT_mechanist_base):
@@ -871,7 +841,6 @@ classes = (
     HVE_PT_pre,
     HVE_PT_mechanist_setup,
     HVE_PT_mechanist_export,
-    HVE_PT_contacts_exporter,
     HVE_PT_post,
     HVE_PT_fbx_importer,
     HVE_PT_variableoutput_importer,
