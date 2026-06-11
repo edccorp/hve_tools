@@ -73,6 +73,14 @@ def make_variable_column_id(vehicle_name, object_name_variable):
     return f"{vehicle_name}||{object_name_variable}"
 
 
+def make_variable_group_id(vehicle_name, group_name):
+    return f"{vehicle_name}||{group_name}"
+
+
+def make_vehicle_id(vehicle_name):
+    return vehicle_name or ""
+
+
 def split_variable_name(object_name_variable):
     if ":" in object_name_variable:
         object_name = object_name_variable[:object_name_variable.rfind(":")]
@@ -124,6 +132,7 @@ def inspect_variable_columns(filepath):
             "id": make_variable_column_id(vehicle_name, object_name_variable),
             "vehicle_name": vehicle_name,
             "object_name": object_name,
+            "group_id": make_variable_group_id(vehicle_name, group_name),
             "group_name": group_name,
             "variable": variable,
             "source_name": object_name_variable,
@@ -135,10 +144,14 @@ def inspect_variable_columns(filepath):
     return variables
 
 
-def parse_disabled_variable_ids(disabled_variables):
-    if not disabled_variables:
+def parse_newline_delimited_ids(serialized_ids):
+    if not serialized_ids:
         return set()
-    return {item for item in disabled_variables.split("\n") if item}
+    return {item for item in serialized_ids.split("\n") if item}
+
+
+def parse_disabled_variable_ids(disabled_variables):
+    return parse_newline_delimited_ids(disabled_variables)
 
 def remove_from_all_collections(obj):
     """Remove an object from all Blender collections before reassigning it."""
@@ -256,12 +269,14 @@ def parent_keep_transform(child,parent):
         #child.matrix_world = matrix_world
     
     
-def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, timing_report=None):
+def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, disabled_groups=None, disabled_vehicles=None, timing_report=None):
 
     """Do something with the selected file(s)."""
     filename = bpy.path.basename(filepath).split('.')[0] 
     # Format: {vehicle_name_0:{object_name_0: {variable_0:[data],variable_1:[data]...},objectname_1: {variable_0[data]...}},vehicle_name_1...
     disabled_variable_ids = parse_disabled_variable_ids(disabled_variables)
+    disabled_group_ids = parse_newline_delimited_ids(disabled_groups)
+    disabled_vehicle_ids = parse_newline_delimited_ids(disabled_vehicles)
     vehicles = {}
     name_mapping = {}  # Dictionary to map object_name to object_name_trans
     group_name_mapping = {}  # Dictionary to map object_name to object_name_trans
@@ -315,55 +330,68 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
     
     # Column 1 is time in seconds
 
-    with timed_phase(timing_report, "build VariableOutput data arrays"):
-        # Scan the first row for vehicles
-        skipped_variable_count = 0
-        for j, vehicle_name in enumerate(data[0]):
-            object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
-            variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
-            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
-                skipped_variable_count += 1
-                continue
-            # Add the vehicle name if not in the dictionary
-            if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
-            object_name_variable = data[1][j]
-            object_name_translated = data[2][j]
+    # Scan the first row for vehicles
+    skipped_variable_count = 0
+    skipped_vehicle_count = 0
+    skipped_group_count = 0
+    for j, vehicle_name in enumerate(data[0]):
+        object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
+        _object_name_for_filter, group_name_for_filter, _variable_for_filter = split_variable_name(object_name_variable_for_filter)
+        variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
+        group_id = make_variable_group_id(vehicle_name, group_name_for_filter)
+        if make_vehicle_id(vehicle_name) in disabled_vehicle_ids:
+            skipped_vehicle_count += 1
+            continue
+        if group_id in disabled_group_ids and not is_required_motion_variable(object_name_variable_for_filter):
+            skipped_group_count += 1
+            continue
+        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
+            skipped_variable_count += 1
+            continue
+        # Add the vehicle name if not in the dictionary
+        if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
+        object_name_variable = data[1][j]
+        object_name_translated = data[2][j]
+        
+        # Ensure object_name_variable contains ":"
+        if ":" in object_name_variable:
+            object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
+            group_name = object_name_variable.split(":")[0]  # Everything before the first colon
+            variable = object_name_variable.split(":")[-1]  # Everything after the last colon
+        else:
+            object_name = object_name_variable   
+            group_name =  object_name_variable
+            variable = object_name_variable  # Use the entire string as the variable
 
-            # Ensure object_name_variable contains ":"
-            if ":" in object_name_variable:
-                object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
-                group_name = object_name_variable.split(":")[0]  # Everything before the first colon
-                variable = object_name_variable.split(":")[-1]  # Everything after the last colon
-            else:
-                object_name = object_name_variable
-                group_name =  object_name_variable
-                variable = object_name_variable  # Use the entire string as the variable
+        # Ensure object_name_translated contains ":"
+        if ":" in object_name_translated:
+            object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
+            variable_name_trans = object_name_translated.split(":")[-1].lstrip()
+        else:
+            object_name_trans = None  # Indicate that there is no object name
+            variable_name_trans = object_name_translated  # Use the entire string as the variable name
 
-            # Ensure object_name_translated contains ":"
-            if ":" in object_name_translated:
-                object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
-                variable_name_trans = object_name_translated.split(":")[-1].lstrip()
-            else:
-                object_name_trans = None  # Indicate that there is no object name
-                variable_name_trans = object_name_translated  # Use the entire string as the variable name
+        # Update name mapping
+        if object_name_trans is not None:
+            name_mapping[object_name] = object_name_trans  # Only map object names if they exist
+        name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
+        name_mapping[variable] = variable_name_trans
 
-            # Update name mapping
-            if object_name_trans is not None:
-                name_mapping[object_name] = object_name_trans  # Only map object names if they exist
-            name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
-            name_mapping[variable] = variable_name_trans
-
-            # Add the Object name if not in dictionary
-            if object_name not in vehicles[vehicle_name].keys():
-                vehicles[vehicle_name].update({object_name:{}})
-            vehicles[vehicle_name][object_name].update({variable:[]})
-            for row in (data[4:]):
-                try:
-                    value = float(row[j])
-                except (IndexError, TypeError, ValueError):
-                    value = 0.0
-                vehicles[vehicle_name][object_name][variable].append(value)
-
+        # Add the Object name if not in dictionary 
+        if object_name not in vehicles[vehicle_name].keys():
+            vehicles[vehicle_name].update({object_name:{}})
+        vehicles[vehicle_name][object_name].update({variable:[]})
+        for row in (data[4:]):
+            try:
+                value = float(row[j])
+            except (IndexError, TypeError, ValueError):
+                value = 0.0
+            vehicles[vehicle_name][object_name][variable].append(value)
+            
+    if skipped_vehicle_count:
+        print(f"Skipped {skipped_vehicle_count} VariableOutput column(s) from disabled vehicle(s).")
+    if skipped_group_count:
+        print(f"Skipped {skipped_group_count} VariableOutput column(s) from disabled group(s).")
     if skipped_variable_count:
         print(f"Skipped {skipped_variable_count} disabled VariableOutput column(s).")
 
@@ -1930,7 +1958,9 @@ def load(context,
          scale_unit,
          scale_factor,
          save_separate_csv,
-         disabled_variables=""
+         disabled_variables="",
+         disabled_groups="",
+         disabled_vehicles=""
          ):
 
     timing_report = ImportTimingReport()
@@ -1939,13 +1969,16 @@ def load(context,
             if bpy.ops.object.mode_set.poll():
                 bpy.ops.object.mode_set(mode='OBJECT')
 
-        result = read_some_data(context,
-                filepath,
-                scale_factor,
-                save_separate_csv,
-                disabled_variables=disabled_variables,
-                timing_report=timing_report
-                )
+        with timing_report.phase("read VariableOutput CSV and build import data"):
+            result = read_some_data(context,
+                    filepath,
+                    scale_factor,
+                    save_separate_csv,
+                    disabled_variables=disabled_variables,
+                    disabled_groups=disabled_groups,
+                    disabled_vehicles=disabled_vehicles,
+                    timing_report=timing_report
+                    )
     finally:
         timing_report.print_summary()
 
