@@ -53,6 +53,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
 
         layout.prop(operator, "merge_body_mesh")
         layout.prop(operator, "deformation_storage")
+        layout.prop(operator, "find_missing_files")
 
 
 
@@ -86,6 +87,12 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             default='SHAPE_KEYS',
             )
 
+    find_missing_files: BoolProperty(
+            name="Find Missing Files",
+            description="Search the public HVE support-files folder for missing assets after import; disable for faster imports",
+            default=False,
+            )
+
 
     def execute(self, context):
         from . import fbx_importer
@@ -97,6 +104,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             self.filepath,
             merge_body_mesh=self.merge_body_mesh,
             deformation_storage=self.deformation_storage,
+            find_missing_files=self.find_missing_files,
         )
 
     def draw(self, context):

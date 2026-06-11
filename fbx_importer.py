@@ -363,7 +363,7 @@ def zero_main_vehicle_empty_transform_at_preroll(imported_objects, frame=-1):
 
 
 
-def copy_animated_rotation(parent, axis_keywords=None, debug=False):
+def copy_animated_rotation(parent, axis_keywords=None, debug=False, candidate_objects=None):
     """Copy rotation animation from axis-specific helper objects to ``parent``.
 
     Parameters
@@ -377,6 +377,9 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
         :data:`ROTATION_AXIS_KEYWORDS` is used.
     debug : bool, optional
         When ``True``, log details about source selection. Defaults to ``False``.
+    candidate_objects : iterable, optional
+        Objects to search for rotation helpers. Defaults to selected objects for
+        backward compatibility with manual use.
 
     Missing axes are skipped.
     """
@@ -392,10 +395,12 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
     if debug:
         print(f"🛠 Normalized parent name: '{norm_parent}'")
 
-    # Get selected objects and filter by conditions
+    candidates = list(candidate_objects) if candidate_objects is not None else list(bpy.context.selected_objects)
+
+    # Get helper objects and filter by conditions
     selected_objects = [
         obj
-        for obj in bpy.context.selected_objects
+        for obj in candidates
         if obj != parent
         and norm_parent in normalize_name(obj.name)
         and "objects" in obj.name.lower()
@@ -412,10 +417,10 @@ def copy_animated_rotation(parent, axis_keywords=None, debug=False):
 
     #print(f"✅ Parented {len(selected_objects)} objects to '{parent.name}': {[obj.name for obj in selected_objects]}")
 
-    # Get selected objects (excluding the parent) and only keep objects that contain the parent's name
+    # Get helper candidates (excluding the parent) and only keep objects that contain the parent's name
     selected_objects = [
         obj
-        for obj in bpy.context.selected_objects
+        for obj in candidates
         if obj != parent
         and norm_parent in normalize_name(obj.name)
         and belongs_to_vehicle(obj.name, vehicle_id)
@@ -1512,7 +1517,13 @@ def set_new_materials_metallic_zero(new_materials):
             if metallic_input is not None:
                 metallic_input.default_value = 0.0
 
-def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storage="SHAPE_KEYS"):
+def import_fbx(
+    context,
+    fbx_file_path,
+    merge_body_mesh=False,
+    deformation_storage="SHAPE_KEYS",
+    find_missing_files=False,
+):
     timing_report = ImportTimingReport()
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
     if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
@@ -1755,9 +1766,16 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
         timing_report.finish_phase(modifier_phase)
 
         with timing_report.phase("offset imported animation keyframes"):
-            # Loop through imported objects
+            processed_offset_actions = set()
+            # Loop through imported objects and offset each shared action only once.
             for obj in imported_objects:
-                # Offset keyframes for all selected objects by 1 frame
+                action = getattr(getattr(obj, "animation_data", None), "action", None)
+                if action is None:
+                    continue
+                action_key = action.as_pointer() if hasattr(action, "as_pointer") else id(action)
+                if action_key in processed_offset_actions:
+                    continue
+                processed_offset_actions.add(action_key)
                 offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
 
         with timing_report.phase("adjust imported animation orientation"):
@@ -1798,8 +1816,9 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                 ):
                     bpy.ops.object.select_all(action="DESELECT")
                     obj.select_set(True)  # Select the object
-                    # Run the function
-                    copy_animated_rotation(obj, debug=True)
+                    # Run the function against the imported objects directly instead of
+                    # repeatedly scanning Blender's selection state.
+                    copy_animated_rotation(obj, debug=True, candidate_objects=imported_objects)
 
                     # Rename the object by adding "_FBX" to the end of its name
                     if not name.endswith(": FBX"):
@@ -1954,14 +1973,19 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
             # Replace duplicate materials
             merge_duplicate_materials_per_vehicle(vehicle_names)
 
-        with timing_report.phase("restore scene settings and find missing files"):
+        with timing_report.phase("restore scene settings"):
             # Restore the original frame rate settings
             context.scene.render.fps = original_fps
             context.scene.render.fps_base = original_fps_base
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
 
             context.scene.frame_start = 0
-            bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
+
+        with timing_report.phase("optional find missing files"):
+            if find_missing_files:
+                bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
+            else:
+                print("ℹ️ Missing-file search disabled for faster import.")
 
         timing_report.print_summary()
 
@@ -1976,6 +2000,7 @@ def load(context,
          filepath,
          merge_body_mesh=False,
          deformation_storage="SHAPE_KEYS",
+         find_missing_files=False,
          ):
 
 
@@ -1988,6 +2013,7 @@ def load(context,
             filepath,
             merge_body_mesh=merge_body_mesh,
             deformation_storage=deformation_storage,
+            find_missing_files=find_missing_files,
             )
 
     return {'FINISHED'}
