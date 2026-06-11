@@ -29,3 +29,29 @@ def test_variableoutput_ui_has_group_and_vehicle_toggles():
     assert 'group_box.label(text="Groups (optional variables only)")' in ui_source
     assert "disabled_vehicles" in ui_source
     assert "disabled_groups" in ui_source
+
+
+def test_variableoutput_disable_optional_also_disables_groups():
+    assert "class IMPORT_VARIABLES_OT_disable_optional_variables" in ui_source
+    assert "for item in operator.group_items:" in ui_source
+    assert "item.enabled = False" in ui_source
+
+
+def test_variableoutput_creation_toggles_are_exposed_and_passed_to_importer():
+    for prop in (
+        "create_tire_paths",
+        "create_paths",
+        "create_velocities",
+        "create_accelerations",
+        "create_forces",
+    ):
+        assert f"{prop}: BoolProperty" in ui_source
+        assert f'creation_box.prop(operator, "{prop}")' in ui_source
+        assert f"{prop}=True" in importer_source
+        assert f"{prop}={prop}" in importer_source
+
+    assert "if create_tire_paths:" in importer_source
+    assert "if create_paths:" in importer_source
+    assert "if create_velocities and 'VehKinematicVTotal'" in importer_source
+    assert "if create_accelerations and 'VehKinematicAccTotal'" in importer_source
+    assert "if create_forces and 'VehKineticFxImpact'" in importer_source

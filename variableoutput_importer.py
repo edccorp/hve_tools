@@ -269,7 +269,7 @@ def parent_keep_transform(child,parent):
         #child.matrix_world = matrix_world
     
     
-def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, disabled_groups=None, disabled_vehicles=None, timing_report=None):
+def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, disabled_groups=None, disabled_vehicles=None, timing_report=None, create_tire_paths=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
 
     """Do something with the selected file(s)."""
     filename = bpy.path.basename(filepath).split('.')[0] 
@@ -330,70 +330,71 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
     
     # Column 1 is time in seconds
 
-    # Scan the first row for vehicles
-    skipped_variable_count = 0
-    skipped_vehicle_count = 0
-    skipped_group_count = 0
-    for j, vehicle_name in enumerate(data[0]):
-        object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
-        _object_name_for_filter, group_name_for_filter, _variable_for_filter = split_variable_name(object_name_variable_for_filter)
-        variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
-        group_id = make_variable_group_id(vehicle_name, group_name_for_filter)
-        if make_vehicle_id(vehicle_name) in disabled_vehicle_ids:
-            skipped_vehicle_count += 1
-            continue
-        if group_id in disabled_group_ids and not is_required_motion_variable(object_name_variable_for_filter):
-            skipped_group_count += 1
-            continue
-        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
-            skipped_variable_count += 1
-            continue
-        # Add the vehicle name if not in the dictionary
-        if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
-        object_name_variable = data[1][j]
-        object_name_translated = data[2][j]
+    with timed_phase(timing_report, "build VariableOutput data arrays"):
+        # Scan the first row for vehicles
+        skipped_variable_count = 0
+        skipped_vehicle_count = 0
+        skipped_group_count = 0
+        for j, vehicle_name in enumerate(data[0]):
+            object_name_variable_for_filter = data[1][j] if len(data) > 1 and j < len(data[1]) else ""
+            _object_name_for_filter, group_name_for_filter, _variable_for_filter = split_variable_name(object_name_variable_for_filter)
+            variable_id = make_variable_column_id(vehicle_name, object_name_variable_for_filter)
+            group_id = make_variable_group_id(vehicle_name, group_name_for_filter)
+            if make_vehicle_id(vehicle_name) in disabled_vehicle_ids:
+                skipped_vehicle_count += 1
+                continue
+            if group_id in disabled_group_ids and not is_required_motion_variable(object_name_variable_for_filter):
+                skipped_group_count += 1
+                continue
+            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
+                skipped_variable_count += 1
+                continue
+            # Add the vehicle name if not in the dictionary
+            if vehicle_name not in vehicles.keys(): vehicles.update({vehicle_name:{}})
+            object_name_variable = data[1][j]
+            object_name_translated = data[2][j]
         
-        # Ensure object_name_variable contains ":"
-        if ":" in object_name_variable:
-            object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
-            group_name = object_name_variable.split(":")[0]  # Everything before the first colon
-            variable = object_name_variable.split(":")[-1]  # Everything after the last colon
-        else:
-            object_name = object_name_variable   
-            group_name =  object_name_variable
-            variable = object_name_variable  # Use the entire string as the variable
+            # Ensure object_name_variable contains ":"
+            if ":" in object_name_variable:
+                object_name = object_name_variable[:object_name_variable.rfind(":")]  # Everything before the last colon
+                group_name = object_name_variable.split(":")[0]  # Everything before the first colon
+                variable = object_name_variable.split(":")[-1]  # Everything after the last colon
+            else:
+                object_name = object_name_variable
+                group_name =  object_name_variable
+                variable = object_name_variable  # Use the entire string as the variable
 
-        # Ensure object_name_translated contains ":"
-        if ":" in object_name_translated:
-            object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
-            variable_name_trans = object_name_translated.split(":")[-1].lstrip()
-        else:
-            object_name_trans = None  # Indicate that there is no object name
-            variable_name_trans = object_name_translated  # Use the entire string as the variable name
+            # Ensure object_name_translated contains ":"
+            if ":" in object_name_translated:
+                object_name_trans = object_name_translated[:object_name_translated.rfind(":")]
+                variable_name_trans = object_name_translated.split(":")[-1].lstrip()
+            else:
+                object_name_trans = None  # Indicate that there is no object name
+                variable_name_trans = object_name_translated  # Use the entire string as the variable name
 
-        # Update name mapping
-        if object_name_trans is not None:
-            name_mapping[object_name] = object_name_trans  # Only map object names if they exist
-        name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
-        name_mapping[variable] = variable_name_trans
+            # Update name mapping
+            if object_name_trans is not None:
+                name_mapping[object_name] = object_name_trans  # Only map object names if they exist
+            name_mapping[f"group_name {object_name}"] = group_name  # Only map object names if they exist
+            name_mapping[variable] = variable_name_trans
 
-        # Add the Object name if not in dictionary 
-        if object_name not in vehicles[vehicle_name].keys():
-            vehicles[vehicle_name].update({object_name:{}})
-        vehicles[vehicle_name][object_name].update({variable:[]})
-        for row in (data[4:]):
-            try:
-                value = float(row[j])
-            except (IndexError, TypeError, ValueError):
-                value = 0.0
-            vehicles[vehicle_name][object_name][variable].append(value)
+            # Add the Object name if not in dictionary
+            if object_name not in vehicles[vehicle_name].keys():
+                vehicles[vehicle_name].update({object_name:{}})
+            vehicles[vehicle_name][object_name].update({variable:[]})
+            for row in (data[4:]):
+                try:
+                    value = float(row[j])
+                except (IndexError, TypeError, ValueError):
+                    value = 0.0
+                vehicles[vehicle_name][object_name][variable].append(value)
             
-    if skipped_vehicle_count:
-        print(f"Skipped {skipped_vehicle_count} VariableOutput column(s) from disabled vehicle(s).")
-    if skipped_group_count:
-        print(f"Skipped {skipped_group_count} VariableOutput column(s) from disabled group(s).")
-    if skipped_variable_count:
-        print(f"Skipped {skipped_variable_count} disabled VariableOutput column(s).")
+        if skipped_vehicle_count:
+            print(f"Skipped {skipped_vehicle_count} VariableOutput column(s) from disabled vehicle(s).")
+        if skipped_group_count:
+            print(f"Skipped {skipped_group_count} VariableOutput column(s) from disabled group(s).")
+        if skipped_variable_count:
+            print(f"Skipped {skipped_variable_count} disabled VariableOutput column(s).")
 
     if not vehicles:
         print("No vehicle data found in CSV.")
@@ -406,9 +407,9 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
         if vehicle_name != '':
             if timing_report:
                 with timing_report.phase(f"build vehicle data for {vehicle_name}"):
-                    add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
+                    add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
             else:
-                add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename)
+                add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
         
         if save_separate_csv == True:
             save_phase_name = f"save separate CSV for {vehicle_name}" if vehicle_name else "save separate CSV"
@@ -477,7 +478,7 @@ def safe_name(name, max_length=63):
     """Ensure object name fits within Blender's limit of 63 characters."""
     return name[:max_length]
 
-def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename):
+def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
    
    #Setup converions         
     deg2rad = math.pi/180
@@ -507,16 +508,20 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
     # Create t    
     # Create the overall  collections (Global for all vehicles)
     overall_skids_collection_name = f"HVE: {filename}: Skids"
-    overall_skids_collection = ensure_collection_exists(overall_skids_collection_name, event_collection, hide = False, dont_render=True)
+    if create_tire_paths:
+        overall_skids_collection = ensure_collection_exists(overall_skids_collection_name, event_collection, hide = False, dont_render=True)
    
     overall_tire_paths_collection_name = f"HVE: {filename}: Tire Paths"
-    overall_tire_paths_collection = ensure_collection_exists(overall_tire_paths_collection_name, event_collection, hide = False, dont_render=True)
+    if create_tire_paths:
+        overall_tire_paths_collection = ensure_collection_exists(overall_tire_paths_collection_name, event_collection, hide = False, dont_render=True)
 
     overall_paths_collection_name = f"HVE: {filename}: Paths"
-    overall_paths_collection = ensure_collection_exists(overall_paths_collection_name, event_collection, hide = False, dont_render=True)
+    if create_paths:
+        overall_paths_collection = ensure_collection_exists(overall_paths_collection_name, event_collection, hide = False, dont_render=True)
 
     overall_velocity_collection_name = f"HVE: {filename}: Velocities"
-    overall_velocity_collection = ensure_collection_exists(overall_velocity_collection_name, event_collection, hide = False, dont_render=True)
+    if create_velocities:
+        overall_velocity_collection = ensure_collection_exists(overall_velocity_collection_name, event_collection, hide = False, dont_render=True)
         
     overall_cameras_collection_name = f"HVE: {filename}: Cameras"
     overall_cameras_collection = ensure_collection_exists(overall_cameras_collection_name, event_collection, hide = False, dont_render=True)
@@ -525,24 +530,27 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
     overall_vehicles_collection = ensure_collection_exists(overall_vehicles_collection_name, event_collection, hide = False, dont_render=True)
     
     overall_acceleration_collection_name = f"HVE: {filename}: Accelerations"
-    overall_acceleration_collection = ensure_collection_exists(overall_acceleration_collection_name, event_collection, hide = False, dont_render=True)
+    if create_accelerations:
+        overall_acceleration_collection = ensure_collection_exists(overall_acceleration_collection_name, event_collection, hide = False, dont_render=True)
         
     overall_force_collection_name = f"HVE: {filename}: Forces"
-    overall_force_collection = ensure_collection_exists(overall_force_collection_name, event_collection, hide = False, dont_render=True)
+    if create_forces:
+        overall_force_collection = ensure_collection_exists(overall_force_collection_name, event_collection, hide = False, dont_render=True)
 
     overall_vehicle_data_collection_name = f"HVE: {filename}: Data"
     overall_vehicle_data_collection = ensure_collection_exists(overall_vehicle_data_collection_name, event_collection, hide = False, dont_render=True)
 
 
     # Ensure the layer collection exists before setting it as active
-    layer_collection = None
-    for lc in bpy.context.view_layer.layer_collection.children:
-        if lc.name == overall_skids_collection.name:
-            layer_collection = lc
-            break
+    if create_tire_paths:
+        layer_collection = None
+        for lc in bpy.context.view_layer.layer_collection.children:
+            if lc.name == overall_skids_collection.name:
+                layer_collection = lc
+                break
 
-    if layer_collection:
-        bpy.context.view_layer.active_layer_collection = layer_collection
+        if layer_collection:
+            bpy.context.view_layer.active_layer_collection = layer_collection
 
 
     # Create the main vehicle collection
@@ -573,13 +581,16 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
     ensure_collection_exists(extras_collection_name, vehicle_collection, hide = False, dont_render=True)
  
     paths_collection_name =f"Paths: {vehicle_name}: {filename}"
-    ensure_collection_exists(paths_collection_name, vehicle_collection, hide = False, dont_render=True)
+    if create_paths:
+        ensure_collection_exists(paths_collection_name, vehicle_collection, hide = False, dont_render=True)
         
     tire_paths_collection_name =f"Tire Paths: {vehicle_name}: {filename}"
-    ensure_collection_exists(tire_paths_collection_name, vehicle_collection, hide = False, dont_render=True)
+    if create_tire_paths:
+        ensure_collection_exists(tire_paths_collection_name, vehicle_collection, hide = False, dont_render=True)
     
     skids_collection_name =f"Skids: {vehicle_name}: {filename}"
-    ensure_collection_exists(skids_collection_name, vehicle_collection, hide = False, dont_render=False)
+    if create_tire_paths:
+        ensure_collection_exists(skids_collection_name, vehicle_collection, hide = False, dont_render=False)
     
     
     # Used to create objects, if they already exist, clear the animation data
@@ -1168,81 +1179,82 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
                 custom_properties["Yaw"].append(veh_obj_data['VehKinematicYaw'][frame]*deg2rad)                
             # Create a new object with the curve data
             
-            cg_curve_object = create_curve_obj(f"CG Path: {vehicle_name}: {filename}",points, custom_properties)   
+            if create_paths:
+                cg_curve_object = create_curve_obj(f"CG Path: {vehicle_name}: {filename}",points, custom_properties)
 
-            assign_objects_to_subcollection(paths_collection_name, vehicle_collection, cg_curve_object)    
-            assign_objects_to_collection(overall_paths_collection_name, cg_curve_object) 
+                assign_objects_to_subcollection(paths_collection_name, vehicle_collection, cg_curve_object)
+                assign_objects_to_collection(overall_paths_collection_name, cg_curve_object)
        
-            existing_modifier = None
-            for mod in cg_curve_object.modifiers:
-                if mod.type == 'NODES' and mod.name == "GeometryNodes":
-                    existing_modifier = mod
-                    break
+                existing_modifier = None
+                for mod in cg_curve_object.modifiers:
+                    if mod.type == 'NODES' and mod.name == "GeometryNodes":
+                        existing_modifier = mod
+                        break
 
-            # If no modifier exists, create a new one
-            if existing_modifier is None:
-                # Add a Geometry Nodes modifier
-                geo_modifier = cg_curve_object.modifiers.new(name="GeometryNodes", type='NODES')
+                # If no modifier exists, create a new one
+                if existing_modifier is None:
+                    # Add a Geometry Nodes modifier
+                    geo_modifier = cg_curve_object.modifiers.new(name="GeometryNodes", type='NODES')
               
-                # Check if the node group already exists
-                node_group = bpy.data.node_groups.get("CGPaths")
+                    # Check if the node group already exists
+                    node_group = bpy.data.node_groups.get("CGPaths")
                               
-                if node_group is None:
-                    node_group = bpy.data.node_groups.new(name="CGPaths", type='GeometryNodeTree')
-                    node_group.use_fake_user = True  # Prevent Blender from deleting it
-                    node_group.is_modifier = True
-                    # Add input and output nodes
-                    input_node = node_group.nodes.new(type='NodeGroupInput')
-                    output_node = node_group.nodes.new(type='NodeGroupOutput')
+                    if node_group is None:
+                        node_group = bpy.data.node_groups.new(name="CGPaths", type='GeometryNodeTree')
+                        node_group.use_fake_user = True  # Prevent Blender from deleting it
+                        node_group.is_modifier = True
+                        # Add input and output nodes
+                        input_node = node_group.nodes.new(type='NodeGroupInput')
+                        output_node = node_group.nodes.new(type='NodeGroupOutput')
                     
-                    node_group.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
-                    node_group.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+                        node_group.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+                        node_group.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
                     
-                    # Position nodes
-                    input_node.location = (-200, 0)
-                    output_node.location = (200, 0)                              
+                        # Position nodes
+                        input_node.location = (-200, 0)
+                        output_node.location = (200, 0)
                    
                     
-                    # Create a Set Material Node
-                    set_material_node = node_group.nodes.new(type='GeometryNodeSetMaterial')
-                    set_material_node.location = (200, -400)
+                        # Create a Set Material Node
+                        set_material_node = node_group.nodes.new(type='GeometryNodeSetMaterial')
+                        set_material_node.location = (200, -400)
 
-                    # Create or get the material
-                    material_name = "CGPaths"
-                    material = bpy.data.materials.get(material_name)
-                    if material is None:
-                        material = bpy.data.materials.new(name=material_name)
-                       # Ensure the material uses nodes
-                        material.use_nodes = True
-                        material_tree = material.node_tree
+                        # Create or get the material
+                        material_name = "CGPaths"
+                        material = bpy.data.materials.get(material_name)
+                        if material is None:
+                            material = bpy.data.materials.new(name=material_name)
+                           # Ensure the material uses nodes
+                            material.use_nodes = True
+                            material_tree = material.node_tree
 
-                        # Clear any existing nodes
-                        material_tree.nodes.clear()
+                            # Clear any existing nodes
+                            material_tree.nodes.clear()
 
-                        # Create a Principled BSDF Node
-                        principled_bsdf_node = material_tree.nodes.new(type='ShaderNodeBsdfPrincipled')
-                        principled_bsdf_node.location = (-200, -400)
-                        principled_bsdf_node.inputs["Base Color"].default_value = (1,1,0,1)
+                            # Create a Principled BSDF Node
+                            principled_bsdf_node = material_tree.nodes.new(type='ShaderNodeBsdfPrincipled')
+                            principled_bsdf_node.location = (-200, -400)
+                            principled_bsdf_node.inputs["Base Color"].default_value = (1,1,0,1)
 
-                        # Create a Material Output Node
-                        material_output_node = material_tree.nodes.new(type='ShaderNodeOutputMaterial')
-                        material_output_node.location = (0, -400)
+                            # Create a Material Output Node
+                            material_output_node = material_tree.nodes.new(type='ShaderNodeOutputMaterial')
+                            material_output_node.location = (0, -400)
 
-                        # Connect shader nodes in the material node tree
-                        material_tree.links.new(principled_bsdf_node.outputs["BSDF"], material_output_node.inputs["Surface"])
+                            # Connect shader nodes in the material node tree
+                            material_tree.links.new(principled_bsdf_node.outputs["BSDF"], material_output_node.inputs["Surface"])
 
-                    # Assign the material to Set Material node
-                    set_material_node.inputs["Material"].default_value = material
+                        # Assign the material to Set Material node
+                        set_material_node.inputs["Material"].default_value = material
                      
                     
-                    # Connect nodes
-                    node_group.links.new(input_node.outputs["Geometry"], set_material_node.inputs["Geometry"])
-                    node_group.links.new(set_material_node.outputs["Geometry"], output_node.inputs["Geometry"])
+                        # Connect nodes
+                        node_group.links.new(input_node.outputs["Geometry"], set_material_node.inputs["Geometry"])
+                        node_group.links.new(set_material_node.outputs["Geometry"], output_node.inputs["Geometry"])
                 
-                geo_modifier.node_group = node_group 
-            else:
-                geo_modifier = existing_modifier
-                print("Using existing Geometry Nodes modifier.")              
+                    geo_modifier.node_group = node_group
+                else:
+                    geo_modifier = existing_modifier
+                    print("Using existing Geometry Nodes modifier.")
       
         if veh_obj_name=='KineticOut':
             blender_obj = blender_CG_obj
@@ -1258,7 +1270,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
             create_custom_properties(blender_obj,veh_obj_data,custprops_exclude)                   
 
         #Force Vector
-        if 'VehKineticFxImpact' in veh_obj_data.keys() and 'VehKineticFyImpact' in veh_obj_data.keys() and 'VehKineticFzImpact' in veh_obj_data.keys():
+        if create_forces and 'VehKineticFxImpact' in veh_obj_data.keys() and 'VehKineticFyImpact' in veh_obj_data.keys() and 'VehKineticFzImpact' in veh_obj_data.keys():
             blender_obj, exists = create_arrowhead(f"Force: Impact: {vehicle_name}: {filename}", .001)
             #blender_obj.location = (0, 0, 0)
             frame = -1            
@@ -1296,7 +1308,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
             add_or_get_geometry_nodes_modifier(blender_obj, node_group_name="ForceVectors", base_color=(0 , 0, 1, 1))
 
         #Velocity Vectors
-        if 'VehKinematicVTotal' in veh_obj_data.keys()  :
+        if create_velocities and 'VehKinematicVTotal' in veh_obj_data.keys()  :
             blender_obj, exists = create_arrowhead(f"Velocity: {vehicle_name}: {filename}", 1)
             frame = -1
             while frame < numframes-1:
@@ -1386,7 +1398,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
             assign_objects_to_collection(overall_velocity_collection_name, blender_obj)
 
         #Acceleration Vectors
-        if 'VehKinematicAccTotal' in veh_obj_data.keys()  :
+        if create_accelerations and 'VehKinematicAccTotal' in veh_obj_data.keys()  :
             blender_obj, exists = create_arrowhead(f"Acceleration: {vehicle_name}: {filename}", 7)
             frame = -1
             while frame < numframes-1:
@@ -1590,7 +1602,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
 
         
         # 'VehTireX' indicates that it is a tire and a child object
-        if 'VehTireX' in veh_obj_data.keys() and  'VehTireY' in veh_obj_data.keys() and  'VehTireZ' in veh_obj_data.keys():         
+        if create_tire_paths and 'VehTireX' in veh_obj_data.keys() and  'VehTireY' in veh_obj_data.keys() and  'VehTireZ' in veh_obj_data.keys():
             # Define the points of the spline
             points = []
             # Custom  properties                       
@@ -1784,45 +1796,46 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
             create_custom_properties(blender_accel_obj,veh_obj_data,custprops_exclude) 
             assign_objects_to_subcollection(extras_collection_name, vehicle_collection, blender_accel_obj)    
 
-            # Define the points of the spline
-            points = []
-            # Custom  properties                       
-            custom_properties = {
-                "X": [],
-                "Y": [],
-                "Z": [],
-                "Roll": [],
-                "Pitch": [],
-                "Yaw": [],
-            }
-            frame = -1           
-            while frame < numframes-1:
-                frame = frame+1
-                locationx = veh_obj_data['VehAccelX'][frame]*scale_factor
-                locationy = veh_obj_data['VehAccelY'][frame]*scale_factor*-1
-                if 'VehAccelZ' in veh_obj_data.keys():
-                    locationz = veh_obj_data['VehAccelZ'][frame]*scale_factor*-1
-                else:
-                    locationz = blender_CG_obj.location[2]
-                points.append((locationx, locationy, locationz))
-                # Adding data to the dictionary
-                custom_properties["X"].append(locationx)   
-                custom_properties["Y"].append(locationy)             
-                custom_properties["Z"].append(locationz)
-                custom_properties["Roll"].append(blender_CG_obj.rotation_euler[0])   
-                custom_properties["Pitch"].append(blender_CG_obj.rotation_euler[1])             
-                custom_properties["Yaw"].append(blender_CG_obj.rotation_euler[2])                
-            # Create a new object with the curve data
+            if create_paths:
+                # Define the points of the spline
+                points = []
+                # Custom  properties
+                custom_properties = {
+                    "X": [],
+                    "Y": [],
+                    "Z": [],
+                    "Roll": [],
+                    "Pitch": [],
+                    "Yaw": [],
+                }
+                frame = -1
+                while frame < numframes-1:
+                    frame = frame+1
+                    locationx = veh_obj_data['VehAccelX'][frame]*scale_factor
+                    locationy = veh_obj_data['VehAccelY'][frame]*scale_factor*-1
+                    if 'VehAccelZ' in veh_obj_data.keys():
+                        locationz = veh_obj_data['VehAccelZ'][frame]*scale_factor*-1
+                    else:
+                        locationz = blender_CG_obj.location[2]
+                    points.append((locationx, locationy, locationz))
+                    # Adding data to the dictionary
+                    custom_properties["X"].append(locationx)
+                    custom_properties["Y"].append(locationy)
+                    custom_properties["Z"].append(locationz)
+                    custom_properties["Roll"].append(blender_CG_obj.rotation_euler[0])
+                    custom_properties["Pitch"].append(blender_CG_obj.rotation_euler[1])
+                    custom_properties["Yaw"].append(blender_CG_obj.rotation_euler[2])
+                # Create a new object with the curve data
             
-            curve_object = create_curve_obj(f"Accelerometer Path: {obj_name}: {vehicle_name}: {filename}",points, custom_properties)   
+                curve_object = create_curve_obj(f"Accelerometer Path: {obj_name}: {vehicle_name}: {filename}",points, custom_properties)
             
-            assign_objects_to_subcollection(paths_collection_name, vehicle_collection, curve_object)   
-            assign_objects_to_collection(overall_paths_collection_name, curve_object) 
+                assign_objects_to_subcollection(paths_collection_name, vehicle_collection, curve_object)
+                assign_objects_to_collection(overall_paths_collection_name, curve_object)
             
-            add_or_get_geometry_nodes_modifier(curve_object, node_group_name="AccelerometerPaths", base_color=(1 , .25, 0, 1))
+                add_or_get_geometry_nodes_modifier(curve_object, node_group_name="AccelerometerPaths", base_color=(1 , .25, 0, 1))
             
             #Velocity Vectors
-            if 'VehAccelVTotal' in veh_obj_data.keys()  :
+            if create_velocities and 'VehAccelVTotal' in veh_obj_data.keys()  :
                 blender_accel_vel_obj, velocity_exists = create_arrowhead(f"Accelerometer Velocity: {obj_name}: {vehicle_name}: {filename}", 1)
                 if velocity_exists == True:
                     bpy.data.objects.remove(blender_accel_vel_obj, do_unlink=True)
@@ -1960,7 +1973,12 @@ def load(context,
          save_separate_csv,
          disabled_variables="",
          disabled_groups="",
-         disabled_vehicles=""
+         disabled_vehicles="",
+         create_tire_paths=True,
+         create_paths=True,
+         create_velocities=True,
+         create_accelerations=True,
+         create_forces=True
          ):
 
     timing_report = ImportTimingReport()
@@ -1969,16 +1987,20 @@ def load(context,
             if bpy.ops.object.mode_set.poll():
                 bpy.ops.object.mode_set(mode='OBJECT')
 
-        with timing_report.phase("read VariableOutput CSV and build import data"):
-            result = read_some_data(context,
-                    filepath,
-                    scale_factor,
-                    save_separate_csv,
-                    disabled_variables=disabled_variables,
-                    disabled_groups=disabled_groups,
-                    disabled_vehicles=disabled_vehicles,
-                    timing_report=timing_report
-                    )
+        result = read_some_data(context,
+                filepath,
+                scale_factor,
+                save_separate_csv,
+                disabled_variables=disabled_variables,
+                disabled_groups=disabled_groups,
+                disabled_vehicles=disabled_vehicles,
+                timing_report=timing_report,
+                create_tire_paths=create_tire_paths,
+                create_paths=create_paths,
+                create_velocities=create_velocities,
+                create_accelerations=create_accelerations,
+                create_forces=create_forces
+                )
     finally:
         timing_report.print_summary()
 

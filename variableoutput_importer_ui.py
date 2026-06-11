@@ -129,6 +129,14 @@ class CSV_PT_variableoutput_importer_include(bpy.types.Panel):
         layout.prop(operator, "scale_factor")
         layout.prop(operator, "save_separate_csv")
 
+        creation_box = layout.box()
+        creation_box.label(text="Create Objects")
+        creation_box.prop(operator, "create_tire_paths")
+        creation_box.prop(operator, "create_paths")
+        creation_box.prop(operator, "create_velocities")
+        creation_box.prop(operator, "create_accelerations")
+        creation_box.prop(operator, "create_forces")
+
         layout.separator()
         row = layout.row(align=True)
         row.operator(IMPORT_VARIABLES_OT_refresh_variable_list.bl_idname, icon='FILE_REFRESH')
@@ -206,7 +214,7 @@ class IMPORT_VARIABLES_OT_disable_optional_variables(bpy.types.Operator):
         for item in operator.variable_items:
             item.enabled = item.required
         for item in operator.group_items:
-            item.enabled = True
+            item.enabled = False
         for item in operator.vehicle_items:
             item.enabled = True
         return {'FINISHED'}
@@ -248,6 +256,36 @@ class ImportVariables(bpy.types.Operator, ExportHelper):
         description="Assigned scale factor",
         default=0.3048,  # Default to feet conversion
         precision=6,
+    )
+
+    create_tire_paths: BoolProperty(
+        name="Tire Paths",
+        description="Create tire path and skid trace objects",
+        default=True,
+    )
+
+    create_paths: BoolProperty(
+        name="Paths",
+        description="Create vehicle CG and accelerometer path curve objects",
+        default=True,
+    )
+
+    create_velocities: BoolProperty(
+        name="Velocities",
+        description="Create velocity vector and component objects",
+        default=True,
+    )
+
+    create_accelerations: BoolProperty(
+        name="Accelerations",
+        description="Create acceleration vector and component objects",
+        default=True,
+    )
+
+    create_forces: BoolProperty(
+        name="Forces",
+        description="Create force vector objects",
+        default=True,
     )
 
     variable_items: CollectionProperty(type=VariableOutputVariableItem)
