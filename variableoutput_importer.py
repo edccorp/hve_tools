@@ -78,6 +78,42 @@ REQUIRED_WHEEL_VARIABLES = {
     "VehWheelDelta",
 }
 
+REQUIRED_TIRE_PATH_VARIABLES = {
+    "VehTireX",
+    "VehTireY",
+    "VehTireZ",
+}
+
+REQUIRED_SKID_VARIABLES = REQUIRED_TIRE_PATH_VARIABLES | {
+    "VehTireSkidFlag",
+}
+
+REQUIRED_CREATE_OBJECT_VARIABLES = {
+    "create_tire_paths": {
+        "variables": REQUIRED_TIRE_PATH_VARIABLES,
+    },
+    "create_skids": {
+        "variables": REQUIRED_SKID_VARIABLES,
+    },
+    "create_velocities": {
+        "object_variables": {
+            ("KinematicOut", "VehKinematicVTotal"),
+        },
+    },
+    "create_accelerations": {
+        "object_variables": {
+            ("KinematicOut", "VehKinematicAccTotal"),
+        },
+    },
+    "create_forces": {
+        "object_variables": {
+            ("KineticOut", "VehKineticFxImpact"),
+            ("KineticOut", "VehKineticFyImpact"),
+            ("KineticOut", "VehKineticFzImpact"),
+        },
+    },
+}
+
 
 def make_variable_column_id(vehicle_name, object_name_variable):
     return f"{vehicle_name}||{object_name_variable}"
@@ -111,7 +147,26 @@ def is_required_motion_variable(object_name_variable):
     )
 
 
-def inspect_variable_columns(filepath):
+def is_required_create_object_variable(object_name_variable, **create_options):
+    object_name, _group_name, variable = split_variable_name(object_name_variable)
+    for option_name, requirement in REQUIRED_CREATE_OBJECT_VARIABLES.items():
+        if not create_options.get(option_name, False):
+            continue
+        if variable in requirement.get("variables", set()):
+            return True
+        if (object_name, variable) in requirement.get("object_variables", set()):
+            return True
+    return False
+
+
+def is_required_variable(object_name_variable, **create_options):
+    return (
+        is_required_motion_variable(object_name_variable)
+        or is_required_create_object_variable(object_name_variable, **create_options)
+    )
+
+
+def inspect_variable_columns(filepath, **create_options):
     """Return VariableOutput column metadata without importing the animation data."""
     variables = []
     if not filepath or not os.path.isfile(filepath):
@@ -151,7 +206,7 @@ def inspect_variable_columns(filepath):
             "source_name": object_name_variable,
             "translated_name": translated_name,
             "unit": unit,
-            "required": is_required_motion_variable(object_name_variable),
+            "required": is_required_variable(object_name_variable, **create_options),
         })
 
     return variables
@@ -282,7 +337,7 @@ def parent_keep_transform(child,parent):
         #child.matrix_world = matrix_world
     
     
-def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, disabled_groups=None, disabled_vehicles=None, timing_report=None, create_tire_paths=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
+def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_variables=None, disabled_groups=None, disabled_vehicles=None, timing_report=None, create_tire_paths=True, create_skids=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
 
     """Do something with the selected file(s)."""
     filename = bpy.path.basename(filepath).split('.')[0] 
@@ -356,10 +411,10 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
             if make_vehicle_id(vehicle_name) in disabled_vehicle_ids:
                 skipped_vehicle_count += 1
                 continue
-            if group_id in disabled_group_ids and not is_required_motion_variable(object_name_variable_for_filter):
+            if group_id in disabled_group_ids and not is_required_variable(object_name_variable_for_filter, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
                 skipped_group_count += 1
                 continue
-            if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable_for_filter):
+            if variable_id in disabled_variable_ids and not is_required_variable(object_name_variable_for_filter, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
                 skipped_variable_count += 1
                 continue
             # Add the vehicle name if not in the dictionary
@@ -420,9 +475,9 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
         if vehicle_name != '':
             if timing_report:
                 with timing_report.phase(f"build vehicle data for {vehicle_name}"):
-                    add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
+                    add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
             else:
-                add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
+                add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces)
         
         if save_separate_csv == True:
             save_phase_name = f"save separate CSV for {vehicle_name}" if vehicle_name else "save separate CSV"
@@ -437,7 +492,7 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
                     if vehicle_col == vehicle_name:
                         object_name_variable = data[1][j] if j < len(data[1]) else ""
                         variable_id = make_variable_column_id(vehicle_col, object_name_variable)
-                        if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                        if variable_id in disabled_variable_ids and not is_required_variable(object_name_variable, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
                             continue
                         translated_name = data[2][j]  # Object name translated (Row 3)
                         unit = data[3][j] if j < len(data[3]) else ""  # Units (Row 4)
@@ -460,7 +515,7 @@ def read_some_data(context, filepath, scale_factor, save_separate_csv, disabled_
                             if vehicle_col == vehicle_name:
                                 object_name_variable = data[1][j]
                                 variable_id = make_variable_column_id(vehicle_col, object_name_variable)
-                                if variable_id in disabled_variable_ids and not is_required_motion_variable(object_name_variable):
+                                if variable_id in disabled_variable_ids and not is_required_variable(object_name_variable, create_tire_paths=create_tire_paths, create_skids=create_skids, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
                                     continue
                                 object_name = object_name_variable[:object_name_variable.rfind(":")]
                                 variable = object_name_variable.split(":")[-1]
@@ -491,7 +546,7 @@ def safe_name(name, max_length=63):
     """Ensure object name fits within Blender's limit of 63 characters."""
     return name[:max_length]
 
-def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
+def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=True, create_skids=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
    
    #Setup converions         
     deg2rad = math.pi/180
@@ -521,7 +576,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
     # Create t    
     # Create the overall  collections (Global for all vehicles)
     overall_skids_collection_name = f"HVE: {filename}: Skids"
-    if create_tire_paths:
+    if create_skids:
         overall_skids_collection = ensure_collection_exists(overall_skids_collection_name, event_collection, hide = False, dont_render=True)
    
     overall_tire_paths_collection_name = f"HVE: {filename}: Tire Paths"
@@ -555,7 +610,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
 
 
     # Ensure the layer collection exists before setting it as active
-    if create_tire_paths:
+    if create_skids:
         layer_collection = None
         for lc in bpy.context.view_layer.layer_collection.children:
             if lc.name == overall_skids_collection.name:
@@ -602,7 +657,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
         ensure_collection_exists(tire_paths_collection_name, vehicle_collection, hide = False, dont_render=True)
     
     skids_collection_name =f"Skids: {vehicle_name}: {filename}"
-    if create_tire_paths:
+    if create_skids:
         ensure_collection_exists(skids_collection_name, vehicle_collection, hide = False, dont_render=False)
     
     
@@ -1615,7 +1670,7 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
 
         
         # 'VehTireX' indicates that it is a tire and a child object
-        if create_tire_paths and 'VehTireX' in veh_obj_data.keys() and  'VehTireY' in veh_obj_data.keys() and  'VehTireZ' in veh_obj_data.keys():
+        if (create_tire_paths or create_skids) and 'VehTireX' in veh_obj_data.keys() and  'VehTireY' in veh_obj_data.keys() and  'VehTireZ' in veh_obj_data.keys():
             # Define the points of the spline
             points = []
             # Custom  properties                       
@@ -1631,13 +1686,17 @@ def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_m
                     custom_properties["Skid"].append(veh_obj_data['VehTireSkidFlag'][frame])   
                 
 
-            # Create a new object with the curve data            
-            tire_curve_object = create_curve_obj(f"Tire Path: {obj_name}: {vehicle_name}: {filename}",points, custom_properties)   
-            assign_objects_to_subcollection(tire_paths_collection_name, vehicle_collection, tire_curve_object)         
-            assign_objects_to_collection(overall_tire_paths_collection_name, tire_curve_object)     
+            if create_tire_paths:
+                # Create a new object with the curve data
+                tire_curve_object = create_curve_obj(f"Tire Path: {obj_name}: {vehicle_name}: {filename}",points, custom_properties)
+                assign_objects_to_subcollection(tire_paths_collection_name, vehicle_collection, tire_curve_object)
+                assign_objects_to_collection(overall_tire_paths_collection_name, tire_curve_object)
 
-            add_or_get_geometry_nodes_modifier(tire_curve_object, node_group_name="TirePaths", base_color=(0 , 1, 0, 1))
+                add_or_get_geometry_nodes_modifier(tire_curve_object, node_group_name="TirePaths", base_color=(0 , 1, 0, 1))
             
+            if not create_skids:
+                continue
+
             # Create a new object with the curve data 
             skid_curve_object = create_mesh_obj(f"Skids: {obj_name}: Skids: {vehicle_name}: {filename}",points, custom_properties) 
             assign_objects_to_subcollection(skids_collection_name, vehicle_collection, skid_curve_object)                      
@@ -1988,6 +2047,7 @@ def load(context,
          disabled_groups="",
          disabled_vehicles="",
          create_tire_paths=True,
+         create_skids=True,
          create_paths=True,
          create_velocities=True,
          create_accelerations=True,
@@ -2009,6 +2069,7 @@ def load(context,
                 disabled_vehicles=disabled_vehicles,
                 timing_report=timing_report,
                 create_tire_paths=create_tire_paths,
+                create_skids=create_skids,
                 create_paths=create_paths,
                 create_velocities=create_velocities,
                 create_accelerations=create_accelerations,
