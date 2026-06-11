@@ -163,3 +163,16 @@ def test_marker_cleanup_removes_meshes_and_text_curves_from_matching_collections
     assert "bpy.data.meshes.remove(old_data)" in source
     assert "elif old_type in {'CURVE', 'FONT'}:" in source
     assert "bpy.data.curves.remove(old_data)" in source
+
+
+def test_motion_path_generation_isolates_each_selected_object():
+    assert "def preserve_object_selection_for_motion_path(ob, operation):" in source
+    assert "original_selection = list(bpy.context.selected_objects)" in source
+    assert "for selected_ob in original_selection:" in source
+    assert "ob.select_set(True)" in source
+    assert "return preserve_object_selection_for_motion_path(ob, calculate_path_for_active_object)" in source
+
+
+def test_motion_path_removal_uses_same_selection_isolation():
+    assert "return preserve_object_selection_for_motion_path(ob, clear_path_for_active_object)" in source
+    assert "Clear only this object's existing motion path" in source
