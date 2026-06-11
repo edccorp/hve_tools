@@ -18,7 +18,9 @@ def test_export_ui_uses_selected_object_types_and_warns_on_mixed_types():
     assert "get_selected_hve_type_counts(context)" in ui_source
     assert "Mixed HVE object types selected" in ui_source
     assert "hvetools.set_selected_hve_type" in ui_source
-    assert "Export GATB Contact Surfaces" in ui_source
+    assert "Export to HVE" in ui_source
+    assert "Export GATB Surfaces" in ui_source
+    assert "GATB Contact Surface Export" not in ui_source
 
 
 def test_vehicle_lighting_is_hidden_for_mixed_selection():
