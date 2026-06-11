@@ -478,7 +478,7 @@ def safe_name(name, max_length=63):
     """Ensure object name fits within Blender's limit of 63 characters."""
     return name[:max_length]
 
-def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=create_tire_paths, create_paths=create_paths, create_velocities=create_velocities, create_accelerations=create_accelerations, create_forces=create_forces):
+def add_vehicle(context, vehicle_name, vehicles, scale_factor, numframes, name_mapping, filename, create_tire_paths=True, create_paths=True, create_velocities=True, create_accelerations=True, create_forces=True):
    
    #Setup converions         
     deg2rad = math.pi/180
