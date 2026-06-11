@@ -15,6 +15,8 @@ if "bpy" in locals():
     if "variableoutput_importer" in locals():
         importlib.reload(variableoutput_importer)
 
+import os
+
 import bpy
 from bpy.props import (
         BoolProperty,
@@ -30,6 +32,32 @@ from bpy_extras.io_utils import (
         axis_conversion,
         path_reference_mode,
         )
+
+
+def _active_import_variables_operator(context):
+    sfile = getattr(context, "space_data", None)
+    operator = getattr(sfile, "active_operator", None) if sfile else None
+    if operator and getattr(operator, "bl_idname", "") == "IMPORT_VARIABLES_OT_csv":
+        return operator
+    return None
+
+
+def _set_group_variables_enabled(group_item, context):
+    operator = _active_import_variables_operator(context)
+    if not operator:
+        return
+
+    for variable_item in operator.variable_items:
+        if variable_item.group_id != group_item.group_id:
+            continue
+        variable_item.enabled = True if variable_item.required else group_item.enabled
+
+
+def _variable_scan_path(operator):
+    filepath = getattr(operator, "filepath", "")
+    if filepath:
+        filepath = bpy.path.abspath(filepath)
+    return filepath if filepath and os.path.isfile(filepath) else ""
 # Function to update scale_factor based on the selected unit
 def update_scale_factor(self, context):
     if self.scale_unit == 'FEET':
@@ -65,6 +93,7 @@ class VariableOutputGroupItem(bpy.types.PropertyGroup):
         name="Import",
         description="Import optional variables in this VariableOutput group",
         default=True,
+        update=_set_group_variables_enabled,
     )
     group_id: StringProperty(options={'HIDDEN'})
     display_name: StringProperty(name="Group")
@@ -97,8 +126,12 @@ class IMPORT_VARIABLES_OT_refresh_variable_list(bpy.types.Operator):
             self.report({'WARNING'}, "Open the VariableOutput importer to scan variables.")
             return {'CANCELLED'}
 
-        operator.refresh_variable_list()
-        count = len(operator.variable_items)
+        if not _variable_scan_path(operator):
+            operator.clear_variable_list()
+            self.report({'WARNING'}, "Select a VariableOutput .hvo or .csv file before scanning variables.")
+            return {'CANCELLED'}
+
+        count = operator.refresh_variable_list()
         if count:
             self.report({'INFO'}, f"Found {count} VariableOutput variable column(s).")
         else:
@@ -315,18 +348,27 @@ class ImportVariables(bpy.types.Operator, ExportHelper):
         options={'HIDDEN'},
     )
 
+    def clear_variable_list(self):
+        self.variable_items.clear()
+        self.group_items.clear()
+        self.vehicle_items.clear()
+        self.variable_scan_filepath = ""
+
     def refresh_variable_list(self):
         from . import variableoutput_importer
+
+        scan_filepath = _variable_scan_path(self)
+        if not scan_filepath:
+            self.clear_variable_list()
+            return 0
 
         previously_disabled = {item.variable_id for item in self.variable_items if not item.enabled}
         previously_disabled_groups = {item.group_id for item in self.group_items if not item.enabled}
         previously_disabled_vehicles = {item.vehicle_id for item in self.vehicle_items if not item.enabled}
-        self.variable_items.clear()
-        self.group_items.clear()
-        self.vehicle_items.clear()
-        self.variable_scan_filepath = self.filepath
+        self.clear_variable_list()
+        self.variable_scan_filepath = scan_filepath
 
-        variables = variableoutput_importer.inspect_variable_columns(self.filepath)
+        variables = variableoutput_importer.inspect_variable_columns(scan_filepath)
         vehicle_names = []
         group_data = {}
         for variable in variables:
@@ -374,6 +416,8 @@ class ImportVariables(bpy.types.Operator, ExportHelper):
                 display_name = f"{variable['vehicle_name']}: {display_name}"
             item.display_name = display_name
             item.enabled = item.required or item.variable_id not in previously_disabled
+
+        return len(self.variable_items)
 
     def is_vehicle_enabled(self, vehicle_name):
         from . import variableoutput_importer
