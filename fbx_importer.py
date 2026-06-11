@@ -4,6 +4,7 @@ import re
 import math
 import threading
 import struct
+import time
 from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
@@ -24,6 +25,43 @@ ROTATION_AXIS_KEYWORDS = {
     "Y": ["Rotation", "Pitch"],  # Y-axis rotation
     "Z": ["Steering", "Yaw"],   # Z-axis rotation
 }
+
+
+class ImportTimingReport:
+    """Collect and print coarse timings for the HVE FBX import pipeline."""
+
+    def __init__(self):
+        self._entries = []
+        self._started_at = time.perf_counter()
+
+    @contextmanager
+    def phase(self, name):
+        started_at = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.finish_phase((name, started_at))
+
+    def start_phase(self, name):
+        return name, time.perf_counter()
+
+    def finish_phase(self, phase):
+        name, started_at = phase
+        elapsed = time.perf_counter() - started_at
+        self._entries.append((name, elapsed))
+        print(f"⏱️ HVE FBX timing | {name}: {elapsed:.2f}s")
+
+    def print_summary(self):
+        total_elapsed = time.perf_counter() - self._started_at
+        if not self._entries:
+            print(f"⏱️ HVE FBX timing | total: {total_elapsed:.2f}s")
+            return
+
+        print("⏱️ HVE FBX timing summary:")
+        for name, elapsed in sorted(self._entries, key=lambda entry: entry[1], reverse=True):
+            percent = (elapsed / total_elapsed * 100.0) if total_elapsed else 0.0
+            print(f"   {elapsed:7.2f}s ({percent:5.1f}%)  {name}")
+        print(f"   {total_elapsed:7.2f}s          total")
 
 
 def normalize_name(name: str) -> str:
@@ -524,8 +562,8 @@ def assign_objects_to_collection(collection_name, objects):
     - collection_name (str.
     - objects (list of bpy.types.Object]): List of objects to add to the subcollection.
     """
-    
-    
+
+
     collection = bpy.data.collections.get(collection_name)
     if not collection:
         print(f"Error: Parent collection '{parent_collection}' does not exist.")
@@ -537,7 +575,7 @@ def assign_objects_to_collection(collection_name, objects):
 
     # Remove objects from existing collections and reassign them
     for obj in objects:
-        if obj:            
+        if obj:
             if obj.name not in collection.objects:
                 collection.objects.link(obj)
 
@@ -566,7 +604,7 @@ def ensure_collection_exists(collection_name, parent_collection=None, hide=False
     # Set visibility properties
     collection.hide_viewport = hide  # Hide from viewport
     collection.hide_render = dont_render    # Hide from rendering
-    
+
     return collection
 
 
@@ -1473,8 +1511,9 @@ def set_new_materials_metallic_zero(new_materials):
             metallic_input = node.inputs.get('Metallic')
             if metallic_input is not None:
                 metallic_input.default_value = 0.0
-    
+
 def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storage="SHAPE_KEYS"):
+    timing_report = ImportTimingReport()
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
     if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
         deformation_storage = "SHAPE_KEYS"
@@ -1484,57 +1523,62 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
     original_fps_base = context.scene.render.fps_base
 
     """Do something with the selected file(s)."""
-    filename = bpy.path.basename(fbx_file_path).split('.')[0] 
-    
+    filename = bpy.path.basename(fbx_file_path).split('.')[0]
+
     # Ensure the file exists
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
-        pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
-        pre_import_material_ids = {mat.as_pointer() for mat in bpy.data.materials}
-        bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
+        with timing_report.phase("snapshot scene before native FBX import"):
+            pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
+            pre_import_material_ids = {mat.as_pointer() for mat in bpy.data.materials}
+
+        with timing_report.phase("native Blender FBX import"):
+            bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
 
-        # Set metallic to zero for any materials created by this import.
-        new_materials = [
-            mat for mat in bpy.data.materials
-            if mat.as_pointer() not in pre_import_material_ids
-        ]
-        set_new_materials_metallic_zero(new_materials)
+        with timing_report.phase("post-import object/material detection"):
+            # Set metallic to zero for any materials created by this import.
+            new_materials = [
+                mat for mat in bpy.data.materials
+                if mat.as_pointer() not in pre_import_material_ids
+            ]
+            set_new_materials_metallic_zero(new_materials)
 
-        # Determine which objects were added by the import
-        post_import_objects = list(bpy.context.scene.objects)
-        imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
-        imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
-        imported_names = [obj.name for obj in imported_objects]
+            # Determine which objects were added by the import
+            post_import_objects = list(bpy.context.scene.objects)
+            imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
+            imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
+            imported_names = [obj.name for obj in imported_objects]
 
-        # Initialize max frame variable
-        max_frame = 0
-        
-        # Find the highest keyframe in the imported animation
-        for obj in imported_objects:
-            if obj.animation_data and obj.animation_data.action:
-                action = obj.animation_data.action
-                fcurve_found = False
-                for fcurve in iter_action_fcurves(action):
-                    fcurve_found = True
-                    for keyframe in fcurve.keyframe_points:
-                        max_frame = max(max_frame, int(keyframe.co.x) - 1)  # Update max frame
+        with timing_report.phase("scan animation and update timeline"):
+            # Initialize max frame variable
+            max_frame = 0
 
-                if not fcurve_found:
-                    frame_end = int(action.frame_range[1]) - 1
-                    max_frame = max(max_frame, frame_end)
+            # Find the highest keyframe in the imported animation
+            for obj in imported_objects:
+                if obj.animation_data and obj.animation_data.action:
+                    action = obj.animation_data.action
+                    fcurve_found = False
+                    for fcurve in iter_action_fcurves(action):
+                        fcurve_found = True
+                        for keyframe in fcurve.keyframe_points:
+                            max_frame = max(max_frame, int(keyframe.co.x) - 1)  # Update max frame
 
-        # Get the current frame end in Blender's timeline
-        current_max_frame = context.scene.frame_end
+                    if not fcurve_found:
+                        frame_end = int(action.frame_range[1]) - 1
+                        max_frame = max(max_frame, frame_end)
 
-        # Only update frame_end if the new max_frame is greater
-        if max_frame > current_max_frame:
-            context.scene.frame_end = max_frame
-            #print(f"🎬 Timeline updated: New frame end set to {max_frame} (previous: {current_max_frame})")
-        else:
-            print(f"⏳ Timeline unchanged: Existing frame end ({current_max_frame}) is greater than or equal to imported max ({max_frame})")
+            # Get the current frame end in Blender's timeline
+            current_max_frame = context.scene.frame_end
 
-                
+            # Only update frame_end if the new max_frame is greater
+            if max_frame > current_max_frame:
+                context.scene.frame_end = max_frame
+                #print(f"🎬 Timeline updated: New frame end set to {max_frame} (previous: {current_max_frame})")
+            else:
+                print(f"⏳ Timeline unchanged: Existing frame end ({current_max_frame}) is greater than or equal to imported max ({max_frame})")
+
+
         # Define name replacements in sequential order
         name_replacements = {
             "Axle 2": "Axle 3:",
@@ -1545,12 +1589,14 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
             "shapenode": "Mesh:"
         }
 
-        # Loop through selected objects and apply replacements
-        for obj in imported_objects:
-            for old_part, new_part in name_replacements.items():
-                if old_part in obj.name:  # Check if the old_part exists in the name
-                    obj.name = obj.name.replace(old_part, new_part)  # Replace the text
-        
+        with timing_report.phase("rename imported HVE objects"):
+            # Loop through selected objects and apply replacements
+            for obj in imported_objects:
+                for old_part, new_part in name_replacements.items():
+                    if old_part in obj.name:  # Check if the old_part exists in the name
+                        obj.name = obj.name.replace(old_part, new_part)  # Replace the text
+
+        modifier_phase = timing_report.start_phase("add mesh cleanup Geometry Nodes modifiers")
         # Loop through selected objects and apply modifiers
         for obj in imported_objects:
             if ("Mesh" in obj.name or "Geometry" in obj.name) and obj.type == 'MESH':  # Ensure it's a mesh object
@@ -1606,7 +1652,7 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
 
                 if existing_smooth_modifier is None:
                     smooth_modifier = obj.modifiers.new(name="SmoothByAngle", type='NODES')
-                    
+
                      # Check if the SmoothByAngle node group exists
                     smooth_node_group = bpy.data.node_groups.get("SmoothByAngle")
 
@@ -1615,7 +1661,7 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                         smooth_node_group = bpy.data.node_groups.new(name="SmoothByAngle", type='GeometryNodeTree')
                         smooth_node_group.use_fake_user = True  # Prevent deletion
                         smooth_node_group.is_modifier = True
-                        
+
                         # Create Group Input and Group Output nodes
                         group_input = smooth_node_group.nodes.new(type="NodeGroupInput")
                         group_output = smooth_node_group.nodes.new(type="NodeGroupOutput")
@@ -1630,18 +1676,18 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
 
                         # Add outputs
                         output_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='OUTPUT', socket_type='NodeSocketGeometry')
-                        
+
                         #Create Angle value node
                         angle = smooth_node_group.nodes.new('ShaderNodeValue')
                         angle.outputs[0].default_value = 15.0
                         angle.location = (-400, -150)
-                        
-                        
+
+
                         # Create a Math Node and set it to "To Radians"
                         to_radians_node = smooth_node_group.nodes.new(type="ShaderNodeMath")  # Math Node
                         to_radians_node.operation = 'RADIANS'  # Set the operation to "To Radians"
                         to_radians_node.location = (-200, -150)  # Position in node ed                        itor
-                        
+
                         # Create Edge Angle node
                         edge_angle = smooth_node_group.nodes.new('GeometryNodeInputMeshEdgeAngle')
 
@@ -1652,7 +1698,7 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
 
                         # Create Is Edge Smooth node
                         is_edge_smooth = smooth_node_group.nodes.new('GeometryNodeInputEdgeSmooth')
-                        #is_edge_smooth.domain = 'EDGE'                        
+                        #is_edge_smooth.domain = 'EDGE'
                         # Create Boolean OR for Edge Smoothness
                         boolean_or_edge = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
                         boolean_or_edge.operation = 'OR'
@@ -1664,7 +1710,7 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                         # Create Set Shade Smooth (Edges)
                         set_shade_smooth_edge = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
                         set_shade_smooth_edge.domain = 'EDGE'
-                        
+
                         # Create Is Face Smooth node
                         is_face_smooth = smooth_node_group.nodes.new('GeometryNodeInputShadeSmooth')
 
@@ -1677,24 +1723,24 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
 
                         # Connecting Nodes
 
-                        smooth_node_group.links.new(edge_angle.outputs['Unsigned Angle'], compare_angle.inputs[0])            
+                        smooth_node_group.links.new(edge_angle.outputs['Unsigned Angle'], compare_angle.inputs[0])
                         smooth_node_group.links.new(angle.outputs['Value'], to_radians_node.inputs[0])
                         smooth_node_group.links.new(to_radians_node.outputs['Value'], compare_angle.inputs[1])
-                        
+
                         smooth_node_group.links.new(compare_angle.outputs['Result'], boolean_and.inputs[0])
 
                         smooth_node_group.links.new(is_face_smooth.outputs['Smooth'], boolean_or_face.inputs[0])
                         smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_face.inputs[1])
-                        smooth_node_group.links.new(boolean_or_face.outputs['Boolean'], boolean_and.inputs[1]) 
-             
+                        smooth_node_group.links.new(boolean_or_face.outputs['Boolean'], boolean_and.inputs[1])
+
                         smooth_node_group.links.new(is_edge_smooth.outputs['Smooth'], boolean_or_edge.inputs[0])
                         smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_edge.inputs[1])
 
                         smooth_node_group.links.new(boolean_or_edge.outputs['Boolean'], set_shade_smooth_edge.inputs['Selection'])
                         smooth_node_group.links.new(group_input.outputs['Mesh'], set_shade_smooth_edge.inputs['Geometry'])
-                        smooth_node_group.links.new(boolean_and.outputs['Boolean'], set_shade_smooth_edge.inputs['Shade Smooth'])           
-                  
-                        smooth_node_group.links.new(set_shade_smooth_edge.outputs['Geometry'], set_shade_smooth_face.inputs['Geometry'])            
+                        smooth_node_group.links.new(boolean_and.outputs['Boolean'], set_shade_smooth_edge.inputs['Shade Smooth'])
+
+                        smooth_node_group.links.new(set_shade_smooth_edge.outputs['Geometry'], set_shade_smooth_face.inputs['Geometry'])
                         smooth_node_group.links.new(set_shade_smooth_face.outputs['Geometry'], group_output.inputs['Mesh'])
 
                     # Assign the node group to the modifier
@@ -1706,71 +1752,80 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
 
 
 
-        # Loop through imported objects
-        for obj in imported_objects:
-            # Offset keyframes for all selected objects by 1 frame
-            offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
-  
-        # List of keywords to exclude from selection
-        exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed     
-       
-        # Loop through imported objects
-        for obj in imported_objects:
-            # Check if none of the exclude keywords are in the object name
-            if not any(keyword in obj.name for keyword in exclude_keywords):
-                obj.select_set(True)  # Select the object
+        timing_report.finish_phase(modifier_phase)
 
-                # Run function to adjust X rotation and scale for selected objects
-                adjust_animation(obj)      
-                
-                
-        # Derive keywords used for rotation helpers so they aren't processed as wheels
-        exclude_keywords = [
-            kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
-        ]
-        exclude_keywords += ["objects", "geometry"]
-        include_keywords = ["wheel"]
+        with timing_report.phase("offset imported animation keyframes"):
+            # Loop through imported objects
+            for obj in imported_objects:
+                # Offset keyframes for all selected objects by 1 frame
+                offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
 
-        # Loop through imported objects
-        for obj in imported_objects:
-            try:
-                name = obj.name
-            except ReferenceError:
-                # Object was removed (e.g. by copy_animated_rotation); skip it
-                continue
+        with timing_report.phase("adjust imported animation orientation"):
+            # List of keywords to exclude from selection
+            exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed
 
-            name_lower = name.lower()
+            # Loop through imported objects
+            for obj in imported_objects:
+                # Check if none of the exclude keywords are in the object name
+                if not any(keyword in obj.name for keyword in exclude_keywords):
+                    obj.select_set(True)  # Select the object
 
-            # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-            if any(kw in name_lower for kw in include_keywords) and not any(
-                kw in name_lower for kw in exclude_keywords
-            ):
-                bpy.ops.object.select_all(action="DESELECT")
-                obj.select_set(True)  # Select the object
-                # Run the function
-                copy_animated_rotation(obj, debug=True)
+                    # Run function to adjust X rotation and scale for selected objects
+                    adjust_animation(obj)
 
-                # Rename the object by adding "_FBX" to the end of its name
-                if not name.endswith(": FBX"):
-                    obj.name = f"{name}: FBX"
 
-        # Determine root vehicle names after any renaming or cleanup
-        vehicle_names = get_root_vehicle_names(imported_objects)
-        
-        # Force vehicle root empties to be zeroed at frame -1
-        for obj in imported_objects:
-            if obj.type == "EMPTY" and obj.parent is None:
-                # Only apply to the top-level vehicle empties we detected
-                root = normalize_root_name(obj.name)
-                if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
-                    force_zero_preroll_pose(obj, frame=-1)
+        with timing_report.phase("copy wheel helper rotation animation"):
+            # Derive keywords used for rotation helpers so they aren't processed as wheels
+            exclude_keywords = [
+                kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
+            ]
+            exclude_keywords += ["objects", "geometry"]
+            include_keywords = ["wheel"]
 
-        overwrite_existing_fbx_objects(filename, imported_objects)
+            # Loop through imported objects
+            for obj in imported_objects:
+                try:
+                    name = obj.name
+                except ReferenceError:
+                    # Object was removed (e.g. by copy_animated_rotation); skip it
+                    continue
+
+                name_lower = name.lower()
+
+                # Condition: Name must contain at least one include keyword AND none of the exclude keywords
+                if any(kw in name_lower for kw in include_keywords) and not any(
+                    kw in name_lower for kw in exclude_keywords
+                ):
+                    bpy.ops.object.select_all(action="DESELECT")
+                    obj.select_set(True)  # Select the object
+                    # Run the function
+                    copy_animated_rotation(obj, debug=True)
+
+                    # Rename the object by adding "_FBX" to the end of its name
+                    if not name.endswith(": FBX"):
+                        obj.name = f"{name}: FBX"
+
+        with timing_report.phase("detect vehicles and force preroll pose"):
+            # Determine root vehicle names after any renaming or cleanup
+            vehicle_names = get_root_vehicle_names(imported_objects)
+
+            # Force vehicle root empties to be zeroed at frame -1
+            for obj in imported_objects:
+                if obj.type == "EMPTY" and obj.parent is None:
+                    # Only apply to the top-level vehicle empties we detected
+                    root = normalize_root_name(obj.name)
+                    if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
+                        force_zero_preroll_pose(obj, frame=-1)
+
+        with timing_report.phase("overwrite previous matching FBX import"):
+            overwrite_existing_fbx_objects(filename, imported_objects)
+
+        collection_phase = timing_report.start_phase("organize imported objects into HVE collections")
 
         # Create the event collection
         event_collection_name = f"HVE: {filename}"
         event_collection = ensure_collection_exists(event_collection_name, bpy.context.scene.collection, hide = False, dont_render=False)
- 
+
         # Ensure the layer collection exists before setting it as active
         layer_collection = None
         for lc in bpy.context.view_layer.layer_collection.children:
@@ -1790,10 +1845,10 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
             # Remove any trailing '.###' from vehicle_name (e.g., 'Car.001' -> 'Car')
             clean_vehicle_name = re.sub(r'\.\d+$', '', vehicle_name)
 
-        
-            fbx_collection_name = f"HVE: {filename}: {vehicle_name}: FBX"            
+
+            fbx_collection_name = f"HVE: {filename}: {vehicle_name}: FBX"
             fbx_collection = ensure_collection_exists(fbx_collection_name, event_collection, hide = False, dont_render=False)
-            
+
             # Ensure the layer collection exists before setting it as active
             layer_collection = None
             for lc in bpy.context.view_layer.layer_collection.children:
@@ -1810,15 +1865,15 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                     remove_from_all_collections(obj)
                     fbx_collection.objects.link(obj)
                     object_collections[obj.as_pointer()] = fbx_collection
- 
 
-            # Create subcollections 
+
+            # Create subcollections
             wheels_collection_name = f"Wheels: {vehicle_name}: {filename}: FBX"
-            wheels_collection = ensure_collection_exists(wheels_collection_name, fbx_collection, hide = False, dont_render=False)       
-       
+            wheels_collection = ensure_collection_exists(wheels_collection_name, fbx_collection, hide = False, dont_render=False)
+
             mesh_collection_name = f"Body Mesh: {vehicle_name}: {filename}: FBX"
-            mesh_collection = ensure_collection_exists(mesh_collection_name, fbx_collection, hide = False, dont_render=False)       
-        
+            mesh_collection = ensure_collection_exists(mesh_collection_name, fbx_collection, hide = False, dont_render=False)
+
             # Loop through imported objects
             for obj in imported_objects:
                 existing_collection = object_collections.get(obj.as_pointer())
@@ -1838,7 +1893,7 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                 if "Mesh" in obj.name:
                     assign_objects_to_subcollection(mesh_collection_name, fbx_collection, obj)
 
-                                                      
+
             new_name = f"CG: {vehicle_name} {filename}: FBX"
             for o in imported_objects:
                 if o.type == "EMPTY" and o.parent is None:
@@ -1852,11 +1907,11 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
                         obj.name = new_name
                         print(f"Renamed root empty: {old} → {new_name}")
                         renamed = True
-                                                                        
+
                         break
 
             if not renamed:
-                      
+
                 print(f"WARNING: Could not find root empty for vehicle '{vehicle_name}' to rename to '{new_name}'")
 
         # Ensure any remaining imported objects follow their parent's collection
@@ -1873,41 +1928,50 @@ def import_fbx(context, fbx_file_path, merge_body_mesh=False, deformation_storag
             target_collection = parent_collection or event_collection
             remove_from_all_collections(obj)
             target_collection.objects.link(obj)
-                    
-        if merge_body_mesh:
-            # Join body mesh objects separately for each vehicle only when requested.
-            join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
-        else:
-            print("ℹ️ Body mesh merge disabled; imported body geometry remains split for faster import.")
 
-        if deformation_storage == "MDD":
-            export_body_shape_key_animations_to_mdd(
-                vehicle_names,
-                fbx_file_path,
-                imported_objects,
-                imported_pointer_set,
-            )
-        elif merge_body_mesh:
-            # Rebuild joined shape-key meshes with a smaller self-contained sample set.
-            reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
+        timing_report.finish_phase(collection_phase)
 
-        # Replace duplicate materials
-        merge_duplicate_materials_per_vehicle(vehicle_names)
- 
-       # Restore the original frame rate settings
-        context.scene.render.fps = original_fps
-        context.scene.render.fps_base = original_fps_base
-        print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
-        
-        context.scene.frame_start = 0
-        bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
-        
-        
+        with timing_report.phase("optional body mesh merge"):
+            if merge_body_mesh:
+                # Join body mesh objects separately for each vehicle only when requested.
+                join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
+            else:
+                print("ℹ️ Body mesh merge disabled; imported body geometry remains split for faster import.")
+
+        with timing_report.phase("optional deformation storage conversion"):
+            if deformation_storage == "MDD":
+                export_body_shape_key_animations_to_mdd(
+                    vehicle_names,
+                    fbx_file_path,
+                    imported_objects,
+                    imported_pointer_set,
+                )
+            elif merge_body_mesh:
+                # Rebuild joined shape-key meshes with a smaller self-contained sample set.
+                reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
+
+        with timing_report.phase("merge duplicate imported materials"):
+            # Replace duplicate materials
+            merge_duplicate_materials_per_vehicle(vehicle_names)
+
+        with timing_report.phase("restore scene settings and find missing files"):
+            # Restore the original frame rate settings
+            context.scene.render.fps = original_fps
+            context.scene.render.fps_base = original_fps_base
+            print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
+
+            context.scene.frame_start = 0
+            bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
+
+        timing_report.print_summary()
+
+
     else:
         print("Error: File not found!")
+        timing_report.print_summary()
 
-    
-    
+
+
 def load(context,
          filepath,
          merge_body_mesh=False,
@@ -1916,11 +1980,11 @@ def load(context,
 
 
     if bpy.ops.object.mode_set.poll():
-        bpy.ops.object.mode_set(mode='OBJECT') 
-        
-    dirname = os.path.dirname(filepath)        
+        bpy.ops.object.mode_set(mode='OBJECT')
 
-    import_fbx(context, 
+    dirname = os.path.dirname(filepath)
+
+    import_fbx(context,
             filepath,
             merge_body_mesh=merge_body_mesh,
             deformation_storage=deformation_storage,
