@@ -1522,6 +1522,7 @@ def import_fbx(
     fbx_file_path,
     merge_body_mesh=False,
     deformation_storage="SHAPE_KEYS",
+    apply_mesh_cleanup=False,
     find_missing_files=False,
 ):
     timing_report = ImportTimingReport()
@@ -1607,163 +1608,167 @@ def import_fbx(
                     if old_part in obj.name:  # Check if the old_part exists in the name
                         obj.name = obj.name.replace(old_part, new_part)  # Replace the text
 
-        modifier_phase = timing_report.start_phase("add mesh cleanup Geometry Nodes modifiers")
-        # Loop through selected objects and apply modifiers
-        for obj in imported_objects:
-            if ("Mesh" in obj.name or "Geometry" in obj.name) and obj.type == 'MESH':  # Ensure it's a mesh object
-                # --- First Modifier: MergeByDistance ---
-                existing_merge_modifier = None
-                for mod in obj.modifiers:
-                    if mod.type == 'NODES' and mod.name == "MergeByDistance":
-                        existing_merge_modifier = mod
-                        break
+        if apply_mesh_cleanup:
+            modifier_phase = timing_report.start_phase("add mesh cleanup Geometry Nodes modifiers")
+            # Loop through selected objects and apply modifiers
+            for obj in imported_objects:
+                if ("Mesh" in obj.name or "Geometry" in obj.name) and obj.type == 'MESH':  # Ensure it's a mesh object
+                    # --- First Modifier: MergeByDistance ---
+                    existing_merge_modifier = None
+                    for mod in obj.modifiers:
+                        if mod.type == 'NODES' and mod.name == "MergeByDistance":
+                            existing_merge_modifier = mod
+                            break
 
-                if existing_merge_modifier is None:
-                    merge_modifier = obj.modifiers.new(name="MergeByDistance", type='NODES')
+                    if existing_merge_modifier is None:
+                        merge_modifier = obj.modifiers.new(name="MergeByDistance", type='NODES')
 
-                    # Check if the MergeByDistance node group exists
-                    merge_node_group = bpy.data.node_groups.get("MergeByDistance")
+                        # Check if the MergeByDistance node group exists
+                        merge_node_group = bpy.data.node_groups.get("MergeByDistance")
 
-                    if merge_node_group is None:
-                        merge_node_group = bpy.data.node_groups.new(name="MergeByDistance", type='GeometryNodeTree')
-                        merge_node_group.use_fake_user = True  # Prevent deletion
-                        merge_node_group.is_modifier = True
+                        if merge_node_group is None:
+                            merge_node_group = bpy.data.node_groups.new(name="MergeByDistance", type='GeometryNodeTree')
+                            merge_node_group.use_fake_user = True  # Prevent deletion
+                            merge_node_group.is_modifier = True
 
-                        # Add input and output nodes
-                        input_node = merge_node_group.nodes.new(type='NodeGroupInput')
-                        output_node = merge_node_group.nodes.new(type='NodeGroupOutput')
+                            # Add input and output nodes
+                            input_node = merge_node_group.nodes.new(type='NodeGroupInput')
+                            output_node = merge_node_group.nodes.new(type='NodeGroupOutput')
 
-                        merge_node_group.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
-                        merge_node_group.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
+                            merge_node_group.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
+                            merge_node_group.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
 
-                        # Position nodes
-                        input_node.location = (-200, 0)
-                        output_node.location = (400, 0)
+                            # Position nodes
+                            input_node.location = (-200, 0)
+                            output_node.location = (400, 0)
 
-                        # Create Merge by Distance Node
-                        merge_by_distance_node = merge_node_group.nodes.new(type='GeometryNodeMergeByDistance')
-                        merge_by_distance_node.location = (0, 0)
+                            # Create Merge by Distance Node
+                            merge_by_distance_node = merge_node_group.nodes.new(type='GeometryNodeMergeByDistance')
+                            merge_by_distance_node.location = (0, 0)
 
-                        # Connect nodes
-                        merge_node_group.links.new(input_node.outputs["Geometry"], merge_by_distance_node.inputs["Geometry"])
-                        merge_node_group.links.new(merge_by_distance_node.outputs["Geometry"], output_node.inputs["Geometry"])
+                            # Connect nodes
+                            merge_node_group.links.new(input_node.outputs["Geometry"], merge_by_distance_node.inputs["Geometry"])
+                            merge_node_group.links.new(merge_by_distance_node.outputs["Geometry"], output_node.inputs["Geometry"])
 
-                    # Assign the node group to the modifier
-                    merge_modifier.node_group = merge_node_group
-                else:
-                    merge_modifier = existing_merge_modifier
-                    print(f"Using existing 'MergeByDistance' modifier for {obj.name}.")
+                        # Assign the node group to the modifier
+                        merge_modifier.node_group = merge_node_group
+                    else:
+                        merge_modifier = existing_merge_modifier
+                        print(f"Using existing 'MergeByDistance' modifier for {obj.name}.")
 
-                # --- Second Modifier: Smooth by Angle ---
-                existing_smooth_modifier = None
-                for mod in obj.modifiers:
-                    if mod.type == 'NODES' and mod.name == "SmoothByAngle":
-                        existing_smooth_modifier = mod
-                        break
+                    # --- Second Modifier: Smooth by Angle ---
+                    existing_smooth_modifier = None
+                    for mod in obj.modifiers:
+                        if mod.type == 'NODES' and mod.name == "SmoothByAngle":
+                            existing_smooth_modifier = mod
+                            break
 
-                if existing_smooth_modifier is None:
-                    smooth_modifier = obj.modifiers.new(name="SmoothByAngle", type='NODES')
+                    if existing_smooth_modifier is None:
+                        smooth_modifier = obj.modifiers.new(name="SmoothByAngle", type='NODES')
 
-                     # Check if the SmoothByAngle node group exists
-                    smooth_node_group = bpy.data.node_groups.get("SmoothByAngle")
+                         # Check if the SmoothByAngle node group exists
+                        smooth_node_group = bpy.data.node_groups.get("SmoothByAngle")
 
-                    if smooth_node_group is None:
-                        # Create a new Geometry Nodes group
-                        smooth_node_group = bpy.data.node_groups.new(name="SmoothByAngle", type='GeometryNodeTree')
-                        smooth_node_group.use_fake_user = True  # Prevent deletion
-                        smooth_node_group.is_modifier = True
+                        if smooth_node_group is None:
+                            # Create a new Geometry Nodes group
+                            smooth_node_group = bpy.data.node_groups.new(name="SmoothByAngle", type='GeometryNodeTree')
+                            smooth_node_group.use_fake_user = True  # Prevent deletion
+                            smooth_node_group.is_modifier = True
 
-                        # Create Group Input and Group Output nodes
-                        group_input = smooth_node_group.nodes.new(type="NodeGroupInput")
-                        group_output = smooth_node_group.nodes.new(type="NodeGroupOutput")
-                        group_input.location = (-400, 0)
-                        group_output.location = (400, 0)
-
-
-                        # Add inputs
-                        input_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='INPUT', socket_type='NodeSocketGeometry')
-                        #input_angle = smooth_node_group.interface.new_socket(name="Angle", in_out='INPUT', socket_type='NodeSocketFloat')
-                        input_ignore_sharpness = smooth_node_group.interface.new_socket(name="Ignore Sharpness", in_out='INPUT', socket_type='NodeSocketBool')
-
-                        # Add outputs
-                        output_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='OUTPUT', socket_type='NodeSocketGeometry')
-
-                        #Create Angle value node
-                        angle = smooth_node_group.nodes.new('ShaderNodeValue')
-                        angle.outputs[0].default_value = 15.0
-                        angle.location = (-400, -150)
+                            # Create Group Input and Group Output nodes
+                            group_input = smooth_node_group.nodes.new(type="NodeGroupInput")
+                            group_output = smooth_node_group.nodes.new(type="NodeGroupOutput")
+                            group_input.location = (-400, 0)
+                            group_output.location = (400, 0)
 
 
-                        # Create a Math Node and set it to "To Radians"
-                        to_radians_node = smooth_node_group.nodes.new(type="ShaderNodeMath")  # Math Node
-                        to_radians_node.operation = 'RADIANS'  # Set the operation to "To Radians"
-                        to_radians_node.location = (-200, -150)  # Position in node ed                        itor
+                            # Add inputs
+                            input_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='INPUT', socket_type='NodeSocketGeometry')
+                            #input_angle = smooth_node_group.interface.new_socket(name="Angle", in_out='INPUT', socket_type='NodeSocketFloat')
+                            input_ignore_sharpness = smooth_node_group.interface.new_socket(name="Ignore Sharpness", in_out='INPUT', socket_type='NodeSocketBool')
 
-                        # Create Edge Angle node
-                        edge_angle = smooth_node_group.nodes.new('GeometryNodeInputMeshEdgeAngle')
+                            # Add outputs
+                            output_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='OUTPUT', socket_type='NodeSocketGeometry')
 
-                        # Create Less Than or Equal node
-                        compare_angle = smooth_node_group.nodes.new('FunctionNodeCompare')
-                        compare_angle.data_type = 'FLOAT'
-                        compare_angle.operation = 'LESS_EQUAL'
-
-                        # Create Is Edge Smooth node
-                        is_edge_smooth = smooth_node_group.nodes.new('GeometryNodeInputEdgeSmooth')
-                        #is_edge_smooth.domain = 'EDGE'
-                        # Create Boolean OR for Edge Smoothness
-                        boolean_or_edge = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                        boolean_or_edge.operation = 'OR'
-
-                        # Create Boolean AND to combine conditions
-                        boolean_and = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                        boolean_and.operation = 'AND'
-
-                        # Create Set Shade Smooth (Edges)
-                        set_shade_smooth_edge = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
-                        set_shade_smooth_edge.domain = 'EDGE'
-
-                        # Create Is Face Smooth node
-                        is_face_smooth = smooth_node_group.nodes.new('GeometryNodeInputShadeSmooth')
-
-                        # Create Boolean OR for Face Smoothness
-                        boolean_or_face = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                        boolean_or_face.operation = 'OR'
-
-                        # Create Set Shade Smooth (Faces)
-                        set_shade_smooth_face = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
-
-                        # Connecting Nodes
-
-                        smooth_node_group.links.new(edge_angle.outputs['Unsigned Angle'], compare_angle.inputs[0])
-                        smooth_node_group.links.new(angle.outputs['Value'], to_radians_node.inputs[0])
-                        smooth_node_group.links.new(to_radians_node.outputs['Value'], compare_angle.inputs[1])
-
-                        smooth_node_group.links.new(compare_angle.outputs['Result'], boolean_and.inputs[0])
-
-                        smooth_node_group.links.new(is_face_smooth.outputs['Smooth'], boolean_or_face.inputs[0])
-                        smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_face.inputs[1])
-                        smooth_node_group.links.new(boolean_or_face.outputs['Boolean'], boolean_and.inputs[1])
-
-                        smooth_node_group.links.new(is_edge_smooth.outputs['Smooth'], boolean_or_edge.inputs[0])
-                        smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_edge.inputs[1])
-
-                        smooth_node_group.links.new(boolean_or_edge.outputs['Boolean'], set_shade_smooth_edge.inputs['Selection'])
-                        smooth_node_group.links.new(group_input.outputs['Mesh'], set_shade_smooth_edge.inputs['Geometry'])
-                        smooth_node_group.links.new(boolean_and.outputs['Boolean'], set_shade_smooth_edge.inputs['Shade Smooth'])
-
-                        smooth_node_group.links.new(set_shade_smooth_edge.outputs['Geometry'], set_shade_smooth_face.inputs['Geometry'])
-                        smooth_node_group.links.new(set_shade_smooth_face.outputs['Geometry'], group_output.inputs['Mesh'])
-
-                    # Assign the node group to the modifier
-                    smooth_modifier.node_group = smooth_node_group
-                else:
-                    smooth_modifier = existing_smooth_modifier
-                    print(f"Using existing 'SmoothByAngle' modifier for {obj.name}.")
+                            #Create Angle value node
+                            angle = smooth_node_group.nodes.new('ShaderNodeValue')
+                            angle.outputs[0].default_value = 15.0
+                            angle.location = (-400, -150)
 
 
+                            # Create a Math Node and set it to "To Radians"
+                            to_radians_node = smooth_node_group.nodes.new(type="ShaderNodeMath")  # Math Node
+                            to_radians_node.operation = 'RADIANS'  # Set the operation to "To Radians"
+                            to_radians_node.location = (-200, -150)  # Position in node ed                        itor
+
+                            # Create Edge Angle node
+                            edge_angle = smooth_node_group.nodes.new('GeometryNodeInputMeshEdgeAngle')
+
+                            # Create Less Than or Equal node
+                            compare_angle = smooth_node_group.nodes.new('FunctionNodeCompare')
+                            compare_angle.data_type = 'FLOAT'
+                            compare_angle.operation = 'LESS_EQUAL'
+
+                            # Create Is Edge Smooth node
+                            is_edge_smooth = smooth_node_group.nodes.new('GeometryNodeInputEdgeSmooth')
+                            #is_edge_smooth.domain = 'EDGE'
+                            # Create Boolean OR for Edge Smoothness
+                            boolean_or_edge = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
+                            boolean_or_edge.operation = 'OR'
+
+                            # Create Boolean AND to combine conditions
+                            boolean_and = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
+                            boolean_and.operation = 'AND'
+
+                            # Create Set Shade Smooth (Edges)
+                            set_shade_smooth_edge = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
+                            set_shade_smooth_edge.domain = 'EDGE'
+
+                            # Create Is Face Smooth node
+                            is_face_smooth = smooth_node_group.nodes.new('GeometryNodeInputShadeSmooth')
+
+                            # Create Boolean OR for Face Smoothness
+                            boolean_or_face = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
+                            boolean_or_face.operation = 'OR'
+
+                            # Create Set Shade Smooth (Faces)
+                            set_shade_smooth_face = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
+
+                            # Connecting Nodes
+
+                            smooth_node_group.links.new(edge_angle.outputs['Unsigned Angle'], compare_angle.inputs[0])
+                            smooth_node_group.links.new(angle.outputs['Value'], to_radians_node.inputs[0])
+                            smooth_node_group.links.new(to_radians_node.outputs['Value'], compare_angle.inputs[1])
+
+                            smooth_node_group.links.new(compare_angle.outputs['Result'], boolean_and.inputs[0])
+
+                            smooth_node_group.links.new(is_face_smooth.outputs['Smooth'], boolean_or_face.inputs[0])
+                            smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_face.inputs[1])
+                            smooth_node_group.links.new(boolean_or_face.outputs['Boolean'], boolean_and.inputs[1])
+
+                            smooth_node_group.links.new(is_edge_smooth.outputs['Smooth'], boolean_or_edge.inputs[0])
+                            smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_edge.inputs[1])
+
+                            smooth_node_group.links.new(boolean_or_edge.outputs['Boolean'], set_shade_smooth_edge.inputs['Selection'])
+                            smooth_node_group.links.new(group_input.outputs['Mesh'], set_shade_smooth_edge.inputs['Geometry'])
+                            smooth_node_group.links.new(boolean_and.outputs['Boolean'], set_shade_smooth_edge.inputs['Shade Smooth'])
+
+                            smooth_node_group.links.new(set_shade_smooth_edge.outputs['Geometry'], set_shade_smooth_face.inputs['Geometry'])
+                            smooth_node_group.links.new(set_shade_smooth_face.outputs['Geometry'], group_output.inputs['Mesh'])
+
+                        # Assign the node group to the modifier
+                        smooth_modifier.node_group = smooth_node_group
+                    else:
+                        smooth_modifier = existing_smooth_modifier
+                        print(f"Using existing 'SmoothByAngle' modifier for {obj.name}.")
 
 
-        timing_report.finish_phase(modifier_phase)
+
+
+            timing_report.finish_phase(modifier_phase)
+
+        else:
+            print("ℹ️ Mesh cleanup modifiers disabled for faster renders.")
 
         with timing_report.phase("offset imported animation keyframes"):
             processed_offset_actions = set()
@@ -2000,6 +2005,7 @@ def load(context,
          filepath,
          merge_body_mesh=False,
          deformation_storage="SHAPE_KEYS",
+         apply_mesh_cleanup=False,
          find_missing_files=False,
          ):
 
@@ -2013,6 +2019,7 @@ def load(context,
             filepath,
             merge_body_mesh=merge_body_mesh,
             deformation_storage=deformation_storage,
+            apply_mesh_cleanup=apply_mesh_cleanup,
             find_missing_files=find_missing_files,
             )
 

@@ -41,7 +41,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Imports FBX files and updates the scene timeline to include imported animation.
   - Renames imported HVE hierarchy components into cleaner labels.
   - Organizes imported data into HVE collections by event, vehicle, wheels, and body mesh.
-  - Applies mesh cleanup support, can optionally join body mesh objects per vehicle, can keep deformation as shape keys or bake it to external MDD point-cache files, and merges duplicate imported materials per vehicle.
+  - Can optionally apply mesh cleanup modifiers, join body mesh objects per vehicle, keep deformation as shape keys or bake it to external MDD point-cache files, and merge duplicate imported materials per vehicle.
   - Sets newly imported material metallic values to zero and can optionally find missing files in the public HVE support-files path.
 - **RaceRender converter** (`.csv`): convert HVE variable-output data into RaceRender-ready CSV files.
 
@@ -131,7 +131,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### 4. Import HVE post-simulation files
 
 - For variable-output files, open **Post-Simulation Processing → Variable Output Importer**, choose the `.hvo` or `.csv`, set scale options, and import.
-- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, choose the `.fbx`, optionally enable **Merge Body Mesh**, choose **Shape Keys** or **External MDD File** deformation storage, optionally enable **Find Missing Files**, and import.
+- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, choose the `.fbx`, optionally enable **Merge Body Mesh**, choose **Shape Keys** or **External MDD File** deformation storage, optionally enable **Apply Merge by Distance and Smooth** mesh cleanup, optionally enable **Find Missing Files**, and import.
 - For RaceRender conversion, open **Post-Simulation Processing → RaceRender Converter** and convert the HVE variable output into RaceRender-ready `.csv` files.
 
 ### 5. Animate from EDR data

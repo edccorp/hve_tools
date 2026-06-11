@@ -53,6 +53,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
 
         layout.prop(operator, "merge_body_mesh")
         layout.prop(operator, "deformation_storage")
+        layout.prop(operator, "apply_mesh_cleanup")
         layout.prop(operator, "find_missing_files")
 
 
@@ -87,6 +88,12 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             default='SHAPE_KEYS',
             )
 
+    apply_mesh_cleanup: BoolProperty(
+            name="Apply Merge by Distance and Smooth",
+            description="Add Geometry Nodes modifiers that merge nearby vertices and smooth mesh shading; disable for faster renders",
+            default=False,
+            )
+
     find_missing_files: BoolProperty(
             name="Find Missing Files",
             description="Search the public HVE support-files folder for missing assets after import; disable for faster imports",
@@ -104,6 +111,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             self.filepath,
             merge_body_mesh=self.merge_body_mesh,
             deformation_storage=self.deformation_storage,
+            apply_mesh_cleanup=self.apply_mesh_cleanup,
             find_missing_files=self.find_missing_files,
         )
 
