@@ -51,6 +51,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
+        layout.prop(operator, "import_via_usd")
         layout.prop(operator, "merge_body_mesh")
         layout.prop(operator, "deformation_storage")
         layout.prop(operator, "apply_mesh_cleanup")
@@ -70,6 +71,12 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             default="*.fbx",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
+            )
+
+    import_via_usd: BoolProperty(
+            name="Convert FBX Through USD",
+            description="Import the FBX, export the imported result to a temporary USD file, then import that USD for more reliable geometry and animation",
+            default=True,
             )
 
     merge_body_mesh: BoolProperty(
@@ -113,6 +120,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             deformation_storage=self.deformation_storage,
             apply_mesh_cleanup=self.apply_mesh_cleanup,
             find_missing_files=self.find_missing_files,
+            import_via_usd=self.import_via_usd,
         )
 
     def draw(self, context):

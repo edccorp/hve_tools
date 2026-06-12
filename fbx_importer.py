@@ -5,6 +5,7 @@ import math
 import threading
 import struct
 import time
+import tempfile
 from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
@@ -1545,6 +1546,112 @@ def set_new_materials_metallic_zero(new_materials):
             if metallic_input is not None:
                 metallic_input.default_value = 0.0
 
+
+def _call_blender_operator_with_fallback(operator, option_sets):
+    """Call a Blender operator with the first supported keyword set.
+
+    Blender changes USD operator option names between versions.  The importer
+    keeps the user-facing behavior stable by trying a rich option set first and
+    progressively falling back to the smallest required call.
+    """
+    last_error = None
+    for options in option_sets:
+        try:
+            return operator(**options)
+        except TypeError as exc:
+            last_error = exc
+        except RuntimeError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return operator()
+
+
+def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_objects):
+    """Export freshly imported FBX objects to USD and import that USD back.
+
+    HVE FBX files can import with less reliable mesh/animation results than the
+    same data after Blender has serialized it through USD.  This helper performs
+    that conversion as an in-memory import pipeline step: export only the
+    objects created by the native FBX importer to a temporary USD file, import
+    the USD file, then remove the original FBX objects once the USD import has
+    succeeded.  If the active Blender build does not provide USD operators, a
+    RuntimeError is raised so callers can continue with the native FBX import.
+    """
+    imported_objects = [obj for obj in imported_objects if is_valid_blender_object(obj)]
+    if not imported_objects:
+        return []
+
+    usd_export = getattr(bpy.ops.wm, "usd_export", None)
+    usd_import = getattr(bpy.ops.wm, "usd_import", None)
+    if usd_export is None or usd_import is None:
+        raise RuntimeError("This Blender build does not expose USD import/export operators.")
+
+    previous_active = context.view_layer.objects.active
+    previous_selection = [obj for obj in context.selected_objects if is_valid_blender_object(obj)]
+
+    with tempfile.TemporaryDirectory(prefix="hve_fbx_usd_") as temp_dir:
+        usd_file_path = os.path.join(
+            temp_dir,
+            f"{os.path.splitext(os.path.basename(fbx_file_path))[0]}_roundtrip.usdc",
+        )
+
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in imported_objects:
+            obj.select_set(True)
+        context.view_layer.objects.active = imported_objects[0]
+
+        _call_blender_operator_with_fallback(
+            usd_export,
+            (
+                {
+                    "filepath": usd_file_path,
+                    "selected_objects_only": True,
+                    "export_animation": True,
+                    "evaluation_mode": "RENDER",
+                },
+                {
+                    "filepath": usd_file_path,
+                    "selected_objects_only": True,
+                    "export_animation": True,
+                },
+                {"filepath": usd_file_path, "selected_objects_only": True},
+                {"filepath": usd_file_path},
+            ),
+        )
+
+        pre_usd_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
+        _call_blender_operator_with_fallback(
+            usd_import,
+            (
+                {"filepath": usd_file_path, "read_mesh_uvs": True},
+                {"filepath": usd_file_path},
+            ),
+        )
+
+    usd_objects = [
+        obj for obj in bpy.context.scene.objects
+        if obj.as_pointer() not in pre_usd_import_ids
+    ]
+    if not usd_objects:
+        raise RuntimeError("USD round-trip completed but did not create any objects.")
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in imported_objects:
+        if is_valid_blender_object(obj):
+            obj.select_set(True)
+    bpy.ops.object.delete()
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in previous_selection:
+        if is_valid_blender_object(obj):
+            obj.select_set(True)
+    if previous_active and is_valid_blender_object(previous_active):
+        context.view_layer.objects.active = previous_active
+
+    print(f"✅ Converted native FBX import through temporary USD: {len(usd_objects)} objects imported.")
+    return usd_objects
+
 def import_fbx(
     context,
     fbx_file_path,
@@ -1552,6 +1659,7 @@ def import_fbx(
     deformation_storage="SHAPE_KEYS",
     apply_mesh_cleanup=False,
     find_missing_files=False,
+    import_via_usd=True,
 ):
     timing_report = ImportTimingReport()
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
@@ -1587,6 +1695,22 @@ def import_fbx(
             # Determine which objects were added by the import
             post_import_objects = list(bpy.context.scene.objects)
             imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
+
+        if import_via_usd:
+            with timing_report.phase("optional FBX to USD round-trip"):
+                try:
+                    imported_objects = roundtrip_imported_objects_through_usd(
+                        context,
+                        fbx_file_path,
+                        imported_objects,
+                    )
+                except Exception as exc:
+                    print(f"⚠️ USD round-trip failed; continuing with native FBX import: {exc}")
+        else:
+            print("ℹ️ FBX to USD round-trip disabled; using native FBX import results.")
+
+        with timing_report.phase("post-round-trip import tracking"):
+            imported_objects = [obj for obj in imported_objects if is_valid_blender_object(obj)]
             imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
             imported_names = [obj.name for obj in imported_objects]
 
@@ -2036,6 +2160,7 @@ def load(context,
          deformation_storage="SHAPE_KEYS",
          apply_mesh_cleanup=False,
          find_missing_files=False,
+         import_via_usd=True,
          ):
 
 
@@ -2050,6 +2175,7 @@ def load(context,
             deformation_storage=deformation_storage,
             apply_mesh_cleanup=apply_mesh_cleanup,
             find_missing_files=find_missing_files,
+            import_via_usd=import_via_usd,
             )
 
     return {'FINISHED'}
