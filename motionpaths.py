@@ -98,24 +98,52 @@ def get_or_create_motion_path_collection():
     return new_collection
 
 
+def preserve_object_selection_for_motion_path(ob, operation):
+    """Run a motion path operation on one object without changing other selections/paths."""
+    view_layer = bpy.context.view_layer
+    original_active = view_layer.objects.active
+    original_selection = list(bpy.context.selected_objects)
+
+    try:
+        for selected_ob in original_selection:
+            selected_ob.select_set(False)
+
+        ob.select_set(True)
+        view_layer.objects.active = ob
+        return operation()
+    finally:
+        for selected_ob in list(bpy.context.selected_objects):
+            selected_ob.select_set(False)
+
+        for selected_ob in original_selection:
+            if selected_ob.name in bpy.data.objects:
+                selected_ob.select_set(True)
+
+        if original_active and original_active.name in bpy.data.objects:
+            view_layer.objects.active = original_active
+
+
 def create_motion_path(ob):
-    """Generates a motion path for the given object."""
-    bpy.context.view_layer.objects.active = ob
-    if ob.motion_path:
-        bpy.ops.object.paths_clear()  # Clear any existing motion path
+    """Generates a motion path for the given object without clearing paths from others."""
+    def calculate_path_for_active_object():
+        if ob.motion_path:
+            bpy.ops.object.paths_clear()  # Clear only this object's existing motion path
 
-    bpy.ops.object.paths_calculate()
+        bpy.ops.object.paths_calculate()
+        return ob.motion_path is not None
 
-    return ob.motion_path is not None
+    return preserve_object_selection_for_motion_path(ob, calculate_path_for_active_object)
 
 
 def delete_motion_path(ob):
-    """Clears a motion path from the given object."""
-    bpy.context.view_layer.objects.active = ob
-    if ob.motion_path:
-        bpy.ops.object.paths_clear()  # Clear any existing motion path
+    """Clears a motion path from the given object without clearing paths from others."""
+    def clear_path_for_active_object():
+        if ob.motion_path:
+            bpy.ops.object.paths_clear()  # Clear only this object's existing motion path
 
-    return ob.motion_path is not None
+        return ob.motion_path is not None
+
+    return preserve_object_selection_for_motion_path(ob, clear_path_for_active_object)
 
 
 def create_curve_from_motion_path(ob, context):
