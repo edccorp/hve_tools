@@ -23,6 +23,7 @@ for node in module_ast.body:
         "get_body_mesh_objects_for_vehicle",
         "object_pointer",
         "normalize_name",
+        "build_fbx_to_usd_conversion_script",
         "copy_animated_rotation",
         "get_action_fcurve_collection",
         "iter_action_fcurve_collections",
@@ -48,6 +49,7 @@ copy_animated_rotation = ns["copy_animated_rotation"]
 is_valid_blender_object = ns["is_valid_blender_object"]
 adjust_animation = ns["adjust_animation"]
 offset_selected_animation = ns["offset_selected_animation"]
+build_fbx_to_usd_conversion_script = ns["build_fbx_to_usd_conversion_script"]
 ROTATION_AXIS_KEYWORDS = ns["ROTATION_AXIS_KEYWORDS"]
 
 
@@ -648,3 +650,13 @@ if __name__ == "__main__":
     test_belongs_to_vehicle_match()
     test_belongs_to_vehicle_numeric_suffix()
     print("ok")
+
+
+def test_build_fbx_to_usd_conversion_script_uses_clean_command_line_scene():
+    script = build_fbx_to_usd_conversion_script("/tmp/source.fbx", "/tmp/result.usdc")
+
+    assert "bpy.ops.import_scene.fbx(filepath=fbx_file_path)" in script
+    assert "bpy.ops.wm.usd_export(**options)" in script
+    assert "export_materials" in script
+    assert "export_animation" not in script
+    assert "bpy.ops.object.delete()" in script

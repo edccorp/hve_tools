@@ -6,6 +6,7 @@ import threading
 import struct
 import time
 import tempfile
+import subprocess
 from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
@@ -168,6 +169,76 @@ def is_wheel_object(obj):
         current = current.parent
     return False
 
+
+
+
+
+def build_fbx_to_usd_conversion_script(fbx_file_path, usd_file_path):
+    """Return a Blender Python script for an isolated FBX -> USD conversion."""
+    return f"""
+import bpy
+
+fbx_file_path = {fbx_file_path!r}
+usd_file_path = {usd_file_path!r}
+
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.object.delete()
+
+bpy.ops.import_scene.fbx(filepath=fbx_file_path)
+
+# Export the converted scene the same way the successful command-line workflow
+# does: from a clean Blender process, with imported materials, and without
+# selecting only objects from the add-on's already-open scene.
+bpy.ops.object.select_all(action="SELECT")
+last_error = None
+for options in (
+    {{"filepath": usd_file_path, "selected_objects_only": True, "export_materials": True}},
+    {{"filepath": usd_file_path, "export_materials": True}},
+    {{"filepath": usd_file_path}},
+):
+    try:
+        bpy.ops.wm.usd_export(**options)
+        break
+    except (TypeError, RuntimeError) as exc:
+        last_error = exc
+else:
+    raise last_error or RuntimeError("USD export failed without an exception.")
+"""
+
+
+def convert_fbx_to_usd_in_background_blender(fbx_file_path, usd_file_path, temp_dir):
+    """Run Blender in a clean background process to convert ``fbx_file_path`` to USD."""
+    blender_binary_path = getattr(getattr(bpy, "app", None), "binary_path", None)
+    if not blender_binary_path:
+        raise RuntimeError("Cannot locate the Blender executable for command-line FBX to USD conversion.")
+
+    conversion_script_path = os.path.join(temp_dir, "hve_fbx_to_usd.py")
+    with open(conversion_script_path, "w", encoding="utf-8") as script_file:
+        script_file.write(build_fbx_to_usd_conversion_script(fbx_file_path, usd_file_path))
+
+    command = [
+        blender_binary_path,
+        "--background",
+        "--factory-startup",
+        "--python",
+        conversion_script_path,
+    ]
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+        raise RuntimeError(
+            f"Command-line FBX to USD conversion failed with exit code {result.returncode}: {output}"
+        )
+    if not os.path.exists(usd_file_path):
+        raise RuntimeError("Command-line FBX to USD conversion did not create a USD file.")
+
+    return command
 
 def _iter_layered_fcurve_collections(action):
     """Yield F-Curve collections from layered actions (Blender 5+)."""
@@ -1568,24 +1639,22 @@ def _call_blender_operator_with_fallback(operator, option_sets):
 
 
 def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_objects):
-    """Export freshly imported FBX objects to USD and import that USD back.
+    """Replace native FBX objects with USD objects from an isolated conversion.
 
     HVE FBX files can import with less reliable mesh/animation results than the
-    same data after Blender has serialized it through USD.  This helper performs
-    that conversion as an in-memory import pipeline step: export only the
-    objects created by the native FBX importer to a temporary USD file, import
-    the USD file, then remove the original FBX objects once the USD import has
-    succeeded.  If the active Blender build does not provide USD operators, a
-    RuntimeError is raised so callers can continue with the native FBX import.
+    same file after Blender has converted it through USD from a clean command-line
+    process.  This helper runs that external conversion to a temporary USD file,
+    imports the USD into the current scene, then removes the original native FBX
+    objects only after the USD import has succeeded.  If conversion or USD import
+    fails, callers can continue using the native FBX import as a fallback.
     """
     imported_objects = [obj for obj in imported_objects if is_valid_blender_object(obj)]
     if not imported_objects:
         return []
 
-    usd_export = getattr(bpy.ops.wm, "usd_export", None)
     usd_import = getattr(bpy.ops.wm, "usd_import", None)
-    if usd_export is None or usd_import is None:
-        raise RuntimeError("This Blender build does not expose USD import/export operators.")
+    if usd_import is None:
+        raise RuntimeError("This Blender build does not expose the USD import operator.")
 
     previous_active = context.view_layer.objects.active
     previous_selection = [obj for obj in context.selected_objects if is_valid_blender_object(obj)]
@@ -1596,29 +1665,7 @@ def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_obje
             f"{os.path.splitext(os.path.basename(fbx_file_path))[0]}_roundtrip.usdc",
         )
 
-        bpy.ops.object.select_all(action="DESELECT")
-        for obj in imported_objects:
-            obj.select_set(True)
-        context.view_layer.objects.active = imported_objects[0]
-
-        # Match Blender's native FBX -> USD command-line workflow that proved
-        # reliable for HVE shape keys: export materials, but do not explicitly
-        # export animation during this cleanup round-trip.
-        _call_blender_operator_with_fallback(
-            usd_export,
-            (
-                {
-                    "filepath": usd_file_path,
-                    "selected_objects_only": True,
-                    "export_materials": True,
-                },
-                {
-                    "filepath": usd_file_path,
-                    "export_materials": True,
-                },
-                {"filepath": usd_file_path},
-            ),
-        )
+        convert_fbx_to_usd_in_background_blender(fbx_file_path, usd_file_path, temp_dir)
 
         pre_usd_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
         _call_blender_operator_with_fallback(
@@ -1649,7 +1696,7 @@ def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_obje
     if previous_active and is_valid_blender_object(previous_active):
         context.view_layer.objects.active = previous_active
 
-    print(f"✅ Converted native FBX import through temporary USD: {len(usd_objects)} objects imported.")
+    print(f"✅ Converted FBX through isolated command-line USD: {len(usd_objects)} objects imported.")
     return usd_objects
 
 def import_fbx(
