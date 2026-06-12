@@ -75,7 +75,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
 
     import_via_usd: BoolProperty(
             name="Convert FBX Through USD",
-            description="Import the FBX, export the imported result to a temporary USD file, then import that USD for more reliable geometry and animation",
+            description="Import the FBX, export the imported result to a temporary USD file with materials, then import that USD for more reliable geometry and shape-key data",
             default=True,
             )
 

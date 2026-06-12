@@ -38,7 +38,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Override the scale factor.
   - Optionally save separate vehicle CSV files.
 - **HVE FBX importer** (`.fbx`): import HVE FBX motion and geometry data.
-  - Imports FBX files and can optionally round-trip the imported result through a temporary USD file before processing, which improves reliability for some HVE FBX geometry/animation.
+  - Imports FBX files and can optionally round-trip the imported result through a temporary USD file before processing, matching Blender's native FBX-to-USD export path used for more reliable HVE FBX geometry and shape-key data.
   - Updates the scene timeline to include imported animation.
   - Renames imported HVE hierarchy components into cleaner labels.
   - Organizes imported data into HVE collections by event, vehicle, wheels, and body mesh.
