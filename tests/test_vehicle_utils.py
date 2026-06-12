@@ -24,8 +24,7 @@ for node in module_ast.body:
         "get_body_mesh_objects_for_vehicle",
         "object_pointer",
         "normalize_name",
-        "is_shape_node_object",
-        "temporarily_disable_shape_node_animation",
+        "build_fbx_to_usd_conversion_script",
         "copy_animated_rotation",
         "get_action_fcurve_collection",
         "iter_action_fcurve_collections",
@@ -51,8 +50,7 @@ copy_animated_rotation = ns["copy_animated_rotation"]
 is_valid_blender_object = ns["is_valid_blender_object"]
 adjust_animation = ns["adjust_animation"]
 offset_selected_animation = ns["offset_selected_animation"]
-is_shape_node_object = ns["is_shape_node_object"]
-temporarily_disable_shape_node_animation = ns["temporarily_disable_shape_node_animation"]
+build_fbx_to_usd_conversion_script = ns["build_fbx_to_usd_conversion_script"]
 ROTATION_AXIS_KEYWORDS = ns["ROTATION_AXIS_KEYWORDS"]
 
 
@@ -655,35 +653,11 @@ if __name__ == "__main__":
     print("ok")
 
 
-def test_temporarily_disable_shape_node_animation_preserves_regular_animation():
-    class Anim:
-        def __init__(self, action):
-            self.action = action
+def test_build_fbx_to_usd_conversion_script_uses_clean_command_line_scene():
+    script = build_fbx_to_usd_conversion_script("/tmp/source.fbx", "/tmp/result.usdc")
 
-    class MeshData:
-        def __init__(self, shape_keys=None):
-            self.shape_keys = shape_keys
-
-    regular_action = object()
-    shape_node_action = object()
-    shape_key_action = object()
-
-    regular = Obj("CG: Sedan", type="EMPTY")
-    regular.animation_data = Anim(regular_action)
-
-    shape_keys = type("ShapeKeys", (), {"animation_data": Anim(shape_key_action)})()
-    shape_node = Obj("Sedan ShapeNode", type="MESH")
-    shape_node.animation_data = Anim(shape_node_action)
-    shape_node.data = MeshData(shape_keys)
-
-    assert is_shape_node_object(shape_node)
-    assert not is_shape_node_object(regular)
-
-    with temporarily_disable_shape_node_animation([regular, shape_node]):
-        assert regular.animation_data.action is regular_action
-        assert shape_node.animation_data.action is None
-        assert shape_node.data.shape_keys.animation_data.action is None
-
-    assert regular.animation_data.action is regular_action
-    assert shape_node.animation_data.action is shape_node_action
-    assert shape_node.data.shape_keys.animation_data.action is shape_key_action
+    assert "bpy.ops.import_scene.fbx(filepath=fbx_file_path)" in script
+    assert "bpy.ops.wm.usd_export(**options)" in script
+    assert "export_materials" in script
+    assert "export_animation" not in script
+    assert "bpy.ops.object.delete()" in script

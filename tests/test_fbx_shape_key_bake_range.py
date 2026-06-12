@@ -29,22 +29,23 @@ def test_bake_shape_keys_bakes_every_frame_before_reduction():
     assert len(matching_call.args) == 2, 'shape-key baking should evaluate every frame'
 
 
-def test_usd_roundtrip_exports_regular_animation():
+def test_usd_roundtrip_uses_background_blender_conversion():
     roundtrip_func = next(
         node for node in module_ast.body
         if isinstance(node, ast.FunctionDef) and node.name == 'roundtrip_imported_objects_through_usd'
     )
 
-    export_animation_keywords = [
-        keyword for node in ast.walk(roundtrip_func)
-        if isinstance(node, ast.Dict)
-        for keyword, value in zip(node.keys, node.values)
-        if (
-            isinstance(keyword, ast.Constant)
-            and keyword.value == 'export_animation'
-            and isinstance(value, ast.Constant)
-            and value.value is True
-        )
+    background_conversion_calls = [
+        node for node in ast.walk(roundtrip_func)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == 'convert_fbx_to_usd_in_background_blender'
     ]
 
-    assert export_animation_keywords, 'USD round-trip should preserve non-shape-node animation'
+    same_scene_export_calls = [
+        node for node in ast.walk(roundtrip_func)
+        if isinstance(node, ast.Name) and node.id == 'usd_export'
+    ]
+
+    assert background_conversion_calls, 'USD round-trip should use an isolated Blender process'
+    assert not same_scene_export_calls, 'current scene should only import the resulting USD'
