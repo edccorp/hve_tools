@@ -66,6 +66,8 @@ def test_fbx_importer_exposes_body_merge_and_deformation_storage_options():
     assert '(\'MDD\', "External MDD File"' in fbx_ui_source
     assert "import_via_usd=import_via_usd" in fbx_importer_source
     assert "roundtrip_imported_objects_through_usd" in fbx_importer_source
+    assert '"export_materials": True' in fbx_importer_source
+    assert '"export_animation": True' not in fbx_importer_source
     assert "merge_body_mesh=merge_body_mesh" in fbx_importer_source
     assert "apply_mesh_cleanup=apply_mesh_cleanup" in fbx_importer_source
     assert "find_missing_files=find_missing_files" in fbx_importer_source

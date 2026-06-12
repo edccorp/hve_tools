@@ -1601,21 +1601,21 @@ def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_obje
             obj.select_set(True)
         context.view_layer.objects.active = imported_objects[0]
 
+        # Match Blender's native FBX -> USD command-line workflow that proved
+        # reliable for HVE shape keys: export materials, but do not explicitly
+        # export animation during this cleanup round-trip.
         _call_blender_operator_with_fallback(
             usd_export,
             (
                 {
                     "filepath": usd_file_path,
                     "selected_objects_only": True,
-                    "export_animation": True,
-                    "evaluation_mode": "RENDER",
+                    "export_materials": True,
                 },
                 {
                     "filepath": usd_file_path,
-                    "selected_objects_only": True,
-                    "export_animation": True,
+                    "export_materials": True,
                 },
-                {"filepath": usd_file_path, "selected_objects_only": True},
                 {"filepath": usd_file_path},
             ),
         )
