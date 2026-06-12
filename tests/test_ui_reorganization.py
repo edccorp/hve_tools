@@ -78,3 +78,19 @@ def test_fbx_importer_file_browser_options_are_drawn_only_by_panel():
     assert 'layout.prop(self, "deformation_storage")' not in fbx_ui_source
     assert 'layout.prop(self, "apply_mesh_cleanup")' not in fbx_ui_source
     assert 'layout.prop(self, "find_missing_files")' not in fbx_ui_source
+
+
+def test_other_tools_child_panels_default_closed():
+    for panel_name in (
+        "HVE_PT_edr_importer",
+        "HVE_PT_xyzrpy_importer",
+        "HVE_PT_motion_paths",
+        "HVE_PT_scale_objects",
+        "HVE_PT_speed_acceleration",
+        "HVE_PT_point_importer",
+    ):
+        start = ui_source.index(f"class {panel_name}")
+        end = ui_source.find("\nclass ", start + 1)
+        section = ui_source[start:end if end != -1 else len(ui_source)]
+        assert 'bl_parent_id = "HVE_PT_other_tools"' in section
+        assert "bl_options = {'DEFAULT_CLOSED'}" in section
