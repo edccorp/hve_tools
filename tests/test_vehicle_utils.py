@@ -1,12 +1,13 @@
 import ast
 import pathlib
 import re
+from contextlib import contextmanager
 
 # Parse functions from fbx_importer.py without importing the module
 module_path = pathlib.Path(__file__).resolve().parents[1] / "fbx_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
-ns = {'re': re}
+ns = {'re': re, 'contextmanager': contextmanager}
 for node in module_ast.body:
     if isinstance(node, ast.Assign):
         for target in node.targets:
