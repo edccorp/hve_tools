@@ -56,12 +56,16 @@ def test_racerender_ui_uses_converter_language():
 
 
 def test_fbx_importer_exposes_body_merge_and_deformation_storage_options():
+    assert "import_via_usd: BoolProperty" in fbx_ui_source
+    assert "Convert FBX Through USD" in fbx_ui_source
     assert "merge_body_mesh: BoolProperty" in fbx_ui_source
     assert "deformation_storage: EnumProperty" in fbx_ui_source
     assert "apply_mesh_cleanup: BoolProperty" in fbx_ui_source
     assert "find_missing_files: BoolProperty" in fbx_ui_source
     assert '(\'SHAPE_KEYS\', "Shape Keys"' in fbx_ui_source
     assert '(\'MDD\', "External MDD File"' in fbx_ui_source
+    assert "import_via_usd=import_via_usd" in fbx_importer_source
+    assert "roundtrip_imported_objects_through_usd" in fbx_importer_source
     assert "merge_body_mesh=merge_body_mesh" in fbx_importer_source
     assert "apply_mesh_cleanup=apply_mesh_cleanup" in fbx_importer_source
     assert "find_missing_files=find_missing_files" in fbx_importer_source
@@ -69,11 +73,13 @@ def test_fbx_importer_exposes_body_merge_and_deformation_storage_options():
 
 
 def test_fbx_importer_file_browser_options_are_drawn_only_by_panel():
+    assert 'layout.prop(operator, "import_via_usd")' in fbx_ui_source
     assert 'layout.prop(operator, "merge_body_mesh")' in fbx_ui_source
     assert 'layout.prop(operator, "deformation_storage")' in fbx_ui_source
     assert 'layout.prop(operator, "apply_mesh_cleanup")' in fbx_ui_source
     assert 'layout.prop(operator, "find_missing_files")' in fbx_ui_source
     assert 'def draw(self, context):\n        pass' in fbx_ui_source
+    assert 'layout.prop(self, "import_via_usd")' not in fbx_ui_source
     assert 'layout.prop(self, "merge_body_mesh")' not in fbx_ui_source
     assert 'layout.prop(self, "deformation_storage")' not in fbx_ui_source
     assert 'layout.prop(self, "apply_mesh_cleanup")' not in fbx_ui_source
