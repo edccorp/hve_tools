@@ -598,6 +598,7 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "EDR Data Importer / Entry"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
@@ -674,6 +675,7 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Motion Data Importer"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
@@ -705,6 +707,7 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Motion Path Tools"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
@@ -741,6 +744,7 @@ class HVE_PT_scale_objects(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Scale Objects"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
@@ -764,6 +768,7 @@ class HVE_PT_speed_acceleration(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Speed + Acceleration"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -804,6 +809,7 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Point Importer"
     bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
