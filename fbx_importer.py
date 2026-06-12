@@ -169,6 +169,55 @@ def is_wheel_object(obj):
     return False
 
 
+
+def is_shape_node_object(obj):
+    """Return ``True`` when an imported object represents an FBX shape-node helper."""
+    try:
+        normalized = normalize_name(obj.name)
+    except ReferenceError:
+        return False
+
+    compact = normalized.replace(" ", "")
+    return "shapenode" in compact
+
+
+@contextmanager
+def temporarily_disable_shape_node_animation(objects):
+    """Temporarily mute animation only on FBX shape-node helpers.
+
+    USD export still needs regular object animation enabled so imported vehicle
+    motion survives the FBX -> USD cleanup round-trip.  HVE shape-node helpers
+    are the exception: exporting their animation can confuse Blender's USD
+    shape-key reconstruction, so their object and shape-key actions are detached
+    only while the USD file is written and restored immediately afterwards.
+    """
+    disabled_actions = []
+
+    for obj in objects:
+        if not is_valid_blender_object(obj) or not is_shape_node_object(obj):
+            continue
+
+        owners = [obj]
+        shape_keys = getattr(getattr(obj, "data", None), "shape_keys", None)
+        if shape_keys is not None:
+            owners.append(shape_keys)
+
+        for owner in owners:
+            animation_data = getattr(owner, "animation_data", None)
+            if animation_data is None or not hasattr(animation_data, "action"):
+                continue
+            action = animation_data.action
+            if action is None:
+                continue
+            disabled_actions.append((animation_data, action))
+            animation_data.action = None
+
+    try:
+        yield
+    finally:
+        for animation_data, action in disabled_actions:
+            animation_data.action = action
+
 def _iter_layered_fcurve_collections(action):
     """Yield F-Curve collections from layered actions (Blender 5+)."""
     layers = getattr(action, "layers", None)
@@ -1601,24 +1650,28 @@ def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_obje
             obj.select_set(True)
         context.view_layer.objects.active = imported_objects[0]
 
-        # Match Blender's native FBX -> USD command-line workflow that proved
-        # reliable for HVE shape keys: export materials, but do not explicitly
-        # export animation during this cleanup round-trip.
-        _call_blender_operator_with_fallback(
-            usd_export,
-            (
-                {
-                    "filepath": usd_file_path,
-                    "selected_objects_only": True,
-                    "export_materials": True,
-                },
-                {
-                    "filepath": usd_file_path,
-                    "export_materials": True,
-                },
-                {"filepath": usd_file_path},
-            ),
-        )
+        # Keep regular vehicle animation in the USD round-trip, but detach
+        # animation from HVE shape-node helpers while writing USD so those nodes
+        # do not corrupt shape-key reconstruction.
+        with temporarily_disable_shape_node_animation(imported_objects):
+            _call_blender_operator_with_fallback(
+                usd_export,
+                (
+                    {
+                        "filepath": usd_file_path,
+                        "selected_objects_only": True,
+                        "export_animation": True,
+                        "export_materials": True,
+                    },
+                    {
+                        "filepath": usd_file_path,
+                        "selected_objects_only": True,
+                        "export_animation": True,
+                    },
+                    {"filepath": usd_file_path, "selected_objects_only": True},
+                    {"filepath": usd_file_path},
+                ),
+            )
 
         pre_usd_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
         _call_blender_operator_with_fallback(

@@ -27,3 +27,24 @@ def test_bake_shape_keys_bakes_every_frame_before_reduction():
     )
 
     assert len(matching_call.args) == 2, 'shape-key baking should evaluate every frame'
+
+
+def test_usd_roundtrip_exports_regular_animation():
+    roundtrip_func = next(
+        node for node in module_ast.body
+        if isinstance(node, ast.FunctionDef) and node.name == 'roundtrip_imported_objects_through_usd'
+    )
+
+    export_animation_keywords = [
+        keyword for node in ast.walk(roundtrip_func)
+        if isinstance(node, ast.Dict)
+        for keyword, value in zip(node.keys, node.values)
+        if (
+            isinstance(keyword, ast.Constant)
+            and keyword.value == 'export_animation'
+            and isinstance(value, ast.Constant)
+            and value.value is True
+        )
+    ]
+
+    assert export_animation_keywords, 'USD round-trip should preserve non-shape-node animation'
