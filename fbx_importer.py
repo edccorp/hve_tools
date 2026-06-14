@@ -3,6 +3,7 @@ import os
 import re
 import math
 import threading
+import ctypes
 import struct
 import time
 from contextlib import contextmanager
