@@ -800,16 +800,10 @@ def bake_shape_keys_to_keyframes(obj):
     print(f"✅ Shape keys baked for {obj.name}")
 
 def bake_shape_keys_threaded(obj_list):
-    """Runs shape key baking in parallel threads for multiple objects."""
-    threads = []
+    """Bake shape keys for each object sequentially (Blender's API is not thread-safe)."""
     for obj in obj_list:
         if obj.data.shape_keys:
-            thread = threading.Thread(target=bake_shape_keys_to_keyframes, args=(obj,))
-            thread.start()
-            threads.append(thread)
-
-    for thread in threads:
-        thread.join()  # Wait for all threads to complete
+            bake_shape_keys_to_keyframes(obj)
 
 
 def sanitize_cache_name(name):
@@ -2170,8 +2164,8 @@ def import_fbx(
                     imported_objects,
                     imported_pointer_set,
                 )
-            elif merge_body_mesh:
-                # Rebuild joined shape-key meshes with a smaller self-contained sample set.
+            elif deformation_storage == "SHAPE_KEYS":
+                # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
                 reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
 
         with timing_report.phase("merge duplicate imported materials"):
