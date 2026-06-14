@@ -751,8 +751,8 @@ def bake_shape_keys_to_keyframes(obj):
         # foreach_set writes all coordinates in one C-level call — much faster than a Python loop.
         coords = [coord for pair in zip(frames, values) for coord in (float(pair[0]), pair[1])]
         kps.foreach_set("co", coords)
-        interp = ["LINEAR"] * frame_count
-        kps.foreach_set("interpolation", interp)
+        for kp in kps:
+            kp.interpolation = 'LINEAR'
         fcurve.update()
 
     print(f"✅ Shape keys baked for {obj.name}")
