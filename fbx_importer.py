@@ -1599,7 +1599,7 @@ def import_fbx(
     context,
     fbx_file_path,
     merge_body_mesh=False,
-    deformation_storage="SHAPE_KEYS",
+    deformation_storage="MDD",
     apply_mesh_cleanup=False,
     find_missing_files=False,
 ):
@@ -2092,7 +2092,7 @@ def import_fbx(
 def load(context,
          filepath,
          merge_body_mesh=False,
-         deformation_storage="SHAPE_KEYS",
+         deformation_storage="MDD",
          apply_mesh_cleanup=False,
          find_missing_files=False,
          ):

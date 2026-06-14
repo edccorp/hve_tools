@@ -85,7 +85,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
                 ('SHAPE_KEYS', "Shape Keys", "Keep deformation in Blender shape keys; merged meshes are rebuilt with reduced sampled shape keys"),
                 ('MDD', "External MDD File", "Bake deformation to external .mdd point-cache files and attach Mesh Cache modifiers"),
             ),
-            default='SHAPE_KEYS',
+            default='MDD',
             )
 
     apply_mesh_cleanup: BoolProperty(
