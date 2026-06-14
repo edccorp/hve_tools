@@ -113,6 +113,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             deformation_storage=self.deformation_storage,
             apply_mesh_cleanup=self.apply_mesh_cleanup,
             find_missing_files=self.find_missing_files,
+            operator=self,
         )
 
     def draw(self, context):

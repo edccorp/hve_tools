@@ -64,6 +64,57 @@ class ImportTimingReport:
         print(f"   {total_elapsed:7.2f}s          total")
 
 
+class BlenderImportProgress:
+    """Mirror long-running FBX import progress into Blender's main UI."""
+
+    def __init__(self, context, operator=None, total_steps=1):
+        self.context = context
+        self.operator = operator
+        self.total_steps = max(int(total_steps), 1)
+        self.current_step = 0
+        self._wm = getattr(context, "window_manager", None)
+        self._started = False
+
+    def begin(self, message):
+        if self._wm and hasattr(self._wm, "progress_begin"):
+            self._wm.progress_begin(0, self.total_steps)
+            self._started = True
+        self.update(message, advance=False)
+
+    def update(self, message, advance=True):
+        if advance:
+            self.current_step = min(self.current_step + 1, self.total_steps)
+
+        progress_message = f"HVE FBX Import ({self.current_step}/{self.total_steps}): {message}"
+        print(progress_message)
+
+        if self.operator:
+            self.operator.report({'INFO'}, progress_message)
+
+        if self._wm:
+            if hasattr(self._wm, "progress_update"):
+                self._wm.progress_update(self.current_step)
+            if hasattr(self._wm, "status_text_set"):
+                self._wm.status_text_set(progress_message)
+
+    def finish(self, message):
+        self.update(message, advance=False)
+        if self._wm:
+            if hasattr(self._wm, "progress_update"):
+                self._wm.progress_update(self.total_steps)
+            if hasattr(self._wm, "status_text_set"):
+                self._wm.status_text_set(None)
+            if self._started and hasattr(self._wm, "progress_end"):
+                self._wm.progress_end()
+        if self.operator:
+            self.operator.report({'INFO'}, message)
+
+
+def report_import_progress(progress, message, advance=True):
+    if progress is not None:
+        progress.update(message, advance=advance)
+
+
 def normalize_name(name: str) -> str:
     """Return a lowercase name with underscores replaced by spaces."""
     return name.lower().replace("_", " ")
@@ -1602,8 +1653,11 @@ def import_fbx(
     deformation_storage="MDD",
     apply_mesh_cleanup=False,
     find_missing_files=False,
+    operator=None,
 ):
     timing_report = ImportTimingReport()
+    progress = BlenderImportProgress(context, operator=operator, total_steps=17)
+    progress.begin("Starting import")
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
     if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
         deformation_storage = "SHAPE_KEYS"
@@ -1618,14 +1672,17 @@ def import_fbx(
     # Ensure the file exists
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
+        report_import_progress(progress, "Preparing scene snapshot")
         with timing_report.phase("snapshot scene before native FBX import"):
             pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
             pre_import_material_ids = {mat.as_pointer() for mat in bpy.data.materials}
 
+        report_import_progress(progress, "Running Blender FBX importer")
         with timing_report.phase("native Blender FBX import"):
             bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
 
+        report_import_progress(progress, "Detecting imported objects and materials")
         with timing_report.phase("post-import object/material detection"):
             # Set metallic to zero for any materials created by this import.
             new_materials = [
@@ -1643,6 +1700,7 @@ def import_fbx(
             imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
             imported_names = [obj.name for obj in imported_objects]
 
+        report_import_progress(progress, "Scanning animation and updating timeline")
         with timing_report.phase("scan animation and update timeline"):
             # Initialize max frame variable
             max_frame = 0
@@ -1682,6 +1740,7 @@ def import_fbx(
             "shapenode": "Mesh:"
         }
 
+        report_import_progress(progress, "Renaming imported HVE objects")
         with timing_report.phase("rename imported HVE objects"):
             # Loop through selected objects and apply replacements
             for obj in imported_objects:
@@ -1689,6 +1748,7 @@ def import_fbx(
                     if old_part in obj.name:  # Check if the old_part exists in the name
                         obj.name = obj.name.replace(old_part, new_part)  # Replace the text
 
+        report_import_progress(progress, "Applying optional mesh cleanup")
         if apply_mesh_cleanup:
             modifier_phase = timing_report.start_phase("add mesh cleanup Geometry Nodes modifiers")
             # Loop through selected objects and apply modifiers
@@ -1851,6 +1911,7 @@ def import_fbx(
         else:
             print("ℹ️ Mesh cleanup modifiers disabled for faster renders.")
 
+        report_import_progress(progress, "Offsetting imported animation keyframes")
         with timing_report.phase("offset imported animation keyframes"):
             processed_offset_actions = set()
             # Loop through imported objects and offset each shared action only once.
@@ -1864,6 +1925,7 @@ def import_fbx(
                 processed_offset_actions.add(action_key)
                 offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
 
+        report_import_progress(progress, "Adjusting imported animation orientation")
         with timing_report.phase("adjust imported animation orientation"):
             # List of keywords to exclude from selection
             exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed
@@ -1878,6 +1940,7 @@ def import_fbx(
                     adjust_animation(obj)
 
 
+        report_import_progress(progress, "Copying wheel helper rotation animation")
         with timing_report.phase("copy wheel helper rotation animation"):
             # Derive keywords used for rotation helpers so they aren't processed as wheels
             exclude_keywords = [
@@ -1911,6 +1974,7 @@ def import_fbx(
                     if not name.endswith(": FBX"):
                         obj.name = f"{name}: FBX"
 
+        report_import_progress(progress, "Detecting vehicles and setting preroll pose")
         with timing_report.phase("detect vehicles and force preroll pose"):
             # Determine root vehicle names after any renaming or cleanup
             vehicle_names = get_root_vehicle_names(imported_objects)
@@ -1923,9 +1987,11 @@ def import_fbx(
                     if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
                         force_zero_preroll_pose(obj, frame=-1)
 
+        report_import_progress(progress, "Replacing previous matching FBX imports")
         with timing_report.phase("overwrite previous matching FBX import"):
             overwrite_existing_fbx_objects(filename, imported_objects)
 
+        report_import_progress(progress, "Organizing imported objects into HVE collections")
         collection_phase = timing_report.start_phase("organize imported objects into HVE collections")
 
         # Create the event collection
@@ -2040,6 +2106,7 @@ def import_fbx(
         # Ensure frame_start is 0 before any shape-key baking or sampling.
         context.scene.frame_start = 0
 
+        report_import_progress(progress, "Processing optional body mesh merge")
         with timing_report.phase("optional body mesh merge"):
             if merge_body_mesh:
                 # Join body mesh objects separately for each vehicle only when requested.
@@ -2047,6 +2114,7 @@ def import_fbx(
             else:
                 print("ℹ️ Body mesh merge disabled; imported body geometry remains split for faster import.")
 
+        report_import_progress(progress, "Converting optional deformation storage")
         with timing_report.phase("optional deformation storage conversion"):
             if deformation_storage == "MDD":
                 export_body_shape_key_animations_to_mdd(
@@ -2064,16 +2132,19 @@ def import_fbx(
                     imported_pointer_set=imported_pointer_set,
                 )
 
+        report_import_progress(progress, "Merging duplicate imported materials")
         with timing_report.phase("merge duplicate imported materials"):
             # Replace duplicate materials
             merge_duplicate_materials_per_vehicle(vehicle_names)
 
+        report_import_progress(progress, "Restoring scene settings")
         with timing_report.phase("restore scene settings"):
             # Restore the original frame rate settings
             context.scene.render.fps = original_fps
             context.scene.render.fps_base = original_fps_base
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
 
+        report_import_progress(progress, "Checking optional missing file search")
         with timing_report.phase("optional find missing files"):
             if find_missing_files:
                 bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
@@ -2081,11 +2152,16 @@ def import_fbx(
                 print("ℹ️ Missing-file search disabled for faster import.")
 
         timing_report.print_summary()
+        progress.finish("HVE FBX import finished")
 
 
     else:
-        print("Error: File not found!")
+        error_message = f"Error: File not found: {fbx_file_path}"
+        print(error_message)
+        if operator:
+            operator.report({'ERROR'}, error_message)
         timing_report.print_summary()
+        progress.finish("HVE FBX import failed: file not found")
 
 
 
@@ -2095,6 +2171,7 @@ def load(context,
          deformation_storage="MDD",
          apply_mesh_cleanup=False,
          find_missing_files=False,
+         operator=None,
          ):
 
 
@@ -2109,6 +2186,7 @@ def load(context,
             deformation_storage=deformation_storage,
             apply_mesh_cleanup=apply_mesh_cleanup,
             find_missing_files=find_missing_files,
+            operator=operator,
             )
 
     return {'FINISHED'}
