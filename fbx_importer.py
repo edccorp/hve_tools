@@ -2024,8 +2024,9 @@ def import_fbx(
                     imported_objects,
                     imported_pointer_set,
                 )
-            elif deformation_storage == "SHAPE_KEYS":
-                # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
+            elif deformation_storage == "SHAPE_KEYS" and merge_body_mesh:
+                # Reduce per-frame shape keys after merging — one joined object per vehicle
+                # is far faster to sample than the many individual unmerged parts.
                 reduce_shape_key_meshes_with_adaptive_samples(
                     vehicle_names,
                     imported_objects=imported_objects,
