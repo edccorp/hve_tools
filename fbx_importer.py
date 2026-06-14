@@ -800,16 +800,10 @@ def bake_shape_keys_to_keyframes(obj):
     print(f"✅ Shape keys baked for {obj.name}")
 
 def bake_shape_keys_threaded(obj_list):
-    """Runs shape key baking in parallel threads for multiple objects."""
-    threads = []
+    """Bake shape keys for each object sequentially (Blender's API is not thread-safe)."""
     for obj in obj_list:
         if obj.data.shape_keys:
-            thread = threading.Thread(target=bake_shape_keys_to_keyframes, args=(obj,))
-            thread.start()
-            threads.append(thread)
-
-    for thread in threads:
-        thread.join()  # Wait for all threads to complete
+            bake_shape_keys_to_keyframes(obj)
 
 
 def sanitize_cache_name(name):
