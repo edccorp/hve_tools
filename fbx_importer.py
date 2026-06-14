@@ -705,29 +705,55 @@ def overwrite_existing_fbx_objects(filename, imported_objects):
 
 
 def bake_shape_keys_to_keyframes(obj):
-    """Bakes shape key animations into keyframes only if the object has shape keys."""
+    """Bake shape key F-curves to dense per-frame keyframes before a join operation.
+
+    Uses direct F-curve point manipulation (foreach_set) instead of keyframe_insert
+    so the cost is one bulk write per shape key rather than one RNA round-trip per frame.
+    """
     if not obj.data.shape_keys or not obj.data.shape_keys.animation_data:
-        return  # Skip if no shape keys or no animation
+        return
 
     action = obj.data.shape_keys.animation_data.action
     action_fcurves = get_action_fcurve_collection(action)
     if action_fcurves is None:
         return
-    frame_range = bpy.context.scene.frame_start, bpy.context.scene.frame_end
+
+    frame_start = bpy.context.scene.frame_start
+    frame_end = bpy.context.scene.frame_end
+    frames = list(range(frame_start, frame_end + 1))
+    frame_count = len(frames)
 
     for shape_key in obj.data.shape_keys.key_blocks:
         if shape_key.name == "Basis":
-            continue  # Skip basis shape key
+            continue
 
+        data_path = f'key_blocks["{shape_key.name}"].value'
         fcurve = next(
-            (fc for fc in action_fcurves if fc.data_path.endswith(f'key_blocks["{shape_key.name}"].value')),
-            None
+            (fc for fc in action_fcurves if fc.data_path.endswith(data_path)),
+            None,
         )
+        if fcurve is None:
+            continue
 
-        if fcurve:
-            for frame in range(frame_range[0], frame_range[1] + 1):  # Bake every frame before join/reduction.
-                shape_key.value = fcurve.evaluate(frame)
-                shape_key.keyframe_insert(data_path="value", frame=frame)
+        # Evaluate all values in one pass — cheap, no depsgraph update needed.
+        values = [fcurve.evaluate(f) for f in frames]
+
+        # Replace all existing keyframe points with the dense baked set.
+        kps = fcurve.keyframe_points
+        try:
+            kps.clear()
+        except AttributeError:
+            # Blender < 3.6 fallback: remove points from end to avoid index shifting.
+            for _ in range(len(kps)):
+                kps.remove(kps[-1], fast=True)
+
+        kps.add(frame_count)
+        # foreach_set writes all coordinates in one C-level call — much faster than a Python loop.
+        coords = [coord for pair in zip(frames, values) for coord in (float(pair[0]), pair[1])]
+        kps.foreach_set("co", coords)
+        interp = ["LINEAR"] * frame_count
+        kps.foreach_set("interpolation", interp)
+        fcurve.update()
 
     print(f"✅ Shape keys baked for {obj.name}")
 
@@ -2024,8 +2050,9 @@ def import_fbx(
                     imported_objects,
                     imported_pointer_set,
                 )
-            elif deformation_storage == "SHAPE_KEYS":
-                # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
+            elif deformation_storage == "SHAPE_KEYS" and merge_body_mesh:
+                # Reduce per-frame shape keys after merging — one joined object per vehicle
+                # is far faster to sample than the many individual unmerged parts.
                 reduce_shape_key_meshes_with_adaptive_samples(
                     vehicle_names,
                     imported_objects=imported_objects,
