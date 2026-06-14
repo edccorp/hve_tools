@@ -192,8 +192,9 @@ bpy.ops.import_scene.fbx(filepath=fbx_file_path)
 bpy.ops.object.select_all(action="SELECT")
 last_error = None
 for options in (
-    {{"filepath": usd_file_path, "selected_objects_only": True, "export_materials": True}},
-    {{"filepath": usd_file_path, "export_materials": True}},
+    {{"filepath": usd_file_path, "selected_objects_only": True, "export_materials": True, "export_animation": True}},
+    {{"filepath": usd_file_path, "export_materials": True, "export_animation": True}},
+    {{"filepath": usd_file_path, "export_animation": True}},
     {{"filepath": usd_file_path}},
 ):
     try:
@@ -1063,8 +1064,15 @@ def rebuild_shape_keys_from_samples(obj, sample_frames, sample_vertex_positions)
     if len(sample_frames) != len(sample_vertex_positions):
         raise ValueError("Sample frame count must match sampled vertex positions.")
 
+    # Capture the existing Basis geometry before clearing, so the resting pose is preserved.
+    existing_basis = obj.data.shape_keys
+    if existing_basis and existing_basis.key_blocks:
+        basis_positions = [tuple(kb.co) for kb in existing_basis.key_blocks[0].data]
+    else:
+        basis_positions = [tuple(v.co) for v in obj.data.vertices]
+
     clear_object_shape_keys(obj)
-    set_mesh_vertex_positions(obj.data, sample_vertex_positions[0])
+    set_mesh_vertex_positions(obj.data, basis_positions)
     obj.shape_key_add(name="Basis", from_mix=False)
 
     reduced_keys = []
@@ -1085,11 +1093,14 @@ def reduce_shape_key_meshes_with_adaptive_samples(
     vehicle_names,
     tolerance=0.01,
     max_samples=24,
+    imported_objects=None,
+    imported_pointer_set=None,
 ):
     """Rebuild joined meshes with a smaller self-contained shapekey set."""
     scene = bpy.context.scene
     reduced_objects = []
     seen_pointers = set()
+    imported_pointer_set = imported_pointer_set or set()
 
     for vehicle_name in vehicle_names:
         collection_prefix = f"Body Mesh: {vehicle_name}:"
@@ -1101,12 +1112,21 @@ def reduce_shape_key_meshes_with_adaptive_samples(
         for col in body_mesh_collections:
             mesh_objects.extend(_gather_meshes(col))
 
+        # Restrict to objects from this import when a pointer set is provided.
+        if imported_pointer_set:
+            mesh_objects = [
+                obj for obj in mesh_objects
+                if (obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)) in imported_pointer_set
+            ]
+
         if not mesh_objects:
             clean_vehicle_name = re.sub(r"\.\d+$", "", vehicle_name)
+            source_objects = imported_objects if imported_objects is not None else bpy.context.scene.objects
             mesh_objects = [
                 obj
-                for obj in bpy.context.scene.objects
+                for obj in source_objects
                 if obj.type == "MESH" and belongs_to_vehicle(obj.name, clean_vehicle_name)
+                and (not imported_pointer_set or (obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)) in imported_pointer_set)
             ]
 
         for obj in mesh_objects:
@@ -1665,6 +1685,7 @@ def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_obje
         _call_blender_operator_with_fallback(
             usd_import,
             (
+                {"filepath": usd_file_path, "read_mesh_uvs": True, "import_blendshape_fcurves": True},
                 {"filepath": usd_file_path, "read_mesh_uvs": True},
                 {"filepath": usd_file_path},
             ),
@@ -1767,10 +1788,10 @@ def import_fbx(
                     for fcurve in iter_action_fcurves(action):
                         fcurve_found = True
                         for keyframe in fcurve.keyframe_points:
-                            max_frame = max(max_frame, int(keyframe.co.x) - 1)  # Update max frame
+                            max_frame = max(max_frame, int(keyframe.co.x))
 
                     if not fcurve_found:
-                        frame_end = int(action.frame_range[1]) - 1
+                        frame_end = int(action.frame_range[1])
                         max_frame = max(max_frame, frame_end)
 
             # Get the current frame end in Blender's timeline
@@ -2149,6 +2170,9 @@ def import_fbx(
 
         timing_report.finish_phase(collection_phase)
 
+        # Ensure frame_start is 0 before any shape-key baking or sampling.
+        context.scene.frame_start = 0
+
         with timing_report.phase("optional body mesh merge"):
             if merge_body_mesh:
                 # Join body mesh objects separately for each vehicle only when requested.
@@ -2166,7 +2190,11 @@ def import_fbx(
                 )
             elif deformation_storage == "SHAPE_KEYS":
                 # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
-                reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
+                reduce_shape_key_meshes_with_adaptive_samples(
+                    vehicle_names,
+                    imported_objects=imported_objects,
+                    imported_pointer_set=imported_pointer_set,
+                )
 
         with timing_report.phase("merge duplicate imported materials"):
             # Replace duplicate materials
@@ -2177,8 +2205,6 @@ def import_fbx(
             context.scene.render.fps = original_fps
             context.scene.render.fps_base = original_fps_base
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
-
-            context.scene.frame_start = 0
 
         with timing_report.phase("optional find missing files"):
             if find_missing_files:
