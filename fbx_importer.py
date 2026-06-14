@@ -751,8 +751,13 @@ def bake_shape_keys_to_keyframes(obj):
         # foreach_set writes all coordinates in one C-level call — much faster than a Python loop.
         coords = [coord for pair in zip(frames, values) for coord in (float(pair[0]), pair[1])]
         kps.foreach_set("co", coords)
-        interp = ["LINEAR"] * frame_count
-        kps.foreach_set("interpolation", interp)
+        # ``interpolation`` is an enum property backed by integer identifiers in
+        # Blender RNA.  ``foreach_set`` cannot accept enum names such as
+        # ``"LINEAR"`` here (Blender raises ``TypeError: 'str' object cannot be
+        # interpreted as an integer`` / ``couldn't access the py sequence``), so
+        # set it per keyframe using the public enum string API instead.
+        for keyframe_point in kps:
+            keyframe_point.interpolation = "LINEAR"
         fcurve.update()
 
     print(f"✅ Shape keys baked for {obj.name}")
