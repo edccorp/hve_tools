@@ -55,6 +55,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
         layout.prop(operator, "deformation_storage")
         layout.prop(operator, "apply_mesh_cleanup")
         layout.prop(operator, "find_missing_files")
+        layout.prop(operator, "show_system_console")
 
 
 
@@ -100,6 +101,12 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             default=False,
             )
 
+    show_system_console: BoolProperty(
+            name="Show System Console",
+            description="Open Blender's system console for live FBX import logs; useful for troubleshooting long imports",
+            default=False,
+            )
+
 
     def execute(self, context):
         from . import fbx_importer
@@ -114,6 +121,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             apply_mesh_cleanup=self.apply_mesh_cleanup,
             find_missing_files=self.find_missing_files,
             operator=self,
+            show_system_console=self.show_system_console,
         )
 
     def draw(self, context):
