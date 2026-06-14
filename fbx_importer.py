@@ -5,8 +5,6 @@ import math
 import threading
 import struct
 import time
-import tempfile
-import subprocess
 from contextlib import contextmanager
 import mathutils  # Blender's math utilities library
 bl_info = {
@@ -173,72 +171,6 @@ def is_wheel_object(obj):
 
 
 
-def build_fbx_to_usd_conversion_script(fbx_file_path, usd_file_path):
-    """Return a Blender Python script for an isolated FBX -> USD conversion."""
-    return f"""
-import bpy
-
-fbx_file_path = {fbx_file_path!r}
-usd_file_path = {usd_file_path!r}
-
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.object.delete()
-
-bpy.ops.import_scene.fbx(filepath=fbx_file_path)
-
-# Export the converted scene the same way the successful command-line workflow
-# does: from a clean Blender process, with imported materials, and without
-# selecting only objects from the add-on's already-open scene.
-bpy.ops.object.select_all(action="SELECT")
-last_error = None
-for options in (
-    {{"filepath": usd_file_path, "selected_objects_only": True, "export_materials": True}},
-    {{"filepath": usd_file_path, "export_materials": True}},
-    {{"filepath": usd_file_path}},
-):
-    try:
-        bpy.ops.wm.usd_export(**options)
-        break
-    except (TypeError, RuntimeError) as exc:
-        last_error = exc
-else:
-    raise last_error or RuntimeError("USD export failed without an exception.")
-"""
-
-
-def convert_fbx_to_usd_in_background_blender(fbx_file_path, usd_file_path, temp_dir):
-    """Run Blender in a clean background process to convert ``fbx_file_path`` to USD."""
-    blender_binary_path = getattr(getattr(bpy, "app", None), "binary_path", None)
-    if not blender_binary_path:
-        raise RuntimeError("Cannot locate the Blender executable for command-line FBX to USD conversion.")
-
-    conversion_script_path = os.path.join(temp_dir, "hve_fbx_to_usd.py")
-    with open(conversion_script_path, "w", encoding="utf-8") as script_file:
-        script_file.write(build_fbx_to_usd_conversion_script(fbx_file_path, usd_file_path))
-
-    command = [
-        blender_binary_path,
-        "--background",
-        "--factory-startup",
-        "--python",
-        conversion_script_path,
-    ]
-    result = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
-        raise RuntimeError(
-            f"Command-line FBX to USD conversion failed with exit code {result.returncode}: {output}"
-        )
-    if not os.path.exists(usd_file_path):
-        raise RuntimeError("Command-line FBX to USD conversion did not create a USD file.")
-
-    return command
 
 def _iter_layered_fcurve_collections(action):
     """Yield F-Curve collections from layered actions (Blender 5+)."""
@@ -1063,8 +995,15 @@ def rebuild_shape_keys_from_samples(obj, sample_frames, sample_vertex_positions)
     if len(sample_frames) != len(sample_vertex_positions):
         raise ValueError("Sample frame count must match sampled vertex positions.")
 
+    # Capture the existing Basis geometry before clearing, so the resting pose is preserved.
+    existing_basis = obj.data.shape_keys
+    if existing_basis and existing_basis.key_blocks:
+        basis_positions = [tuple(kb.co) for kb in existing_basis.key_blocks[0].data]
+    else:
+        basis_positions = [tuple(v.co) for v in obj.data.vertices]
+
     clear_object_shape_keys(obj)
-    set_mesh_vertex_positions(obj.data, sample_vertex_positions[0])
+    set_mesh_vertex_positions(obj.data, basis_positions)
     obj.shape_key_add(name="Basis", from_mix=False)
 
     reduced_keys = []
@@ -1085,11 +1024,14 @@ def reduce_shape_key_meshes_with_adaptive_samples(
     vehicle_names,
     tolerance=0.01,
     max_samples=24,
+    imported_objects=None,
+    imported_pointer_set=None,
 ):
     """Rebuild joined meshes with a smaller self-contained shapekey set."""
     scene = bpy.context.scene
     reduced_objects = []
     seen_pointers = set()
+    imported_pointer_set = imported_pointer_set or set()
 
     for vehicle_name in vehicle_names:
         collection_prefix = f"Body Mesh: {vehicle_name}:"
@@ -1101,12 +1043,21 @@ def reduce_shape_key_meshes_with_adaptive_samples(
         for col in body_mesh_collections:
             mesh_objects.extend(_gather_meshes(col))
 
+        # Restrict to objects from this import when a pointer set is provided.
+        if imported_pointer_set:
+            mesh_objects = [
+                obj for obj in mesh_objects
+                if (obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)) in imported_pointer_set
+            ]
+
         if not mesh_objects:
             clean_vehicle_name = re.sub(r"\.\d+$", "", vehicle_name)
+            source_objects = imported_objects if imported_objects is not None else bpy.context.scene.objects
             mesh_objects = [
                 obj
-                for obj in bpy.context.scene.objects
+                for obj in source_objects
                 if obj.type == "MESH" and belongs_to_vehicle(obj.name, clean_vehicle_name)
+                and (not imported_pointer_set or (obj.as_pointer() if hasattr(obj, "as_pointer") else id(obj)) in imported_pointer_set)
             ]
 
         for obj in mesh_objects:
@@ -1612,86 +1563,6 @@ def set_new_materials_metallic_zero(new_materials):
                 metallic_input.default_value = 0.0
 
 
-def _call_blender_operator_with_fallback(operator, option_sets):
-    """Call a Blender operator with the first supported keyword set.
-
-    Blender changes USD operator option names between versions.  The importer
-    keeps the user-facing behavior stable by trying a rich option set first and
-    progressively falling back to the smallest required call.
-    """
-    last_error = None
-    for options in option_sets:
-        try:
-            return operator(**options)
-        except TypeError as exc:
-            last_error = exc
-        except RuntimeError as exc:
-            last_error = exc
-    if last_error is not None:
-        raise last_error
-    return operator()
-
-
-def roundtrip_imported_objects_through_usd(context, fbx_file_path, imported_objects):
-    """Replace native FBX objects with USD objects from an isolated conversion.
-
-    HVE FBX files can import with less reliable mesh/animation results than the
-    same file after Blender has converted it through USD from a clean command-line
-    process.  This helper runs that external conversion to a temporary USD file,
-    imports the USD into the current scene, then removes the original native FBX
-    objects only after the USD import has succeeded.  If conversion or USD import
-    fails, callers can continue using the native FBX import as a fallback.
-    """
-    imported_objects = [obj for obj in imported_objects if is_valid_blender_object(obj)]
-    if not imported_objects:
-        return []
-
-    usd_import = getattr(bpy.ops.wm, "usd_import", None)
-    if usd_import is None:
-        raise RuntimeError("This Blender build does not expose the USD import operator.")
-
-    previous_active = context.view_layer.objects.active
-    previous_selection = [obj for obj in context.selected_objects if is_valid_blender_object(obj)]
-
-    with tempfile.TemporaryDirectory(prefix="hve_fbx_usd_") as temp_dir:
-        usd_file_path = os.path.join(
-            temp_dir,
-            f"{os.path.splitext(os.path.basename(fbx_file_path))[0]}_roundtrip.usdc",
-        )
-
-        convert_fbx_to_usd_in_background_blender(fbx_file_path, usd_file_path, temp_dir)
-
-        pre_usd_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
-        _call_blender_operator_with_fallback(
-            usd_import,
-            (
-                {"filepath": usd_file_path, "read_mesh_uvs": True},
-                {"filepath": usd_file_path},
-            ),
-        )
-
-    usd_objects = [
-        obj for obj in bpy.context.scene.objects
-        if obj.as_pointer() not in pre_usd_import_ids
-    ]
-    if not usd_objects:
-        raise RuntimeError("USD round-trip completed but did not create any objects.")
-
-    bpy.ops.object.select_all(action="DESELECT")
-    for obj in imported_objects:
-        if is_valid_blender_object(obj):
-            obj.select_set(True)
-    bpy.ops.object.delete()
-
-    bpy.ops.object.select_all(action="DESELECT")
-    for obj in previous_selection:
-        if is_valid_blender_object(obj):
-            obj.select_set(True)
-    if previous_active and is_valid_blender_object(previous_active):
-        context.view_layer.objects.active = previous_active
-
-    print(f"✅ Converted FBX through isolated command-line USD: {len(usd_objects)} objects imported.")
-    return usd_objects
 
 def import_fbx(
     context,
@@ -1700,7 +1571,6 @@ def import_fbx(
     deformation_storage="SHAPE_KEYS",
     apply_mesh_cleanup=False,
     find_missing_files=False,
-    import_via_usd=True,
 ):
     timing_report = ImportTimingReport()
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
@@ -1737,20 +1607,7 @@ def import_fbx(
             post_import_objects = list(bpy.context.scene.objects)
             imported_objects = [obj for obj in post_import_objects if obj.as_pointer() not in pre_import_ids]
 
-        if import_via_usd:
-            with timing_report.phase("optional FBX to USD round-trip"):
-                try:
-                    imported_objects = roundtrip_imported_objects_through_usd(
-                        context,
-                        fbx_file_path,
-                        imported_objects,
-                    )
-                except Exception as exc:
-                    print(f"⚠️ USD round-trip failed; continuing with native FBX import: {exc}")
-        else:
-            print("ℹ️ FBX to USD round-trip disabled; using native FBX import results.")
-
-        with timing_report.phase("post-round-trip import tracking"):
+        with timing_report.phase("post-import tracking"):
             imported_objects = [obj for obj in imported_objects if is_valid_blender_object(obj)]
             imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
             imported_names = [obj.name for obj in imported_objects]
@@ -1767,10 +1624,10 @@ def import_fbx(
                     for fcurve in iter_action_fcurves(action):
                         fcurve_found = True
                         for keyframe in fcurve.keyframe_points:
-                            max_frame = max(max_frame, int(keyframe.co.x) - 1)  # Update max frame
+                            max_frame = max(max_frame, int(keyframe.co.x))
 
                     if not fcurve_found:
-                        frame_end = int(action.frame_range[1]) - 1
+                        frame_end = int(action.frame_range[1])
                         max_frame = max(max_frame, frame_end)
 
             # Get the current frame end in Blender's timeline
@@ -2149,6 +2006,9 @@ def import_fbx(
 
         timing_report.finish_phase(collection_phase)
 
+        # Ensure frame_start is 0 before any shape-key baking or sampling.
+        context.scene.frame_start = 0
+
         with timing_report.phase("optional body mesh merge"):
             if merge_body_mesh:
                 # Join body mesh objects separately for each vehicle only when requested.
@@ -2166,7 +2026,11 @@ def import_fbx(
                 )
             elif deformation_storage == "SHAPE_KEYS":
                 # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
-                reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
+                reduce_shape_key_meshes_with_adaptive_samples(
+                    vehicle_names,
+                    imported_objects=imported_objects,
+                    imported_pointer_set=imported_pointer_set,
+                )
 
         with timing_report.phase("merge duplicate imported materials"):
             # Replace duplicate materials
@@ -2177,8 +2041,6 @@ def import_fbx(
             context.scene.render.fps = original_fps
             context.scene.render.fps_base = original_fps_base
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
-
-            context.scene.frame_start = 0
 
         with timing_report.phase("optional find missing files"):
             if find_missing_files:
@@ -2201,7 +2063,6 @@ def load(context,
          deformation_storage="SHAPE_KEYS",
          apply_mesh_cleanup=False,
          find_missing_files=False,
-         import_via_usd=True,
          ):
 
 
@@ -2216,7 +2077,6 @@ def load(context,
             deformation_storage=deformation_storage,
             apply_mesh_cleanup=apply_mesh_cleanup,
             find_missing_files=find_missing_files,
-            import_via_usd=import_via_usd,
             )
 
     return {'FINISHED'}
