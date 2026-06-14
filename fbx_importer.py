@@ -3,6 +3,7 @@ import os
 import re
 import math
 import threading
+import ctypes
 import struct
 import time
 from contextlib import contextmanager
@@ -96,6 +97,7 @@ class BlenderImportProgress:
                 self._wm.progress_update(self.current_step)
             if hasattr(self._wm, "status_text_set"):
                 self._wm.status_text_set(progress_message)
+        force_blender_ui_redraw()
 
     def finish(self, message):
         self.update(message, advance=False)
@@ -113,6 +115,35 @@ class BlenderImportProgress:
 def report_import_progress(progress, message, advance=True):
     if progress is not None:
         progress.update(message, advance=advance)
+
+
+def force_blender_ui_redraw():
+    """Ask Blender to draw pending status/progress updates before blocking work."""
+    redraw_timer = getattr(getattr(bpy.ops, "wm", None), "redraw_timer", None)
+    if redraw_timer and redraw_timer.poll():
+        redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
+
+def show_system_console_for_import(operator=None):
+    """Best-effort: make Blender's system console visible for long FBX imports."""
+    if os.name != "nt":
+        return
+
+    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if hwnd:
+        is_visible = ctypes.windll.user32.IsWindowVisible(hwnd)
+        if not is_visible:
+            ctypes.windll.user32.ShowWindow(hwnd, 5)  # SW_SHOW
+    else:
+        console_toggle = getattr(getattr(bpy.ops, "wm", None), "console_toggle", None)
+        if not console_toggle or not console_toggle.poll():
+            return
+        console_toggle()
+
+    message = "Opened Blender system console for live HVE FBX import details."
+    print(message)
+    if operator:
+        operator.report({'INFO'}, message)
 
 
 def normalize_name(name: str) -> str:
@@ -1658,6 +1689,7 @@ def import_fbx(
     timing_report = ImportTimingReport()
     progress = BlenderImportProgress(context, operator=operator, total_steps=17)
     progress.begin("Starting import")
+    show_system_console_for_import(operator=operator)
     deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
     if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
         deformation_storage = "SHAPE_KEYS"
