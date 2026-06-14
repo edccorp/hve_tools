@@ -103,3 +103,17 @@ def test_other_tools_child_panels_default_closed():
         section = ui_source[start:end if end != -1 else len(ui_source)]
         assert 'bl_parent_id = "HVE_PT_other_tools"' in section
         assert "bl_options = {'DEFAULT_CLOSED'}" in section
+
+
+def test_fbx_importer_reports_progress_to_blender_ui():
+    assert "class BlenderImportProgress" in fbx_importer_source
+    assert "progress_begin" in fbx_importer_source
+    assert "progress_update" in fbx_importer_source
+    assert "status_text_set" in fbx_importer_source
+    assert "operator.report({'INFO'}" in fbx_importer_source
+    assert "operator=self" in fbx_ui_source
+    assert "operator=operator" in fbx_importer_source
+    assert "show_system_console=False" in fbx_importer_source
+    assert "show_system_console: BoolProperty" in fbx_ui_source
+    assert 'layout.prop(operator, "show_system_console")' in fbx_ui_source
+    assert "debug=False" in fbx_importer_source
