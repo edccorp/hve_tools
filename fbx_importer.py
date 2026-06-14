@@ -2170,8 +2170,8 @@ def import_fbx(
                     imported_objects,
                     imported_pointer_set,
                 )
-            elif merge_body_mesh:
-                # Rebuild joined shape-key meshes with a smaller self-contained sample set.
+            elif deformation_storage == "SHAPE_KEYS":
+                # Reduce per-frame shape keys to a smaller adaptive sample set regardless of merge state.
                 reduce_shape_key_meshes_with_adaptive_samples(vehicle_names)
 
         with timing_report.phase("merge duplicate imported materials"):
