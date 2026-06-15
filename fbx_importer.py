@@ -1954,6 +1954,26 @@ def import_fbx(
 
 
 
+def add_merge_by_distance_modifier(obj):
+    """Add a Weld (merge by distance) modifier to a mesh object if not already present."""
+    for mod in obj.modifiers:
+        if mod.type == 'WELD':
+            return
+    mod = obj.modifiers.new(name="Merge by Distance", type='WELD')
+    mod.merge_threshold = 0.0001
+
+
+def add_smooth_by_angle_modifier(obj):
+    """Add an Edge Split (smooth by angle) modifier to a mesh object if not already present."""
+    for mod in obj.modifiers:
+        if mod.type == 'EDGE_SPLIT':
+            return
+    mod = obj.modifiers.new(name="Smooth by Angle", type='EDGE_SPLIT')
+    mod.split_angle = 0.523599  # 30 degrees in radians
+    mod.use_edge_angle = True
+    mod.use_edge_sharp = True
+
+
 def load(context, filepath):
 
     if bpy.ops.object.mode_set.poll():

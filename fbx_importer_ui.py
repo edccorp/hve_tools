@@ -6,7 +6,7 @@ bl_info = {
     "blender": (2, 83, 0),
     "location": "File > Import-Export",
     "description": "Import HVE motion and variables",
-    "warning": "",    
+    "warning": "",
     "category": "HVE",
 }
 
@@ -16,20 +16,26 @@ if "bpy" in locals():
         importlib.reload(fbx_importer)
 
 import bpy
-from bpy.props import (
-        BoolProperty,
-        EnumProperty,
-        FloatProperty,
-        StringProperty,
-        )
-from bpy_extras.io_utils import (
-        ImportHelper,
-        ExportHelper,
-        orientation_helper,
-        axis_conversion,
-        path_reference_mode,
-        )
-        
+import tempfile
+from bpy.props import StringProperty
+from bpy_extras.io_utils import ExportHelper
+
+
+def get_hve_vehicle_names():
+    """Return vehicle names from all HVE FBX collections currently in the scene."""
+    from . import fbx_importer
+    names = []
+    for col in bpy.data.collections:
+        if col.name.startswith("Body Mesh: "):
+            # "Body Mesh: Toyota: SideFlip: FBX" -> vehicle name is "Toyota"
+            parts = col.name.split(": ")
+            if len(parts) >= 2:
+                name = parts[1]
+                if name not in names:
+                    names.append(name)
+    return names
+
+
 class FBX_PT_fbx_importer_include(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
@@ -40,23 +46,11 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-
         return operator and operator.bl_idname == "IMPORT_HVE_OT_fbx"
 
     def draw(self, context):
         layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False  # No animation.
-
-        sfile = context.space_data
-        operator = sfile.active_operator
-
-        layout.prop(operator, "merge_body_mesh")
-        layout.prop(operator, "deformation_storage")
-        layout.prop(operator, "shape_key_max_samples")
-        layout.prop(operator, "apply_mesh_cleanup")
-        layout.prop(operator, "find_missing_files")
-
+        layout.label(text="Import and rename HVE FBX")
 
 
 class ImportFBX(bpy.types.Operator, ExportHelper):
@@ -70,76 +64,114 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
     filter_glob: StringProperty(
             default="*.fbx",
             options={'HIDDEN'},
-            maxlen=255,  # Max internal buffer length, longer would be clamped.
+            maxlen=255,
             )
-
-    merge_body_mesh: BoolProperty(
-            name="Merge Body Mesh",
-            description="Join each vehicle's body mesh parts into one object after import",
-            default=False,
-            )
-
-    deformation_storage: EnumProperty(
-            name="Deformation Storage",
-            description="How imported body mesh deformation should be stored",
-            items=(
-                ('SHAPE_KEYS', "Shape Keys", "Keep deformation in Blender shape keys; merged meshes are rebuilt with reduced sampled shape keys"),
-                ('MDD', "External MDD File", "Bake deformation to external .mdd point-cache files and attach Mesh Cache modifiers"),
-            ),
-            default='SHAPE_KEYS',
-            )
-
-    shape_key_max_samples: bpy.props.IntProperty(
-            name="Max Shape Key Samples",
-            description=(
-                "Maximum number of shape keys kept per mesh after adaptive reduction. "
-                "Higher values preserve more deformation detail but slow down the viewport. "
-                "Set to 0 to disable the cap and let the tolerance alone control quality"
-            ),
-            default=24,
-            min=0,
-            soft_max=200,
-            )
-
-    apply_mesh_cleanup: BoolProperty(
-            name="Apply Merge by Distance and Smooth",
-            description="Add Geometry Nodes modifiers that merge nearby vertices and smooth mesh shading; disable for faster renders",
-            default=False,
-            )
-
-    find_missing_files: BoolProperty(
-            name="Find Missing Files",
-            description="Search the public HVE support-files folder for missing assets after import; disable for faster imports",
-            default=False,
-            )
-
 
     def execute(self, context):
         from . import fbx_importer
-
-        from mathutils import Matrix
-
-        return fbx_importer.load(
-            context,
-            self.filepath,
-            merge_body_mesh=self.merge_body_mesh,
-            deformation_storage=self.deformation_storage,
-            shape_key_max_samples=self.shape_key_max_samples,
-            apply_mesh_cleanup=self.apply_mesh_cleanup,
-            find_missing_files=self.find_missing_files,
-        )
+        return fbx_importer.load(context, self.filepath)
 
     def draw(self, context):
         pass
 
 
+class FBX_OT_merge_body_mesh(bpy.types.Operator):
+    """Join each vehicle's body mesh parts into a single object"""
+    bl_idname = "import_hve.merge_body_mesh"
+    bl_label = "Merge Body Meshes"
+    bl_description = "Join each vehicle's body mesh parts into a single object"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import fbx_importer
+        vehicle_names = get_hve_vehicle_names()
+        if not vehicle_names:
+            self.report({'WARNING'}, "No HVE body mesh collections found")
+            return {'CANCELLED'}
+        all_objects = list(bpy.context.scene.objects)
+        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
+        fbx_importer.join_mesh_objects_per_vehicle(vehicle_names, all_objects, pointer_set)
+        return {'FINISHED'}
+
+
+class FBX_OT_reduce_shape_keys(bpy.types.Operator):
+    """Adaptively reduce per-frame shape keys to the minimum needed to represent the deformation"""
+    bl_idname = "import_hve.reduce_shape_keys"
+    bl_label = "Reduce Shape Keys"
+    bl_description = "Adaptively reduce per-frame shape keys to the minimum needed to represent the deformation"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import fbx_importer
+        vehicle_names = get_hve_vehicle_names()
+        if not vehicle_names:
+            self.report({'WARNING'}, "No HVE body mesh collections found")
+            return {'CANCELLED'}
+        max_samples = context.scene.fbx_shape_key_max_samples
+        fbx_importer.reduce_shape_key_meshes_with_adaptive_samples(
+            vehicle_names,
+            max_samples=max_samples if max_samples > 0 else None,
+        )
+        return {'FINISHED'}
+
+
+class FBX_OT_bake_to_mdd(bpy.types.Operator):
+    """Export body mesh shape key animation to external .mdd point-cache files and replace with Mesh Cache modifiers"""
+    bl_idname = "import_hve.bake_to_mdd"
+    bl_label = "Bake Shape Keys to MDD"
+    bl_description = "Export body mesh shape key animation to external .mdd point-cache files and replace with Mesh Cache modifiers"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import fbx_importer
+        vehicle_names = get_hve_vehicle_names()
+        if not vehicle_names:
+            self.report({'WARNING'}, "No HVE body mesh collections found")
+            return {'CANCELLED'}
+        all_objects = list(bpy.context.scene.objects)
+        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
+        fbx_importer.export_body_shape_key_animations_to_mdd(
+            vehicle_names,
+            bpy.data.filepath or tempfile.gettempdir(),
+            all_objects,
+            pointer_set,
+        )
+        return {'FINISHED'}
+
+
+class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
+    """Add Merge by Distance and Smooth by Angle geometry node modifiers to body mesh objects"""
+    bl_idname = "import_hve.apply_mesh_cleanup"
+    bl_label = "Apply Mesh Cleanup"
+    bl_description = "Add Merge by Distance and Smooth by Angle geometry node modifiers to body mesh objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import fbx_importer
+        vehicle_names = get_hve_vehicle_names()
+        if not vehicle_names:
+            self.report({'WARNING'}, "No HVE body mesh collections found")
+            return {'CANCELLED'}
+        for col in bpy.data.collections:
+            if col.name.startswith("Body Mesh: "):
+                parts = col.name.split(": ")
+                if len(parts) >= 2 and parts[1] in vehicle_names:
+                    for obj in col.objects:
+                        if obj.type == 'MESH':
+                            fbx_importer.add_merge_by_distance_modifier(obj)
+                            fbx_importer.add_smooth_by_angle_modifier(obj)
+        return {'FINISHED'}
+
 
 def menu_func_export(self, context):
-    self.layout.operator(ImportFBX.bl_idname,
-                         text="FBX (.fbx)")
+    self.layout.operator(ImportFBX.bl_idname, text="FBX (.fbx)")
 
 
 classes = (
-    ImportFBX,  
-    FBX_PT_fbx_importer_include,    
+    ImportFBX,
+    FBX_PT_fbx_importer_include,
+    FBX_OT_merge_body_mesh,
+    FBX_OT_reduce_shape_keys,
+    FBX_OT_bake_to_mdd,
+    FBX_OT_apply_mesh_cleanup,
 )

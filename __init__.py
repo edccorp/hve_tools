@@ -206,6 +206,12 @@ try:
             default=False,
         )
 
+        bpy.types.Scene.fbx_shape_key_max_samples = bpy.props.IntProperty(
+            name="Max Shape Key Samples",
+            description="Maximum shape keys kept per mesh after adaptive reduction. 0 = no cap, tolerance controls quality",
+            default=24, min=0, soft_max=200,
+        )
+
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
         bpy.types.Object.edr_input_mode_preference = EnumProperty(
@@ -243,6 +249,7 @@ try:
         del bpy.types.Scene.hve_setup_show_forces
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water
+        del bpy.types.Scene.fbx_shape_key_max_samples
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
