@@ -848,6 +848,74 @@ def sample_mesh_deformation_frames(obj, frame_start, frame_end):
     return frame_times, frame_vertex_positions
 
 
+def read_shape_key_frames_directly(obj):
+    """Read vertex positions and frame numbers straight from shape key data blocks.
+
+    This is orders of magnitude faster than sample_mesh_deformation_frames because
+    it never calls scene.frame_set(), depsgraph.update(), or to_mesh().  It reads
+    the stored vertex co values directly from each shape key block.
+
+    Returns (frame_numbers, frame_vertex_positions) where frame_numbers are derived
+    from the peak frame of each shape key's F-curve, or sequential integers if no
+    F-curve data is available.  Returns ([], []) when the object has no usable
+    shape keys.
+    """
+    shape_keys = getattr(getattr(obj, "data", None), "shape_keys", None)
+    if not shape_keys:
+        return [], []
+
+    key_blocks = shape_keys.key_blocks
+    if len(key_blocks) < 2:
+        return [], []
+
+    # Build a map from shape key name to the frame where its F-curve peaks (value == 1).
+    # Fall back to sequential frame numbers when animation data is absent.
+    action = getattr(getattr(shape_keys, "animation_data", None), "action", None)
+    peak_frame_map = {}
+    if action is not None:
+        for fcurve in iter_action_fcurves(action):
+            dp = getattr(fcurve, "data_path", "")
+            if not dp.endswith('.value'):
+                continue
+            # Extract key name from data path like key_blocks["Name"].value
+            import re as _re
+            m = _re.search(r'key_blocks\["([^"]+)"\]', dp)
+            if not m:
+                continue
+            key_name = m.group(1)
+            best_frame = None
+            best_value = -1.0
+            for kp in getattr(fcurve, "keyframe_points", []):
+                if kp.co.y > best_value:
+                    best_value = kp.co.y
+                    best_frame = kp.co.x
+            if best_frame is not None:
+                peak_frame_map[key_name] = best_frame
+
+    frame_numbers = []
+    frame_vertex_positions = []
+    sequential = 0
+
+    for kb in key_blocks:
+        if kb.name == "Basis":
+            continue
+        frame = peak_frame_map.get(kb.name, sequential)
+        sequential += 1
+        positions = [tuple(p.co) for p in kb.data]
+        frame_numbers.append(frame)
+        frame_vertex_positions.append(positions)
+
+    if not frame_numbers:
+        return [], []
+
+    # Ensure frames are in ascending order.
+    pairs = sorted(zip(frame_numbers, frame_vertex_positions), key=lambda p: p[0])
+    frame_numbers = [p[0] for p in pairs]
+    frame_vertex_positions = [p[1] for p in pairs]
+
+    return frame_numbers, frame_vertex_positions
+
+
 def clear_object_shape_keys(obj):
     """Remove all shape keys from ``obj`` if present."""
     if not getattr(getattr(obj, "data", None), "shape_keys", None):
@@ -1095,12 +1163,11 @@ def reduce_shape_key_meshes_with_adaptive_samples(
             if not getattr(getattr(obj, "data", None), "shape_keys", None):
                 continue
 
-            frame_numbers = list(range(scene.frame_start, scene.frame_end + 1))
-            _, frame_vertex_positions = sample_mesh_deformation_frames(
-                obj,
-                scene.frame_start,
-                scene.frame_end,
-            )
+            # Read vertex positions directly from shape key data — no frame-setting needed.
+            frame_numbers, frame_vertex_positions = read_shape_key_frames_directly(obj)
+            if not frame_numbers:
+                continue
+
             selected_indices = select_adaptive_sample_indices(
                 frame_numbers,
                 frame_vertex_positions,
@@ -2050,9 +2117,10 @@ def import_fbx(
                     imported_objects,
                     imported_pointer_set,
                 )
-            elif deformation_storage == "SHAPE_KEYS" and merge_body_mesh:
-                # Reduce per-frame shape keys after merging — one joined object per vehicle
-                # is far faster to sample than the many individual unmerged parts.
+            elif deformation_storage == "SHAPE_KEYS":
+                # Reduce per-frame shape keys on all body mesh objects. Reading vertex
+                # positions directly from shape key data (no frame-setting) makes this
+                # fast enough to run even on many unmerged individual mesh parts.
                 reduce_shape_key_meshes_with_adaptive_samples(
                     vehicle_names,
                     imported_objects=imported_objects,
