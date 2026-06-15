@@ -819,13 +819,8 @@ def bake_shape_keys_to_keyframes(obj):
         # foreach_set writes all coordinates in one C-level call — much faster than a Python loop.
         coords = [coord for pair in zip(frames, values) for coord in (float(pair[0]), pair[1])]
         kps.foreach_set("co", coords)
-        # ``interpolation`` is an enum property backed by integer identifiers in
-        # Blender RNA.  ``foreach_set`` cannot accept enum names such as
-        # ``"LINEAR"`` here (Blender raises ``TypeError: 'str' object cannot be
-        # interpreted as an integer`` / ``couldn't access the py sequence``), so
-        # set it per keyframe using the public enum string API instead.
-        for keyframe_point in kps:
-            keyframe_point.interpolation = "LINEAR"
+        for kp in kps:
+            kp.interpolation = 'LINEAR'
         fcurve.update()
 
     print(f"✅ Shape keys baked for {obj.name}")
@@ -919,6 +914,74 @@ def sample_mesh_deformation_frames(obj, frame_start, frame_end):
         scene.frame_set(original_frame)
 
     return frame_times, frame_vertex_positions
+
+
+def read_shape_key_frames_directly(obj):
+    """Read vertex positions and frame numbers straight from shape key data blocks.
+
+    This is orders of magnitude faster than sample_mesh_deformation_frames because
+    it never calls scene.frame_set(), depsgraph.update(), or to_mesh().  It reads
+    the stored vertex co values directly from each shape key block.
+
+    Returns (frame_numbers, frame_vertex_positions) where frame_numbers are derived
+    from the peak frame of each shape key's F-curve, or sequential integers if no
+    F-curve data is available.  Returns ([], []) when the object has no usable
+    shape keys.
+    """
+    shape_keys = getattr(getattr(obj, "data", None), "shape_keys", None)
+    if not shape_keys:
+        return [], []
+
+    key_blocks = shape_keys.key_blocks
+    if len(key_blocks) < 2:
+        return [], []
+
+    # Build a map from shape key name to the frame where its F-curve peaks (value == 1).
+    # Fall back to sequential frame numbers when animation data is absent.
+    action = getattr(getattr(shape_keys, "animation_data", None), "action", None)
+    peak_frame_map = {}
+    if action is not None:
+        for fcurve in iter_action_fcurves(action):
+            dp = getattr(fcurve, "data_path", "")
+            if not dp.endswith('.value'):
+                continue
+            # Extract key name from data path like key_blocks["Name"].value
+            import re as _re
+            m = _re.search(r'key_blocks\["([^"]+)"\]', dp)
+            if not m:
+                continue
+            key_name = m.group(1)
+            best_frame = None
+            best_value = -1.0
+            for kp in getattr(fcurve, "keyframe_points", []):
+                if kp.co.y > best_value:
+                    best_value = kp.co.y
+                    best_frame = kp.co.x
+            if best_frame is not None:
+                peak_frame_map[key_name] = best_frame
+
+    frame_numbers = []
+    frame_vertex_positions = []
+    sequential = 0
+
+    for kb in key_blocks:
+        if kb.name == "Basis":
+            continue
+        frame = peak_frame_map.get(kb.name, sequential)
+        sequential += 1
+        positions = [tuple(p.co) for p in kb.data]
+        frame_numbers.append(frame)
+        frame_vertex_positions.append(positions)
+
+    if not frame_numbers:
+        return [], []
+
+    # Ensure frames are in ascending order.
+    pairs = sorted(zip(frame_numbers, frame_vertex_positions), key=lambda p: p[0])
+    frame_numbers = [p[0] for p in pairs]
+    frame_vertex_positions = [p[1] for p in pairs]
+
+    return frame_numbers, frame_vertex_positions
 
 
 def clear_object_shape_keys(obj):
@@ -1126,6 +1189,7 @@ def reduce_shape_key_meshes_with_adaptive_samples(
     imported_objects=None,
     imported_pointer_set=None,
 ):
+    # None means no hard cap — tolerance alone controls how many samples are kept.
     """Rebuild joined meshes with a smaller self-contained shapekey set."""
     scene = bpy.context.scene
     reduced_objects = []
@@ -1168,23 +1232,23 @@ def reduce_shape_key_meshes_with_adaptive_samples(
             if not getattr(getattr(obj, "data", None), "shape_keys", None):
                 continue
 
-            frame_numbers = list(range(scene.frame_start, scene.frame_end + 1))
-            _, frame_vertex_positions = sample_mesh_deformation_frames(
-                obj,
-                scene.frame_start,
-                scene.frame_end,
-            )
+            # Read vertex positions directly from shape key data — no frame-setting needed.
+            frame_numbers, frame_vertex_positions = read_shape_key_frames_directly(obj)
+            if not frame_numbers:
+                continue
+
             selected_indices = select_adaptive_sample_indices(
                 frame_numbers,
                 frame_vertex_positions,
                 tolerance=tolerance,
             )
-            selected_indices = trim_sample_indices(
-                frame_numbers,
-                frame_vertex_positions,
-                selected_indices,
-                max_samples,
-            )
+            if max_samples is not None:
+                selected_indices = trim_sample_indices(
+                    frame_numbers,
+                    frame_vertex_positions,
+                    selected_indices,
+                    max_samples,
+                )
 
             selected_frames = [frame_numbers[idx] for idx in selected_indices]
             selected_positions = [frame_vertex_positions[idx] for idx in selected_indices]
@@ -1666,21 +1730,8 @@ def set_new_materials_metallic_zero(new_materials):
 def import_fbx(
     context,
     fbx_file_path,
-    merge_body_mesh=False,
-    deformation_storage="MDD",
-    apply_mesh_cleanup=False,
-    find_missing_files=False,
-    operator=None,
-    show_system_console=False,
 ):
     timing_report = ImportTimingReport()
-    progress = BlenderImportProgress(context, operator=operator, total_steps=17)
-    progress.begin("Starting import")
-    if show_system_console:
-        show_system_console_for_import(operator=operator)
-    deformation_storage = (deformation_storage or "SHAPE_KEYS").upper()
-    if deformation_storage not in {"SHAPE_KEYS", "MDD"}:
-        deformation_storage = "SHAPE_KEYS"
 
     # Store the current frame rate settings
     original_fps = context.scene.render.fps
@@ -1768,170 +1819,6 @@ def import_fbx(
                     if old_part in obj.name:  # Check if the old_part exists in the name
                         obj.name = obj.name.replace(old_part, new_part)  # Replace the text
 
-        report_import_progress(progress, "Applying optional mesh cleanup")
-        if apply_mesh_cleanup:
-            modifier_phase = timing_report.start_phase("add mesh cleanup Geometry Nodes modifiers")
-            # Loop through selected objects and apply modifiers
-            for obj in imported_objects:
-                if ("Mesh" in obj.name or "Geometry" in obj.name) and obj.type == 'MESH':  # Ensure it's a mesh object
-                    # --- First Modifier: MergeByDistance ---
-                    existing_merge_modifier = None
-                    for mod in obj.modifiers:
-                        if mod.type == 'NODES' and mod.name == "MergeByDistance":
-                            existing_merge_modifier = mod
-                            break
-
-                    if existing_merge_modifier is None:
-                        merge_modifier = obj.modifiers.new(name="MergeByDistance", type='NODES')
-
-                        # Check if the MergeByDistance node group exists
-                        merge_node_group = bpy.data.node_groups.get("MergeByDistance")
-
-                        if merge_node_group is None:
-                            merge_node_group = bpy.data.node_groups.new(name="MergeByDistance", type='GeometryNodeTree')
-                            merge_node_group.use_fake_user = True  # Prevent deletion
-                            merge_node_group.is_modifier = True
-
-                            # Add input and output nodes
-                            input_node = merge_node_group.nodes.new(type='NodeGroupInput')
-                            output_node = merge_node_group.nodes.new(type='NodeGroupOutput')
-
-                            merge_node_group.interface.new_socket("Geometry", in_out='INPUT', socket_type='NodeSocketGeometry')
-                            merge_node_group.interface.new_socket("Geometry", in_out='OUTPUT', socket_type='NodeSocketGeometry')
-
-                            # Position nodes
-                            input_node.location = (-200, 0)
-                            output_node.location = (400, 0)
-
-                            # Create Merge by Distance Node
-                            merge_by_distance_node = merge_node_group.nodes.new(type='GeometryNodeMergeByDistance')
-                            merge_by_distance_node.location = (0, 0)
-
-                            # Connect nodes
-                            merge_node_group.links.new(input_node.outputs["Geometry"], merge_by_distance_node.inputs["Geometry"])
-                            merge_node_group.links.new(merge_by_distance_node.outputs["Geometry"], output_node.inputs["Geometry"])
-
-                        # Assign the node group to the modifier
-                        merge_modifier.node_group = merge_node_group
-                    else:
-                        merge_modifier = existing_merge_modifier
-                        print(f"Using existing 'MergeByDistance' modifier for {obj.name}.")
-
-                    # --- Second Modifier: Smooth by Angle ---
-                    existing_smooth_modifier = None
-                    for mod in obj.modifiers:
-                        if mod.type == 'NODES' and mod.name == "SmoothByAngle":
-                            existing_smooth_modifier = mod
-                            break
-
-                    if existing_smooth_modifier is None:
-                        smooth_modifier = obj.modifiers.new(name="SmoothByAngle", type='NODES')
-
-                         # Check if the SmoothByAngle node group exists
-                        smooth_node_group = bpy.data.node_groups.get("SmoothByAngle")
-
-                        if smooth_node_group is None:
-                            # Create a new Geometry Nodes group
-                            smooth_node_group = bpy.data.node_groups.new(name="SmoothByAngle", type='GeometryNodeTree')
-                            smooth_node_group.use_fake_user = True  # Prevent deletion
-                            smooth_node_group.is_modifier = True
-
-                            # Create Group Input and Group Output nodes
-                            group_input = smooth_node_group.nodes.new(type="NodeGroupInput")
-                            group_output = smooth_node_group.nodes.new(type="NodeGroupOutput")
-                            group_input.location = (-400, 0)
-                            group_output.location = (400, 0)
-
-
-                            # Add inputs
-                            input_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='INPUT', socket_type='NodeSocketGeometry')
-                            #input_angle = smooth_node_group.interface.new_socket(name="Angle", in_out='INPUT', socket_type='NodeSocketFloat')
-                            input_ignore_sharpness = smooth_node_group.interface.new_socket(name="Ignore Sharpness", in_out='INPUT', socket_type='NodeSocketBool')
-
-                            # Add outputs
-                            output_mesh = smooth_node_group.interface.new_socket(name="Mesh", in_out='OUTPUT', socket_type='NodeSocketGeometry')
-
-                            #Create Angle value node
-                            angle = smooth_node_group.nodes.new('ShaderNodeValue')
-                            angle.outputs[0].default_value = 15.0
-                            angle.location = (-400, -150)
-
-
-                            # Create a Math Node and set it to "To Radians"
-                            to_radians_node = smooth_node_group.nodes.new(type="ShaderNodeMath")  # Math Node
-                            to_radians_node.operation = 'RADIANS'  # Set the operation to "To Radians"
-                            to_radians_node.location = (-200, -150)  # Position in node ed                        itor
-
-                            # Create Edge Angle node
-                            edge_angle = smooth_node_group.nodes.new('GeometryNodeInputMeshEdgeAngle')
-
-                            # Create Less Than or Equal node
-                            compare_angle = smooth_node_group.nodes.new('FunctionNodeCompare')
-                            compare_angle.data_type = 'FLOAT'
-                            compare_angle.operation = 'LESS_EQUAL'
-
-                            # Create Is Edge Smooth node
-                            is_edge_smooth = smooth_node_group.nodes.new('GeometryNodeInputEdgeSmooth')
-                            #is_edge_smooth.domain = 'EDGE'
-                            # Create Boolean OR for Edge Smoothness
-                            boolean_or_edge = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                            boolean_or_edge.operation = 'OR'
-
-                            # Create Boolean AND to combine conditions
-                            boolean_and = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                            boolean_and.operation = 'AND'
-
-                            # Create Set Shade Smooth (Edges)
-                            set_shade_smooth_edge = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
-                            set_shade_smooth_edge.domain = 'EDGE'
-
-                            # Create Is Face Smooth node
-                            is_face_smooth = smooth_node_group.nodes.new('GeometryNodeInputShadeSmooth')
-
-                            # Create Boolean OR for Face Smoothness
-                            boolean_or_face = smooth_node_group.nodes.new('FunctionNodeBooleanMath')
-                            boolean_or_face.operation = 'OR'
-
-                            # Create Set Shade Smooth (Faces)
-                            set_shade_smooth_face = smooth_node_group.nodes.new('GeometryNodeSetShadeSmooth')
-
-                            # Connecting Nodes
-
-                            smooth_node_group.links.new(edge_angle.outputs['Unsigned Angle'], compare_angle.inputs[0])
-                            smooth_node_group.links.new(angle.outputs['Value'], to_radians_node.inputs[0])
-                            smooth_node_group.links.new(to_radians_node.outputs['Value'], compare_angle.inputs[1])
-
-                            smooth_node_group.links.new(compare_angle.outputs['Result'], boolean_and.inputs[0])
-
-                            smooth_node_group.links.new(is_face_smooth.outputs['Smooth'], boolean_or_face.inputs[0])
-                            smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_face.inputs[1])
-                            smooth_node_group.links.new(boolean_or_face.outputs['Boolean'], boolean_and.inputs[1])
-
-                            smooth_node_group.links.new(is_edge_smooth.outputs['Smooth'], boolean_or_edge.inputs[0])
-                            smooth_node_group.links.new(group_input.outputs['Ignore Sharpness'], boolean_or_edge.inputs[1])
-
-                            smooth_node_group.links.new(boolean_or_edge.outputs['Boolean'], set_shade_smooth_edge.inputs['Selection'])
-                            smooth_node_group.links.new(group_input.outputs['Mesh'], set_shade_smooth_edge.inputs['Geometry'])
-                            smooth_node_group.links.new(boolean_and.outputs['Boolean'], set_shade_smooth_edge.inputs['Shade Smooth'])
-
-                            smooth_node_group.links.new(set_shade_smooth_edge.outputs['Geometry'], set_shade_smooth_face.inputs['Geometry'])
-                            smooth_node_group.links.new(set_shade_smooth_face.outputs['Geometry'], group_output.inputs['Mesh'])
-
-                        # Assign the node group to the modifier
-                        smooth_modifier.node_group = smooth_node_group
-                    else:
-                        smooth_modifier = existing_smooth_modifier
-                        print(f"Using existing 'SmoothByAngle' modifier for {obj.name}.")
-
-
-
-
-            timing_report.finish_phase(modifier_phase)
-
-        else:
-            print("ℹ️ Mesh cleanup modifiers disabled for faster renders.")
-
-        report_import_progress(progress, "Offsetting imported animation keyframes")
         with timing_report.phase("offset imported animation keyframes"):
             processed_offset_actions = set()
             # Loop through imported objects and offset each shared action only once.
@@ -2126,33 +2013,6 @@ def import_fbx(
         # Ensure frame_start is 0 before any shape-key baking or sampling.
         context.scene.frame_start = 0
 
-        report_import_progress(progress, "Processing optional body mesh merge")
-        with timing_report.phase("optional body mesh merge"):
-            if merge_body_mesh:
-                # Join body mesh objects separately for each vehicle only when requested.
-                join_mesh_objects_per_vehicle(vehicle_names, imported_objects, imported_pointer_set)
-            else:
-                print("ℹ️ Body mesh merge disabled; imported body geometry remains split for faster import.")
-
-        report_import_progress(progress, "Converting optional deformation storage")
-        with timing_report.phase("optional deformation storage conversion"):
-            if deformation_storage == "MDD":
-                export_body_shape_key_animations_to_mdd(
-                    vehicle_names,
-                    fbx_file_path,
-                    imported_objects,
-                    imported_pointer_set,
-                )
-            elif deformation_storage == "SHAPE_KEYS" and merge_body_mesh:
-                # Reduce per-frame shape keys after merging — one joined object per vehicle
-                # is far faster to sample than the many individual unmerged parts.
-                reduce_shape_key_meshes_with_adaptive_samples(
-                    vehicle_names,
-                    imported_objects=imported_objects,
-                    imported_pointer_set=imported_pointer_set,
-                )
-
-        report_import_progress(progress, "Merging duplicate imported materials")
         with timing_report.phase("merge duplicate imported materials"):
             # Replace duplicate materials
             merge_duplicate_materials_per_vehicle(vehicle_names)
@@ -2163,13 +2023,6 @@ def import_fbx(
             context.scene.render.fps = original_fps
             context.scene.render.fps_base = original_fps_base
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
-
-        report_import_progress(progress, "Checking optional missing file search")
-        with timing_report.phase("optional find missing files"):
-            if find_missing_files:
-                bpy.ops.file.find_missing_files(directory="C:\\Users\\Public\\HVE\\supportfiles")
-            else:
-                print("ℹ️ Missing-file search disabled for faster import.")
 
         timing_report.print_summary()
         progress.finish("HVE FBX import finished")
@@ -2185,30 +2038,33 @@ def import_fbx(
 
 
 
-def load(context,
-         filepath,
-         merge_body_mesh=False,
-         deformation_storage="MDD",
-         apply_mesh_cleanup=False,
-         find_missing_files=False,
-         operator=None,
-         show_system_console=False,
-         ):
+def add_merge_by_distance_modifier(obj):
+    """Add a Weld (merge by distance) modifier to a mesh object if not already present."""
+    for mod in obj.modifiers:
+        if mod.type == 'WELD':
+            return
+    mod = obj.modifiers.new(name="Merge by Distance", type='WELD')
+    mod.merge_threshold = 0.0001
 
+
+def add_smooth_by_angle_modifier(obj):
+    """Add an Edge Split (smooth by angle) modifier to a mesh object if not already present."""
+    for mod in obj.modifiers:
+        if mod.type == 'EDGE_SPLIT':
+            return
+    mod = obj.modifiers.new(name="Smooth by Angle", type='EDGE_SPLIT')
+    mod.split_angle = 0.523599  # 30 degrees in radians
+    mod.use_edge_angle = True
+    mod.use_edge_sharp = True
+
+
+def load(context, filepath):
 
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
     dirname = os.path.dirname(filepath)
 
-    import_fbx(context,
-            filepath,
-            merge_body_mesh=merge_body_mesh,
-            deformation_storage=deformation_storage,
-            apply_mesh_cleanup=apply_mesh_cleanup,
-            find_missing_files=find_missing_files,
-            operator=operator,
-            show_system_console=show_system_console,
-            )
+    import_fbx(context, filepath)
 
     return {'FINISHED'}

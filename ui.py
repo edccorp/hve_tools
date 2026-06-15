@@ -568,13 +568,26 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
 
     def draw(self, context):
         scene = context.scene
-        target_obj = scene.anim_settings.anim_object
         l = self.layout
-        c = l.column()
 
-
-        # Contacts Exporter controls
         l.operator("import_hve.fbx", text="Import FBX", icon='IMPORT')
+
+        l.separator()
+        l.label(text="Body Mesh")
+        l.operator("import_hve.merge_body_mesh", text="Merge Body Meshes")
+
+        l.separator()
+        l.label(text="Shape Keys")
+        l.prop(scene, "fbx_shape_key_max_samples")
+        l.operator("import_hve.reduce_shape_keys", text="Reduce Shape Keys")
+
+        l.separator()
+        l.label(text="Point Cache")
+        l.operator("import_hve.bake_to_mdd", text="Bake Shape Keys to MDD")
+
+        l.separator()
+        l.label(text="Mesh Cleanup")
+        l.operator("import_hve.apply_mesh_cleanup", text="Apply Mesh Cleanup")
 
 class HVE_PT_other_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
