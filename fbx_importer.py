@@ -2058,6 +2058,100 @@ def add_smooth_by_angle_modifier(obj):
     mod.use_edge_sharp = True
 
 
+def fix_boundary_normals_for_vehicles(vehicle_names, imported_objects=None, imported_pointer_set=None):
+    """Smooth normals across body mesh part boundaries without joining.
+
+    For each vehicle, duplicates all body mesh parts into a hidden joined
+    reference mesh (shape keys stripped), then adds a Data Transfer modifier
+    to each original part that copies face-corner normals from that reference.
+    This makes shading continuous across part seams while leaving the individual
+    objects and their shape keys untouched.
+    """
+    scene = bpy.context.scene
+    all_objects = imported_objects if imported_objects is not None else list(scene.objects)
+    pointer_set = imported_pointer_set if imported_pointer_set is not None else {
+        obj.as_pointer() for obj in scene.objects
+    }
+
+    # Find or create a hidden collection for reference meshes.
+    ref_collection_name = "_HVE Normals References"
+    ref_collection = bpy.data.collections.get(ref_collection_name)
+    if ref_collection is None:
+        ref_collection = bpy.data.collections.new(ref_collection_name)
+        scene.collection.children.link(ref_collection)
+        ref_collection.hide_viewport = True
+        ref_collection.hide_render = True
+
+    for vehicle_name in vehicle_names:
+        mesh_objects = get_body_mesh_objects_for_vehicle(vehicle_name, all_objects, pointer_set)
+        if not mesh_objects:
+            print(f"⚠️ No body mesh objects found for {vehicle_name}, skipping normals fix.")
+            continue
+
+        # Remove any existing reference mesh for this vehicle so re-running is safe.
+        ref_name = f"_NormRef: {vehicle_name}"
+        existing = bpy.data.objects.get(ref_name)
+        if existing:
+            bpy.data.objects.remove(existing, do_unlink=True)
+
+        # Duplicate each part and strip shape keys so the join is fast.
+        duplicates = []
+        for obj in mesh_objects:
+            dup_data = obj.data.copy()
+            # Remove shape keys from the duplicate data block directly.
+            if dup_data.shape_keys:
+                dup_data.shape_keys.animation_data_clear()
+                key = dup_data.shape_keys
+                # Blender doesn't expose a direct clear; use key_blocks removal via ops.
+                # Fastest: just zero out shape key influence so the base mesh shows through,
+                # which is all we need for a normals reference.
+                for kb in key_blocks if (key_blocks := key.key_blocks) else []:
+                    if kb.name != "Basis":
+                        kb.value = 0.0
+            dup_obj = bpy.data.objects.new(f"_tmp_ref_{obj.name}", dup_data)
+            ref_collection.objects.link(dup_obj)
+            dup_obj.matrix_world = obj.matrix_world.copy()
+            duplicates.append(dup_obj)
+
+        # Join the duplicates into one reference object.
+        bpy.ops.object.select_all(action='DESELECT')
+        for dup in duplicates:
+            dup.select_set(True)
+        bpy.context.view_layer.objects.active = duplicates[0]
+        bpy.ops.object.join()
+        reference = bpy.context.view_layer.objects.active
+        reference.name = ref_name
+
+        # Apply shade smooth to every face of the reference.
+        for poly in reference.data.polygons:
+            poly.use_smooth = True
+        reference.data.update()
+
+        # Add Data Transfer modifier to each original part.
+        for obj in mesh_objects:
+            # Apply shade smooth to the part itself.
+            for poly in obj.data.polygons:
+                poly.use_smooth = True
+            obj.data.update()
+
+            # Skip if already has a normals transfer modifier targeting this reference.
+            already = any(
+                m.type == 'DATA_TRANSFER' and m.object == reference
+                for m in obj.modifiers
+            )
+            if already:
+                continue
+
+            mod = obj.modifiers.new(name="HVE Boundary Normals", type='DATA_TRANSFER')
+            mod.object = reference
+            mod.use_loop_data = True
+            mod.data_types_loops = {'CUSTOM_NORMAL'}
+            mod.loop_mapping = 'POLYINTERP_NEAREST'
+
+        print(f"✅ Boundary normals fixed for {vehicle_name} ({len(mesh_objects)} parts → reference '{ref_name}').")
+
+
+
 def load(context, filepath):
 
     if bpy.ops.object.mode_set.poll():
