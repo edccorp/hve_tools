@@ -53,6 +53,7 @@ class FBX_PT_fbx_importer_include(bpy.types.Panel):
 
         layout.prop(operator, "merge_body_mesh")
         layout.prop(operator, "deformation_storage")
+        layout.prop(operator, "shape_key_max_samples")
         layout.prop(operator, "apply_mesh_cleanup")
         layout.prop(operator, "find_missing_files")
 
@@ -88,6 +89,18 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             default='SHAPE_KEYS',
             )
 
+    shape_key_max_samples: bpy.props.IntProperty(
+            name="Max Shape Key Samples",
+            description=(
+                "Maximum number of shape keys kept per mesh after adaptive reduction. "
+                "Higher values preserve more deformation detail but slow down the viewport. "
+                "Set to 0 to disable the cap and let the tolerance alone control quality"
+            ),
+            default=24,
+            min=0,
+            soft_max=200,
+            )
+
     apply_mesh_cleanup: BoolProperty(
             name="Apply Merge by Distance and Smooth",
             description="Add Geometry Nodes modifiers that merge nearby vertices and smooth mesh shading; disable for faster renders",
@@ -111,6 +124,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
             self.filepath,
             merge_body_mesh=self.merge_body_mesh,
             deformation_storage=self.deformation_storage,
+            shape_key_max_samples=self.shape_key_max_samples,
             apply_mesh_cleanup=self.apply_mesh_cleanup,
             find_missing_files=self.find_missing_files,
         )

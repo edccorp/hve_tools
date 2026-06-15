@@ -1121,6 +1121,7 @@ def reduce_shape_key_meshes_with_adaptive_samples(
     imported_objects=None,
     imported_pointer_set=None,
 ):
+    # None means no hard cap — tolerance alone controls how many samples are kept.
     """Rebuild joined meshes with a smaller self-contained shapekey set."""
     scene = bpy.context.scene
     reduced_objects = []
@@ -1173,12 +1174,13 @@ def reduce_shape_key_meshes_with_adaptive_samples(
                 frame_vertex_positions,
                 tolerance=tolerance,
             )
-            selected_indices = trim_sample_indices(
-                frame_numbers,
-                frame_vertex_positions,
-                selected_indices,
-                max_samples,
-            )
+            if max_samples is not None:
+                selected_indices = trim_sample_indices(
+                    frame_numbers,
+                    frame_vertex_positions,
+                    selected_indices,
+                    max_samples,
+                )
 
             selected_frames = [frame_numbers[idx] for idx in selected_indices]
             selected_positions = [frame_vertex_positions[idx] for idx in selected_indices]
@@ -1662,6 +1664,7 @@ def import_fbx(
     fbx_file_path,
     merge_body_mesh=False,
     deformation_storage="SHAPE_KEYS",
+    shape_key_max_samples=24,
     apply_mesh_cleanup=False,
     find_missing_files=False,
 ):
@@ -2121,8 +2124,10 @@ def import_fbx(
                 # Reduce per-frame shape keys on all body mesh objects. Reading vertex
                 # positions directly from shape key data (no frame-setting) makes this
                 # fast enough to run even on many unmerged individual mesh parts.
+                _max = shape_key_max_samples if shape_key_max_samples > 0 else None
                 reduce_shape_key_meshes_with_adaptive_samples(
                     vehicle_names,
+                    max_samples=_max,
                     imported_objects=imported_objects,
                     imported_pointer_set=imported_pointer_set,
                 )
@@ -2156,6 +2161,7 @@ def load(context,
          filepath,
          merge_body_mesh=False,
          deformation_storage="SHAPE_KEYS",
+         shape_key_max_samples=24,
          apply_mesh_cleanup=False,
          find_missing_files=False,
          ):
@@ -2170,6 +2176,7 @@ def load(context,
             filepath,
             merge_body_mesh=merge_body_mesh,
             deformation_storage=deformation_storage,
+            shape_key_max_samples=shape_key_max_samples,
             apply_mesh_cleanup=apply_mesh_cleanup,
             find_missing_files=find_missing_files,
             )
