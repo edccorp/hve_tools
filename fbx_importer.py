@@ -3,6 +3,7 @@ import os
 import re
 import math
 import threading
+import ctypes
 import struct
 import time
 from contextlib import contextmanager
@@ -62,6 +63,73 @@ class ImportTimingReport:
             percent = (elapsed / total_elapsed * 100.0) if total_elapsed else 0.0
             print(f"   {elapsed:7.2f}s ({percent:5.1f}%)  {name}")
         print(f"   {total_elapsed:7.2f}s          total")
+
+
+class BlenderImportProgress:
+    """Mirror long-running FBX import progress into Blender's main UI."""
+
+    def __init__(self, context, operator=None, total_steps=1):
+        self.context = context
+        self.operator = operator
+        self.total_steps = max(int(total_steps), 1)
+        self.current_step = 0
+        self._wm = getattr(context, "window_manager", None)
+        self._started = False
+
+    def begin(self, message):
+        if self._wm and hasattr(self._wm, "progress_begin"):
+            self._wm.progress_begin(0, self.total_steps)
+            self._started = True
+        self.update(message, advance=False)
+
+    def update(self, message, advance=True):
+        if advance:
+            self.current_step = min(self.current_step + 1, self.total_steps)
+
+        progress_message = f"HVE FBX Import ({self.current_step}/{self.total_steps}): {message}"
+        print(progress_message)
+
+        if self.operator:
+            self.operator.report({'INFO'}, progress_message)
+
+        if self._wm:
+            if hasattr(self._wm, "progress_update"):
+                self._wm.progress_update(self.current_step)
+            if hasattr(self._wm, "status_text_set"):
+                self._wm.status_text_set(progress_message)
+
+    def finish(self, message):
+        self.update(message, advance=False)
+        if self._wm:
+            if hasattr(self._wm, "progress_update"):
+                self._wm.progress_update(self.total_steps)
+            if hasattr(self._wm, "status_text_set"):
+                self._wm.status_text_set(None)
+            if self._started and hasattr(self._wm, "progress_end"):
+                self._wm.progress_end()
+        if self.operator:
+            self.operator.report({'INFO'}, message)
+
+
+def report_import_progress(progress, message, advance=True):
+    if progress is not None:
+        progress.update(message, advance=advance)
+
+
+def show_system_console_for_import(operator=None):
+    """Best-effort: make Blender's system console visible for long FBX imports."""
+    if os.name != "nt":
+        return
+
+    console_toggle = getattr(getattr(bpy.ops, "wm", None), "console_toggle", None)
+    if not console_toggle or not console_toggle.poll():
+        return
+
+    console_toggle()
+    message = "Opened Blender system console for live HVE FBX import details."
+    print(message)
+    if operator:
+        operator.report({'INFO'}, message)
 
 
 def normalize_name(name: str) -> str:
@@ -1675,14 +1743,17 @@ def import_fbx(
     # Ensure the file exists
     if os.path.exists(fbx_file_path):
         # Capture existing scene objects before import so we can diff afterwards
+        report_import_progress(progress, "Preparing scene snapshot")
         with timing_report.phase("snapshot scene before native FBX import"):
             pre_import_ids = {obj.as_pointer() for obj in bpy.context.scene.objects}
             pre_import_material_ids = {mat.as_pointer() for mat in bpy.data.materials}
 
+        report_import_progress(progress, "Running Blender FBX importer")
         with timing_report.phase("native Blender FBX import"):
             bpy.ops.import_scene.fbx(filepath=fbx_file_path)  # Import FBX
         print("FBX imported successfully!")
 
+        report_import_progress(progress, "Detecting imported objects and materials")
         with timing_report.phase("post-import object/material detection"):
             # Set metallic to zero for any materials created by this import.
             new_materials = [
@@ -1700,6 +1771,7 @@ def import_fbx(
             imported_pointer_set = {obj.as_pointer() for obj in imported_objects}
             imported_names = [obj.name for obj in imported_objects]
 
+        report_import_progress(progress, "Scanning animation and updating timeline")
         with timing_report.phase("scan animation and update timeline"):
             # Initialize max frame variable
             max_frame = 0
@@ -1739,6 +1811,7 @@ def import_fbx(
             "shapenode": "Mesh:"
         }
 
+        report_import_progress(progress, "Renaming imported HVE objects")
         with timing_report.phase("rename imported HVE objects"):
             # Loop through selected objects and apply replacements
             for obj in imported_objects:
@@ -1759,6 +1832,7 @@ def import_fbx(
                 processed_offset_actions.add(action_key)
                 offset_selected_animation(obj, frame_offset=None, target_start_frame=0)
 
+        report_import_progress(progress, "Adjusting imported animation orientation")
         with timing_report.phase("adjust imported animation orientation"):
             # List of keywords to exclude from selection
             exclude_keywords = ["Wheel:", "shapenode"]  # Modify as needed
@@ -1773,6 +1847,7 @@ def import_fbx(
                     adjust_animation(obj)
 
 
+        report_import_progress(progress, "Copying wheel helper rotation animation")
         with timing_report.phase("copy wheel helper rotation animation"):
             # Derive keywords used for rotation helpers so they aren't processed as wheels
             exclude_keywords = [
@@ -1800,12 +1875,13 @@ def import_fbx(
                     obj.select_set(True)  # Select the object
                     # Run the function against the imported objects directly instead of
                     # repeatedly scanning Blender's selection state.
-                    copy_animated_rotation(obj, debug=True, candidate_objects=imported_objects)
+                    copy_animated_rotation(obj, debug=False, candidate_objects=imported_objects)
 
                     # Rename the object by adding "_FBX" to the end of its name
                     if not name.endswith(": FBX"):
                         obj.name = f"{name}: FBX"
 
+        report_import_progress(progress, "Detecting vehicles and setting preroll pose")
         with timing_report.phase("detect vehicles and force preroll pose"):
             # Determine root vehicle names after any renaming or cleanup
             vehicle_names = get_root_vehicle_names(imported_objects)
@@ -1818,9 +1894,11 @@ def import_fbx(
                     if root in [re.sub(r'\.\d+$', '', vn) for vn in vehicle_names]:
                         force_zero_preroll_pose(obj, frame=-1)
 
+        report_import_progress(progress, "Replacing previous matching FBX imports")
         with timing_report.phase("overwrite previous matching FBX import"):
             overwrite_existing_fbx_objects(filename, imported_objects)
 
+        report_import_progress(progress, "Organizing imported objects into HVE collections")
         collection_phase = timing_report.start_phase("organize imported objects into HVE collections")
 
         # Create the event collection
@@ -1939,6 +2017,7 @@ def import_fbx(
             # Replace duplicate materials
             merge_duplicate_materials_per_vehicle(vehicle_names)
 
+        report_import_progress(progress, "Restoring scene settings")
         with timing_report.phase("restore scene settings"):
             # Restore the original frame rate settings
             context.scene.render.fps = original_fps
@@ -1946,11 +2025,16 @@ def import_fbx(
             print(f"🔄 Frame rate restored to {original_fps}/{original_fps_base}")
 
         timing_report.print_summary()
+        progress.finish("HVE FBX import finished")
 
 
     else:
-        print("Error: File not found!")
+        error_message = f"Error: File not found: {fbx_file_path}"
+        print(error_message)
+        if operator:
+            operator.report({'ERROR'}, error_message)
         timing_report.print_summary()
+        progress.finish("HVE FBX import failed: file not found")
 
 
 
