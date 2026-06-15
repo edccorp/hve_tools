@@ -1732,8 +1732,8 @@ def import_fbx(
     fbx_file_path,
 ):
     timing_report = ImportTimingReport()
-
-    # Store the current frame rate settings
+    progress = BlenderImportProgress(context, total_steps=14)
+    progress.begin("Starting HVE FBX import")
     original_fps = context.scene.render.fps
     original_fps_base = context.scene.render.fps_base
 
