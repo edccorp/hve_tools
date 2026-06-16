@@ -16,9 +16,21 @@ if "bpy" in locals():
         importlib.reload(fbx_importer)
 
 import bpy
+import sys
 import time
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ExportHelper
+
+
+def open_system_console():
+    """Open the Blender system console on Windows (no-op on other platforms)."""
+    if sys.platform == "win32":
+        try:
+            bpy.ops.wm.console_toggle()
+            # console_toggle is a toggle — call again if it accidentally closed
+            # We have no reliable way to query state, so just open once.
+        except Exception:
+            pass
 
 
 def get_hve_vehicle_names():
@@ -69,6 +81,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         from . import fbx_importer
+        open_system_console()
         return fbx_importer.load(context, self.filepath)
 
     def draw(self, context):
@@ -88,6 +101,7 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        open_system_console()
         print(f"🔧 Merging body meshes for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
         all_objects = list(bpy.context.scene.objects)
@@ -110,6 +124,7 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        open_system_console()
         max_samples = context.scene.fbx_shape_key_max_samples
         print(f"🔧 Reducing shape keys for: {', '.join(vehicle_names)} (max samples: {max_samples if max_samples > 0 else 'unlimited'})")
         t = time.perf_counter()
@@ -136,6 +151,7 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        open_system_console()
         print(f"🔧 Applying mesh cleanup (merge verts + smooth by angle) for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
         count = 0
