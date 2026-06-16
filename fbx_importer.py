@@ -1170,7 +1170,7 @@ def rebuild_shape_keys_from_samples(obj, sample_frames, sample_vertex_positions)
 
     reduced_keys = []
     for idx, frame in enumerate(sample_frames[1:], start=1):
-        key_name = f"Baked_{frame:04d}"
+        key_name = f"Baked_{int(frame):04d}"
         key_block = obj.shape_key_add(name=key_name, from_mix=False)
         set_shape_key_geometry(key_block, sample_vertex_positions[idx])
         previous_frame = sample_frames[idx - 1]
