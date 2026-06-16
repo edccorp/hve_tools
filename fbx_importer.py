@@ -1237,6 +1237,9 @@ def reduce_shape_key_meshes_with_adaptive_samples(
             if not frame_numbers:
                 continue
 
+            original_count = len(frame_numbers)
+            print(f"  ⏳ {obj.name}: {original_count} shape keys → reducing...")
+
             selected_indices = select_adaptive_sample_indices(
                 frame_numbers,
                 frame_vertex_positions,
@@ -1258,6 +1261,7 @@ def reduce_shape_key_meshes_with_adaptive_samples(
                 selected_positions,
             )
             reduced_objects.append((obj.name, selected_frames, reduced_keys))
+            print(f"  ✅ {obj.name}: {original_count} → {len(selected_frames)} shape keys")
 
     if reduced_objects:
         print(
