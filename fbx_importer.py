@@ -2061,12 +2061,15 @@ def add_smooth_by_angle_modifier(obj):
 def fix_boundary_normals_for_vehicles(vehicle_names, imported_objects=None, imported_pointer_set=None):
     """Smooth normals across body mesh part boundaries without joining.
 
-    For each vehicle, duplicates all body mesh parts into a hidden joined
-    reference mesh (shape keys stripped), then adds a Data Transfer modifier
-    to each original part that copies face-corner normals from that reference.
-    This makes shading continuous across part seams while leaving the individual
-    objects and their shape keys untouched.
+    For each vehicle, builds a hidden joined reference mesh by combining the
+    base geometry of all body mesh parts using bmesh (no operator, no selection
+    required), then adds a Data Transfer modifier to each original part that
+    copies face-corner normals from that reference.  Shading is continuous
+    across part seams while shape keys, animation, and object separation are
+    all preserved.
     """
+    import bmesh as _bmesh
+
     scene = bpy.context.scene
     all_objects = imported_objects if imported_objects is not None else list(scene.objects)
     pointer_set = imported_pointer_set if imported_pointer_set is not None else {
@@ -2092,54 +2095,56 @@ def fix_boundary_normals_for_vehicles(vehicle_names, imported_objects=None, impo
         ref_name = f"_NormRef: {vehicle_name}"
         existing = bpy.data.objects.get(ref_name)
         if existing:
-            bpy.data.objects.remove(existing, do_unlink=True)
+            bpy.data.meshes.remove(existing.data, do_unlink=True)
 
-        # Duplicate each part and strip shape keys so the join is fast.
-        duplicates = []
+        # Build the combined reference mesh with bmesh — no operator, no selection needed.
+        combined_bm = _bmesh.new()
         for obj in mesh_objects:
-            dup_data = obj.data.copy()
-            # Remove shape keys from the duplicate data block directly.
-            if dup_data.shape_keys:
-                dup_data.shape_keys.animation_data_clear()
-                key = dup_data.shape_keys
-                # Blender doesn't expose a direct clear; use key_blocks removal via ops.
-                # Fastest: just zero out shape key influence so the base mesh shows through,
-                # which is all we need for a normals reference.
-                for kb in key_blocks if (key_blocks := key.key_blocks) else []:
-                    if kb.name != "Basis":
-                        kb.value = 0.0
-            dup_obj = bpy.data.objects.new(f"_tmp_ref_{obj.name}", dup_data)
-            ref_collection.objects.link(dup_obj)
-            dup_obj.matrix_world = obj.matrix_world.copy()
-            duplicates.append(dup_obj)
+            part_bm = _bmesh.new()
+            # Use the Basis shape key geometry (index 0) which is the rest pose.
+            part_bm.from_mesh(obj.data)
+            # Transform vertices into world space so parts line up correctly.
+            mat = obj.matrix_world
+            for v in part_bm.verts:
+                v.co = mat @ v.co
+            # Append into the combined mesh.
+            src_mesh = bpy.data.meshes.new("_tmp")
+            part_bm.to_mesh(src_mesh)
+            part_bm.free()
+            combined_bm.from_mesh(src_mesh)
+            bpy.data.meshes.remove(src_mesh)
 
-        # Join the duplicates into one reference object.
-        bpy.ops.object.select_all(action='DESELECT')
-        for dup in duplicates:
-            dup.select_set(True)
-        bpy.context.view_layer.objects.active = duplicates[0]
-        bpy.ops.object.join()
-        reference = bpy.context.view_layer.objects.active
-        reference.name = ref_name
+        ref_mesh = bpy.data.meshes.new(ref_name)
+        combined_bm.to_mesh(ref_mesh)
+        combined_bm.free()
 
-        # Apply shade smooth to every face of the reference.
-        for poly in reference.data.polygons:
+        # Shade smooth on every face of the reference.
+        for poly in ref_mesh.polygons:
             poly.use_smooth = True
-        reference.data.update()
+        ref_mesh.update()
+
+        reference = bpy.data.objects.new(ref_name, ref_mesh)
+        ref_collection.objects.link(reference)
 
         # Add Data Transfer modifier to each original part.
         for obj in mesh_objects:
-            # Apply shade smooth to the part itself.
+            # Shade smooth the part itself.
             for poly in obj.data.polygons:
                 poly.use_smooth = True
             obj.data.update()
 
             # Skip if already has a normals transfer modifier targeting this reference.
-            already = any(
-                m.type == 'DATA_TRANSFER' and m.object == reference
-                for m in obj.modifiers
-            )
-            if already:
+            if any(m.type == 'DATA_TRANSFER' and m.object == reference for m in obj.modifiers):
+                continue
+
+            mod = obj.modifiers.new(name="HVE Boundary Normals", type='DATA_TRANSFER')
+            mod.object = reference
+            mod.use_loop_data = True
+            mod.data_types_loops = {'CUSTOM_NORMAL'}
+            mod.loop_mapping = 'POLYINTERP_NEAREST'
+
+        print(f"✅ Boundary normals fixed for {vehicle_name} ({len(mesh_objects)} parts → '{ref_name}').")
+
                 continue
 
             mod = obj.modifiers.new(name="HVE Boundary Normals", type='DATA_TRANSFER')
