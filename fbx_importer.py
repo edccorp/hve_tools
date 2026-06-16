@@ -1732,7 +1732,7 @@ def import_fbx(
     fbx_file_path,
 ):
     timing_report = ImportTimingReport()
-    progress = BlenderImportProgress(context, total_steps=14)
+    progress = BlenderImportProgress(context, total_steps=10)
     progress.begin("Starting HVE FBX import")
     original_fps = context.scene.render.fps
     original_fps_base = context.scene.render.fps_base
@@ -1846,40 +1846,6 @@ def import_fbx(
                     # Run function to adjust X rotation and scale for selected objects
                     adjust_animation(obj)
 
-
-        report_import_progress(progress, "Copying wheel helper rotation animation")
-        with timing_report.phase("copy wheel helper rotation animation"):
-            # Derive keywords used for rotation helpers so they aren't processed as wheels
-            exclude_keywords = [
-                kw.lower() for kws in ROTATION_AXIS_KEYWORDS.values() for kw in kws
-            ]
-            exclude_keywords += ["objects", "geometry"]
-            include_keywords = ["wheel"]
-
-            # Loop through a snapshot because copy_animated_rotation removes
-            # consumed helper sources from imported_objects.
-            for obj in list(imported_objects):
-                try:
-                    name = obj.name
-                except ReferenceError:
-                    # Object was removed (e.g. by copy_animated_rotation); skip it
-                    continue
-
-                name_lower = name.lower()
-
-                # Condition: Name must contain at least one include keyword AND none of the exclude keywords
-                if any(kw in name_lower for kw in include_keywords) and not any(
-                    kw in name_lower for kw in exclude_keywords
-                ):
-                    bpy.ops.object.select_all(action="DESELECT")
-                    obj.select_set(True)  # Select the object
-                    # Run the function against the imported objects directly instead of
-                    # repeatedly scanning Blender's selection state.
-                    copy_animated_rotation(obj, debug=False, candidate_objects=imported_objects)
-
-                    # Rename the object by adding "_FBX" to the end of its name
-                    if not name.endswith(": FBX"):
-                        obj.name = f"{name}: FBX"
 
         report_import_progress(progress, "Detecting vehicles and setting preroll pose")
         with timing_report.phase("detect vehicles and force preroll pose"):
