@@ -582,10 +582,6 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
         l.operator("import_hve.reduce_shape_keys", text="Reduce Shape Keys")
 
         l.separator()
-        l.label(text="Point Cache")
-        l.operator("import_hve.bake_to_mdd", text="Bake Shape Keys to MDD")
-
-        l.separator()
         l.label(text="Mesh Cleanup")
         l.operator("import_hve.apply_mesh_cleanup", text="Merge Verts + Smooth by Angle")
 

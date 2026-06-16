@@ -122,32 +122,6 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class FBX_OT_bake_to_mdd(bpy.types.Operator):
-    """Export body mesh shape key animation to external .mdd point-cache files and replace with Mesh Cache modifiers"""
-    bl_idname = "import_hve.bake_to_mdd"
-    bl_label = "Bake Shape Keys to MDD"
-    bl_description = "Export body mesh shape key animation to external .mdd point-cache files and replace with Mesh Cache modifiers"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        from . import fbx_importer
-        vehicle_names = get_hve_vehicle_names()
-        if not vehicle_names:
-            self.report({'WARNING'}, "No HVE body mesh collections found")
-            return {'CANCELLED'}
-        print(f"🔧 Baking shape keys to MDD for: {', '.join(vehicle_names)}")
-        t = time.perf_counter()
-        all_objects = list(bpy.context.scene.objects)
-        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
-        fbx_importer.export_body_shape_key_animations_to_mdd(
-            vehicle_names,
-            bpy.data.filepath or tempfile.gettempdir(),
-            all_objects,
-            pointer_set,
-        )
-        print(f"✅ Bake to MDD done ({time.perf_counter() - t:.2f}s)")
-        return {'FINISHED'}
-
 
 
 class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
@@ -188,6 +162,5 @@ classes = (
     FBX_PT_fbx_importer_include,
     FBX_OT_merge_body_mesh,
     FBX_OT_reduce_shape_keys,
-    FBX_OT_bake_to_mdd,
     FBX_OT_apply_mesh_cleanup,
 )
