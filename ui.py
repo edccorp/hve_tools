@@ -586,6 +586,10 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
         l.operator("import_hve.bake_to_mdd", text="Bake Shape Keys to MDD")
 
         l.separator()
+        l.label(text="Normals")
+        l.operator("import_hve.fix_boundary_normals", text="Fix Boundary Normals")
+
+        l.separator()
         l.label(text="Mesh Cleanup")
         l.operator("import_hve.apply_mesh_cleanup", text="Apply Mesh Cleanup")
 

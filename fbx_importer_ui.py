@@ -139,6 +139,28 @@ class FBX_OT_bake_to_mdd(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class FBX_OT_fix_boundary_normals(bpy.types.Operator):
+    """Smooth normals across body mesh part boundaries without merging objects"""
+    bl_idname = "import_hve.fix_boundary_normals"
+    bl_label = "Fix Boundary Normals"
+    bl_description = (
+        "Create a hidden joined reference mesh and apply Data Transfer modifiers "
+        "so normals blend smoothly across part boundaries without merging or baking shape keys"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import fbx_importer
+        vehicle_names = get_hve_vehicle_names()
+        if not vehicle_names:
+            self.report({'WARNING'}, "No HVE body mesh collections found")
+            return {'CANCELLED'}
+        all_objects = list(bpy.context.scene.objects)
+        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
+        fbx_importer.fix_boundary_normals_for_vehicles(vehicle_names, all_objects, pointer_set)
+        return {'FINISHED'}
+
+
 class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
     """Add Merge by Distance and Smooth by Angle geometry node modifiers to body mesh objects"""
     bl_idname = "import_hve.apply_mesh_cleanup"
@@ -173,5 +195,6 @@ classes = (
     FBX_OT_merge_body_mesh,
     FBX_OT_reduce_shape_keys,
     FBX_OT_bake_to_mdd,
+    FBX_OT_fix_boundary_normals,
     FBX_OT_apply_mesh_cleanup,
 )
