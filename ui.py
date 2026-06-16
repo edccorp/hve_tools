@@ -573,16 +573,16 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
         l.operator("import_hve.fbx", text="Import FBX", icon='IMPORT')
 
         l.separator()
-        l.label(text="Shape Keys")
+        l.label(text="1. Shape Keys")
         l.prop(scene, "fbx_shape_key_max_samples")
         l.operator("import_hve.reduce_shape_keys", text="Reduce Shape Keys")
 
         l.separator()
-        l.label(text="Mesh Cleanup")
+        l.label(text="2. Mesh Cleanup")
         l.operator("import_hve.apply_mesh_cleanup", text="Merge Verts + Smooth by Angle")
 
         l.separator()
-        l.label(text="Body Mesh")
+        l.label(text="3. Body Mesh")
         l.operator("import_hve.merge_body_mesh", text="Merge Body Meshes")
 
 class HVE_PT_other_tools(HVE_PT_mechanist_base):
