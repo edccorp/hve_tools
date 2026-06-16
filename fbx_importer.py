@@ -1459,20 +1459,41 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
                 )
             continue
 
+        # Mark true exterior boundary edges as sharp before joining.
+        # We simulate weld on a temp copy (safe — no shape keys modified), find boundary
+        # edges after welding, then mark matching edges on the original by midpoint.
+        import bmesh as _bmesh
+        import numpy as np
+        for obj in mesh_objects:
+            temp_mesh = obj.data.copy()
+            bm_ref = _bmesh.new()
+            bm_ref.from_mesh(temp_mesh)
+            _bmesh.ops.remove_doubles(bm_ref, verts=bm_ref.verts, dist=0.0001)
+            boundary_midpoints = set()
+            for edge in bm_ref.edges:
+                if len(edge.link_faces) < 2:
+                    mid = (edge.verts[0].co + edge.verts[1].co) / 2
+                    boundary_midpoints.add((round(mid.x, 4), round(mid.y, 4), round(mid.z, 4)))
+            bm_ref.free()
+            bpy.data.meshes.remove(temp_mesh)
+
+            # Read vertex positions directly from mesh
+            positions = np.empty(len(obj.data.vertices) * 3, dtype=np.float32)
+            obj.data.vertices.foreach_get("co", positions)
+            positions = positions.reshape(-1, 3)
+
+            # Mark matching edges as sharp without touching shape keys
+            for edge in obj.data.edges:
+                v0 = positions[edge.vertices[0]]
+                v1 = positions[edge.vertices[1]]
+                mid = (v0 + v1) / 2
+                key = (round(float(mid[0]), 4), round(float(mid[1]), 4), round(float(mid[2]), 4))
+                if key in boundary_midpoints:
+                    edge.use_edge_sharp = True
+            obj.data.update()
+
         # Bake shape keys for these objects before joining
         bake_shape_keys_threaded(mesh_objects)
-
-        # Mark boundary edges as sharp on each part so they stay crisp after joining.
-        import bmesh as _bmesh
-        for obj in mesh_objects:
-            bm = _bmesh.new()
-            bm.from_mesh(obj.data)
-            for edge in bm.edges:
-                if len(edge.link_faces) < 2:
-                    edge.smooth = False
-            bm.to_mesh(obj.data)
-            bm.free()
-            obj.data.update()
 
         # Deselect all objects to prevent unwanted merging
         bpy.ops.object.select_all(action="DESELECT")
