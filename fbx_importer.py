@@ -2145,16 +2145,6 @@ def fix_boundary_normals_for_vehicles(vehicle_names, imported_objects=None, impo
 
         print(f"✅ Boundary normals fixed for {vehicle_name} ({len(mesh_objects)} parts → '{ref_name}').")
 
-                continue
-
-            mod = obj.modifiers.new(name="HVE Boundary Normals", type='DATA_TRANSFER')
-            mod.object = reference
-            mod.use_loop_data = True
-            mod.data_types_loops = {'CUSTOM_NORMAL'}
-            mod.loop_mapping = 'POLYINTERP_NEAREST'
-
-        print(f"✅ Boundary normals fixed for {vehicle_name} ({len(mesh_objects)} parts → reference '{ref_name}').")
-
 
 
 def load(context, filepath):
