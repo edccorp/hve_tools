@@ -1462,18 +1462,6 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
         # Bake shape keys for these objects before joining
         bake_shape_keys_threaded(mesh_objects)
 
-        # Mark boundary edges as sharp on each part so they stay crisp after joining.
-        import bmesh as _bmesh
-        for obj in mesh_objects:
-            bm = _bmesh.new()
-            bm.from_mesh(obj.data)
-            for edge in bm.edges:
-                if len(edge.link_faces) < 2:
-                    edge.smooth = False
-            bm.to_mesh(obj.data)
-            bm.free()
-            obj.data.update()
-
         # Deselect all objects to prevent unwanted merging
         bpy.ops.object.select_all(action="DESELECT")
 
