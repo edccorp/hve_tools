@@ -16,7 +16,6 @@ if "bpy" in locals():
         importlib.reload(fbx_importer)
 
 import bpy
-import tempfile
 import time
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ExportHelper
