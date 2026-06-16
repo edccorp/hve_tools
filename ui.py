@@ -573,20 +573,9 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
         l.operator("import_hve.fbx", text="Import FBX", icon='IMPORT')
 
         l.separator()
-        l.operator("import_hve.process_all", text="Process All (1+2+3)", icon='PLAY')
-
-        l.separator()
-        l.label(text="1. Shape Keys")
-        l.prop(scene, "fbx_shape_key_max_samples")
-        l.operator("import_hve.reduce_shape_keys", text="Reduce Shape Keys")
-
-        l.separator()
-        l.label(text="2. Body Mesh")
-        l.operator("import_hve.merge_body_mesh", text="Merge Body Meshes")
-
-        l.separator()
-        l.label(text="3. Mesh Cleanup")
-        l.operator("import_hve.apply_mesh_cleanup", text="Merge Verts + Smooth by Angle")
+        l.prop(scene, "fbx_shape_key_max_samples", text="Max Shape Key Samples")
+        l.label(text="Process: Reduce Keys → Merge Meshes → Smooth", icon='INFO')
+        l.operator("import_hve.process_all", text="Process Imported FBX", icon='PLAY')
 
 class HVE_PT_other_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
