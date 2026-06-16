@@ -578,12 +578,12 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
         l.operator("import_hve.reduce_shape_keys", text="Reduce Shape Keys")
 
         l.separator()
-        l.label(text="2. Mesh Cleanup")
-        l.operator("import_hve.apply_mesh_cleanup", text="Merge Verts + Smooth by Angle")
+        l.label(text="2. Body Mesh")
+        l.operator("import_hve.merge_body_mesh", text="Merge Body Meshes")
 
         l.separator()
-        l.label(text="3. Body Mesh")
-        l.operator("import_hve.merge_body_mesh", text="Merge Body Meshes")
+        l.label(text="3. Mesh Cleanup")
+        l.operator("import_hve.apply_mesh_cleanup", text="Merge Verts + Smooth by Angle")
 
 class HVE_PT_other_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
