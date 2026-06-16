@@ -23,12 +23,14 @@ from bpy_extras.io_utils import ExportHelper
 
 
 def open_system_console():
-    """Open the Blender system console on Windows (no-op on other platforms)."""
+    """Open the Blender system console on Windows if not already visible."""
     if sys.platform == "win32":
         try:
-            bpy.ops.wm.console_toggle()
-            # console_toggle is a toggle — call again if it accidentally closed
-            # We have no reliable way to query state, so just open once.
+            import ctypes
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            visible = ctypes.windll.user32.IsWindowVisible(hwnd)
+            if not visible:
+                bpy.ops.wm.console_toggle()
         except Exception:
             pass
 
