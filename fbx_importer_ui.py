@@ -17,6 +17,7 @@ if "bpy" in locals():
 
 import bpy
 import tempfile
+import time
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -88,9 +89,12 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        print(f"🔧 Merging body meshes for: {', '.join(vehicle_names)}")
+        t = time.perf_counter()
         all_objects = list(bpy.context.scene.objects)
         pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
         fbx_importer.join_mesh_objects_per_vehicle(vehicle_names, all_objects, pointer_set)
+        print(f"✅ Merge body meshes done ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
 
@@ -108,10 +112,13 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
         max_samples = context.scene.fbx_shape_key_max_samples
+        print(f"🔧 Reducing shape keys for: {', '.join(vehicle_names)} (max samples: {max_samples if max_samples > 0 else 'unlimited'})")
+        t = time.perf_counter()
         fbx_importer.reduce_shape_key_meshes_with_adaptive_samples(
             vehicle_names,
             max_samples=max_samples if max_samples > 0 else None,
         )
+        print(f"✅ Reduce shape keys done ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
 
@@ -128,6 +135,8 @@ class FBX_OT_bake_to_mdd(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        print(f"🔧 Baking shape keys to MDD for: {', '.join(vehicle_names)}")
+        t = time.perf_counter()
         all_objects = list(bpy.context.scene.objects)
         pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
         fbx_importer.export_body_shape_key_animations_to_mdd(
@@ -136,6 +145,7 @@ class FBX_OT_bake_to_mdd(bpy.types.Operator):
             all_objects,
             pointer_set,
         )
+        print(f"✅ Bake to MDD done ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
 
@@ -153,6 +163,9 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
+        print(f"🔧 Applying mesh cleanup (merge verts + smooth by angle) for: {', '.join(vehicle_names)}")
+        t = time.perf_counter()
+        count = 0
         for col in bpy.data.collections:
             if col.name.startswith("Body Mesh: "):
                 parts = col.name.split(": ")
@@ -161,6 +174,8 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
                         if obj.type == 'MESH':
                             fbx_importer.add_merge_by_distance_modifier(obj)
                             fbx_importer.add_smooth_by_angle_modifier(obj)
+                            count += 1
+        print(f"✅ Mesh cleanup applied to {count} object(s) ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
 
