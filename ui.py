@@ -799,6 +799,7 @@ class HVE_PT_speed_acceleration(HVE_PT_mechanist_base):
         c.prop(scene, "speed_accel_window_frames")
         c.prop(scene, "speed_accel_unit_mode")
         c.prop(scene, "speed_accel_use_xy_only")
+        c.prop(scene, "speed_accel_include_acceleration")
         c.prop(scene, "speed_accel_remove_old_curves")
         c.prop(scene, "speed_accel_parent_helper")
         c.operator("object.calculate_speed_acceleration", text="Calculate Speed + Acceleration")
