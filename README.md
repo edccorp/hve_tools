@@ -89,7 +89,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Choose the local forward axis and yaw offset.
   - Choose the averaging window in frames.
   - Use scene units automatically, or force meters or feet.
-  - Optionally ignore vertical displacement, replace prior curves, and parent the helper to the source object.
+  - Optionally ignore vertical displacement, include acceleration outputs, replace prior curves, and parent the helper to the source object.
 
 ## Installation
 
@@ -206,7 +206,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 1. Select an animated object or assign one in **Other Tools → Speed + Acceleration**.
 2. Choose the object's forward axis and optional yaw offset.
 3. Set the averaging window and unit mode. The averaging window is a sampled frame count; for example, a 3-frame window compares the previous and next sampled positions.
-4. Choose whether to use XY-only displacement and whether to replace existing output curves.
+4. Choose whether to use XY-only displacement, include acceleration outputs, and replace existing output curves.
 5. Click **Calculate Speed + Acceleration**.
 6. Read the animated custom properties on the generated `SpeedData_<object name>` helper empty.
 

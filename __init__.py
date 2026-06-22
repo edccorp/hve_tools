@@ -109,6 +109,11 @@ try:
             description="Ignore vertical displacement when calculating speed",
             default=True,
         )
+        bpy.types.Scene.speed_accel_include_acceleration = bpy.props.BoolProperty(
+            name="Include Acceleration",
+            description="Bake forward, lateral, and vertical acceleration custom properties in addition to speed",
+            default=True,
+        )
         bpy.types.Scene.speed_accel_remove_old_curves = bpy.props.BoolProperty(
             name="Replace Existing Curves",
             description="Remove previously baked speed and acceleration curves from the helper before baking",
@@ -231,6 +236,7 @@ try:
         del bpy.types.Scene.speed_accel_window_frames
         del bpy.types.Scene.speed_accel_unit_mode
         del bpy.types.Scene.speed_accel_use_xy_only
+        del bpy.types.Scene.speed_accel_include_acceleration
         del bpy.types.Scene.speed_accel_remove_old_curves
         del bpy.types.Scene.speed_accel_parent_helper
         del bpy.types.Scene.motion_marker_interval_seconds

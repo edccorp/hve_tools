@@ -61,6 +61,7 @@ class SpeedAccelerationBakeOperator(bpy.types.Operator):
                 window_frames=scene.speed_accel_window_frames,
                 unit_mode=scene.speed_accel_unit_mode,
                 use_xy_only=scene.speed_accel_use_xy_only,
+                include_acceleration=scene.speed_accel_include_acceleration,
                 remove_existing_output_curves=scene.speed_accel_remove_old_curves,
                 parent_helper_to_source=scene.speed_accel_parent_helper,
             )
@@ -297,6 +298,15 @@ def get_unit_conversions(scene, unit_mode):
     raise RuntimeError('Unit mode must be Auto, Feet, or Meters.')
 
 
+def get_output_props(include_acceleration=True):
+    props = [PROP_AVG_V, PROP_AVG_U]
+
+    if include_acceleration:
+        props.extend([PROP_FWD_A, PROP_LAT_A, PROP_VERT_A])
+
+    return props
+
+
 def bake_speed_acceleration(
     context,
     source_obj,
@@ -305,6 +315,7 @@ def bake_speed_acceleration(
     window_frames,
     unit_mode,
     use_xy_only,
+    include_acceleration,
     remove_existing_output_curves,
     parent_helper_to_source,
 ):
@@ -321,6 +332,7 @@ def bake_speed_acceleration(
         raise RuntimeError("Scene frame range is shorter than the average window.")
 
     speed_to_mph, accel_to_g, resolved_unit_mode = get_unit_conversions(scene, unit_mode)
+    output_props = get_output_props(include_acceleration)
     depsgraph = context.evaluated_depsgraph_get()
 
     helper_obj = get_or_create_helper(scene, source_obj)
@@ -408,14 +420,7 @@ def bake_speed_acceleration(
         if remove_existing_output_curves:
             remove_old_output_curves(helper_obj, OUTPUT_PROPS)
 
-        for f, v, u, af, al, av in zip(
-            frames_out,
-            speeds,
-            forward_speeds,
-            forward_accels,
-            lateral_accels,
-            vertical_accels,
-        ):
+        for i, (f, v, u) in enumerate(zip(frames_out, speeds, forward_speeds)):
             scene.frame_set(f)
 
             helper_obj[PROP_AVG_V] = v
@@ -424,16 +429,17 @@ def bake_speed_acceleration(
             helper_obj[PROP_AVG_U] = u
             helper_obj.keyframe_insert(data_path=f'["{PROP_AVG_U}"]', frame=f)
 
-            helper_obj[PROP_FWD_A] = af
-            helper_obj.keyframe_insert(data_path=f'["{PROP_FWD_A}"]', frame=f)
+            if include_acceleration:
+                helper_obj[PROP_FWD_A] = forward_accels[i]
+                helper_obj.keyframe_insert(data_path=f'["{PROP_FWD_A}"]', frame=f)
 
-            helper_obj[PROP_LAT_A] = al
-            helper_obj.keyframe_insert(data_path=f'["{PROP_LAT_A}"]', frame=f)
+                helper_obj[PROP_LAT_A] = lateral_accels[i]
+                helper_obj.keyframe_insert(data_path=f'["{PROP_LAT_A}"]', frame=f)
 
-            helper_obj[PROP_VERT_A] = av
-            helper_obj.keyframe_insert(data_path=f'["{PROP_VERT_A}"]', frame=f)
+                helper_obj[PROP_VERT_A] = vertical_accels[i]
+                helper_obj.keyframe_insert(data_path=f'["{PROP_VERT_A}"]', frame=f)
 
-        force_output_curves_linear(helper_obj, OUTPUT_PROPS)
+        force_output_curves_linear(helper_obj, output_props)
     finally:
         scene.frame_set(cur_frame)
 
@@ -454,7 +460,7 @@ def bake_speed_acceleration(
     print(f"Helper object: {helper_obj.name}")
     print(f"Unit mode: {resolved_unit_mode}")
     print("Baked:")
-    for prop_name in OUTPUT_PROPS:
+    for prop_name in output_props:
         print(f"  {prop_name}")
     print("Done.")
 
