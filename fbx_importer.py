@@ -2,8 +2,6 @@ import bpy
 import os
 import re
 import math
-import threading
-import ctypes
 import struct
 import time
 from contextlib import contextmanager
@@ -114,22 +112,6 @@ class BlenderImportProgress:
 def report_import_progress(progress, message, advance=True):
     if progress is not None:
         progress.update(message, advance=advance)
-
-
-def show_system_console_for_import(operator=None):
-    """Best-effort: make Blender's system console visible for long FBX imports."""
-    if os.name != "nt":
-        return
-
-    console_toggle = getattr(getattr(bpy.ops, "wm", None), "console_toggle", None)
-    if not console_toggle or not console_toggle.poll():
-        return
-
-    console_toggle()
-    message = "Opened Blender system console for live HVE FBX import details."
-    print(message)
-    if operator:
-        operator.report({'INFO'}, message)
 
 
 def normalize_name(name: str) -> str:
@@ -1437,6 +1419,46 @@ def export_body_shape_key_animations_to_mdd(
     return exported
 
 
+def mark_exterior_boundary_edges_sharp(mesh_objects):
+    """Mark each part's true exterior boundary edges as sharp before a join.
+
+    We simulate a weld on a throwaway copy of each mesh (so shape keys are never
+    touched), collect the edges that remain on the boundary after welding, then
+    flag the matching edges on the original mesh by midpoint.  Edge Split can then
+    preserve the original part seams once everything is joined into one object.
+    """
+    import bmesh
+    import numpy as np
+
+    for obj in mesh_objects:
+        temp_mesh = obj.data.copy()
+        bm_ref = bmesh.new()
+        bm_ref.from_mesh(temp_mesh)
+        bmesh.ops.remove_doubles(bm_ref, verts=bm_ref.verts, dist=0.0001)
+        boundary_midpoints = set()
+        for edge in bm_ref.edges:
+            if len(edge.link_faces) < 2:
+                mid = (edge.verts[0].co + edge.verts[1].co) / 2
+                boundary_midpoints.add((round(mid.x, 4), round(mid.y, 4), round(mid.z, 4)))
+        bm_ref.free()
+        bpy.data.meshes.remove(temp_mesh)
+
+        # Read vertex positions directly from the mesh.
+        positions = np.empty(len(obj.data.vertices) * 3, dtype=np.float32)
+        obj.data.vertices.foreach_get("co", positions)
+        positions = positions.reshape(-1, 3)
+
+        # Mark matching edges as sharp without touching shape keys.
+        for edge in obj.data.edges:
+            v0 = positions[edge.vertices[0]]
+            v1 = positions[edge.vertices[1]]
+            mid = (v0 + v1) / 2
+            key = (round(float(mid[0]), 4), round(float(mid[1]), 4), round(float(mid[2]), 4))
+            if key in boundary_midpoints:
+                edge.use_edge_sharp = True
+        obj.data.update()
+
+
 def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported_pointer_set=None):
     """Joins all imported MESH objects per vehicle separately, after baking shape keys."""
 
@@ -1459,38 +1481,9 @@ def join_mesh_objects_per_vehicle(vehicle_names, imported_objects=None, imported
                 )
             continue
 
-        # Mark true exterior boundary edges as sharp before joining.
-        # We simulate weld on a temp copy (safe — no shape keys modified), find boundary
-        # edges after welding, then mark matching edges on the original by midpoint.
-        import bmesh as _bmesh
-        import numpy as np
-        for obj in mesh_objects:
-            temp_mesh = obj.data.copy()
-            bm_ref = _bmesh.new()
-            bm_ref.from_mesh(temp_mesh)
-            _bmesh.ops.remove_doubles(bm_ref, verts=bm_ref.verts, dist=0.0001)
-            boundary_midpoints = set()
-            for edge in bm_ref.edges:
-                if len(edge.link_faces) < 2:
-                    mid = (edge.verts[0].co + edge.verts[1].co) / 2
-                    boundary_midpoints.add((round(mid.x, 4), round(mid.y, 4), round(mid.z, 4)))
-            bm_ref.free()
-            bpy.data.meshes.remove(temp_mesh)
-
-            # Read vertex positions directly from mesh
-            positions = np.empty(len(obj.data.vertices) * 3, dtype=np.float32)
-            obj.data.vertices.foreach_get("co", positions)
-            positions = positions.reshape(-1, 3)
-
-            # Mark matching edges as sharp without touching shape keys
-            for edge in obj.data.edges:
-                v0 = positions[edge.vertices[0]]
-                v1 = positions[edge.vertices[1]]
-                mid = (v0 + v1) / 2
-                key = (round(float(mid[0]), 4), round(float(mid[1]), 4), round(float(mid[2]), 4))
-                if key in boundary_midpoints:
-                    edge.use_edge_sharp = True
-            obj.data.update()
+        # Mark true exterior boundary edges as sharp so Edge Split preserves original
+        # part seams once the parts are joined into one mesh.
+        mark_exterior_boundary_edges_sharp(mesh_objects)
 
         # Bake shape keys for these objects before joining
         bake_shape_keys_threaded(mesh_objects)
@@ -1767,9 +1760,10 @@ def set_new_materials_metallic_zero(new_materials):
 def import_fbx(
     context,
     fbx_file_path,
+    operator=None,
 ):
     timing_report = ImportTimingReport()
-    progress = BlenderImportProgress(context, total_steps=10)
+    progress = BlenderImportProgress(context, operator=operator, total_steps=10)
     progress.begin("Starting HVE FBX import")
     original_fps = context.scene.render.fps
     original_fps_base = context.scene.render.fps_base
@@ -2063,13 +2057,13 @@ def add_smooth_by_angle_modifier(obj):
 
 
 
-def load(context, filepath):
+def load(context, filepath, operator=None):
 
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
     dirname = os.path.dirname(filepath)
 
-    import_fbx(context, filepath)
+    import_fbx(context, filepath, operator=operator)
 
     return {'FINISHED'}

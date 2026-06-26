@@ -37,7 +37,6 @@ def open_system_console():
 
 def get_hve_vehicle_names():
     """Return vehicle names from all HVE FBX collections currently in the scene."""
-    from . import fbx_importer
     names = []
     for col in bpy.data.collections:
         if col.name.startswith("Body Mesh: "):
@@ -48,6 +47,46 @@ def get_hve_vehicle_names():
                 if name not in names:
                     names.append(name)
     return names
+
+
+def iter_body_mesh_objects(vehicle_names):
+    """Yield every MESH object in the ``Body Mesh:`` collections of the given vehicles."""
+    for col in bpy.data.collections:
+        if not col.name.startswith("Body Mesh: "):
+            continue
+        parts = col.name.split(": ")
+        if len(parts) >= 2 and parts[1] in vehicle_names:
+            for obj in col.objects:
+                if obj.type == 'MESH':
+                    yield obj
+
+
+def reduce_shape_keys_for_vehicles(vehicle_names, max_samples):
+    """Adaptively reduce shape keys; ``max_samples`` of 0 means no hard cap."""
+    from . import fbx_importer
+    fbx_importer.reduce_shape_key_meshes_with_adaptive_samples(
+        vehicle_names,
+        max_samples=max_samples if max_samples > 0 else None,
+    )
+
+
+def merge_body_meshes_for_vehicles(vehicle_names):
+    """Join each vehicle's body mesh parts into a single object."""
+    from . import fbx_importer
+    all_objects = list(bpy.context.scene.objects)
+    pointer_set = {obj.as_pointer() for obj in all_objects}
+    fbx_importer.join_mesh_objects_per_vehicle(vehicle_names, all_objects, pointer_set)
+
+
+def apply_mesh_cleanup_to_vehicles(vehicle_names):
+    """Add merge-by-distance and smooth-by-angle modifiers to body meshes; return the count."""
+    from . import fbx_importer
+    count = 0
+    for obj in iter_body_mesh_objects(vehicle_names):
+        fbx_importer.add_merge_by_distance_modifier(obj)
+        fbx_importer.add_smooth_by_angle_modifier(obj)
+        count += 1
+    return count
 
 
 class FBX_PT_fbx_importer_include(bpy.types.Panel):
@@ -84,7 +123,7 @@ class ImportFBX(bpy.types.Operator, ExportHelper):
     def execute(self, context):
         from . import fbx_importer
         open_system_console()
-        return fbx_importer.load(context, self.filepath)
+        return fbx_importer.load(context, self.filepath, operator=self)
 
     def draw(self, context):
         pass
@@ -98,7 +137,6 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        from . import fbx_importer
         vehicle_names = get_hve_vehicle_names()
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
@@ -106,9 +144,7 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
         open_system_console()
         print(f"🔧 Merging body meshes for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
-        all_objects = list(bpy.context.scene.objects)
-        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
-        fbx_importer.join_mesh_objects_per_vehicle(vehicle_names, all_objects, pointer_set)
+        merge_body_meshes_for_vehicles(vehicle_names)
         print(f"✅ Merge body meshes done ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
@@ -121,7 +157,6 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        from . import fbx_importer
         vehicle_names = get_hve_vehicle_names()
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
@@ -130,10 +165,7 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
         max_samples = context.scene.fbx_shape_key_max_samples
         print(f"🔧 Reducing shape keys for: {', '.join(vehicle_names)} (max samples: {max_samples if max_samples > 0 else 'unlimited'})")
         t = time.perf_counter()
-        fbx_importer.reduce_shape_key_meshes_with_adaptive_samples(
-            vehicle_names,
-            max_samples=max_samples if max_samples > 0 else None,
-        )
+        reduce_shape_keys_for_vehicles(vehicle_names, max_samples)
         print(f"✅ Reduce shape keys done ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
@@ -148,7 +180,6 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        from . import fbx_importer
         vehicle_names = get_hve_vehicle_names()
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
@@ -156,16 +187,7 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
         open_system_console()
         print(f"🔧 Applying mesh cleanup (merge verts + smooth by angle) for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
-        count = 0
-        for col in bpy.data.collections:
-            if col.name.startswith("Body Mesh: "):
-                parts = col.name.split(": ")
-                if len(parts) >= 2 and parts[1] in vehicle_names:
-                    for obj in col.objects:
-                        if obj.type == 'MESH':
-                            fbx_importer.add_merge_by_distance_modifier(obj)
-                            fbx_importer.add_smooth_by_angle_modifier(obj)
-                            count += 1
+        count = apply_mesh_cleanup_to_vehicles(vehicle_names)
         print(f"✅ Mesh cleanup applied to {count} object(s) ({time.perf_counter() - t:.2f}s)")
         return {'FINISHED'}
 
@@ -178,7 +200,6 @@ class FBX_OT_process_all(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        from . import fbx_importer
         vehicle_names = get_hve_vehicle_names()
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
@@ -190,33 +211,19 @@ class FBX_OT_process_all(bpy.types.Operator):
         max_samples = context.scene.fbx_shape_key_max_samples
         print(f"🔧 [1/3] Reducing shape keys for: {', '.join(vehicle_names)} (max samples: {max_samples if max_samples > 0 else 'unlimited'})")
         t = time.perf_counter()
-        fbx_importer.reduce_shape_key_meshes_with_adaptive_samples(
-            vehicle_names,
-            max_samples=max_samples if max_samples > 0 else None,
-        )
+        reduce_shape_keys_for_vehicles(vehicle_names, max_samples)
         print(f"✅ [1/3] Reduce shape keys done ({time.perf_counter() - t:.2f}s)")
 
         # Step 2: Merge body meshes
         print(f"🔧 [2/3] Merging body meshes for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
-        all_objects = list(bpy.context.scene.objects)
-        pointer_set = {obj.as_pointer() for obj in bpy.context.scene.objects}
-        fbx_importer.join_mesh_objects_per_vehicle(vehicle_names, all_objects, pointer_set)
+        merge_body_meshes_for_vehicles(vehicle_names)
         print(f"✅ [2/3] Merge body meshes done ({time.perf_counter() - t:.2f}s)")
 
         # Step 3: Mesh cleanup
         print(f"🔧 [3/3] Applying mesh cleanup for: {', '.join(vehicle_names)}")
         t = time.perf_counter()
-        count = 0
-        for col in bpy.data.collections:
-            if col.name.startswith("Body Mesh: "):
-                parts = col.name.split(": ")
-                if len(parts) >= 2 and parts[1] in vehicle_names:
-                    for obj in col.objects:
-                        if obj.type == 'MESH':
-                            fbx_importer.add_merge_by_distance_modifier(obj)
-                            fbx_importer.add_smooth_by_angle_modifier(obj)
-                            count += 1
+        count = apply_mesh_cleanup_to_vehicles(vehicle_names)
         print(f"✅ [3/3] Mesh cleanup applied to {count} object(s) ({time.perf_counter() - t:.2f}s)")
 
         print(f"🎉 All post-process steps complete ({time.perf_counter() - t_total:.2f}s total)")
