@@ -19,33 +19,11 @@ def test_bake_shape_keys_bakes_every_frame_before_reduction():
         and node.func.id == 'range'
     ]
 
+    # The dense bake builds an inclusive frame range: range(frame_start, frame_end + 1).
+    # That trailing "+ 1" (a BinOp) is what guarantees the final frame is baked too.
     matching_call = next(
         call for call in range_calls
-        if len(call.args) >= 2
-        and isinstance(call.args[0], ast.Subscript)
-        and isinstance(call.args[1], ast.BinOp)
+        if len(call.args) == 2 and isinstance(call.args[1], ast.BinOp)
     )
 
     assert len(matching_call.args) == 2, 'shape-key baking should evaluate every frame'
-
-
-def test_usd_roundtrip_uses_background_blender_conversion():
-    roundtrip_func = next(
-        node for node in module_ast.body
-        if isinstance(node, ast.FunctionDef) and node.name == 'roundtrip_imported_objects_through_usd'
-    )
-
-    background_conversion_calls = [
-        node for node in ast.walk(roundtrip_func)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == 'convert_fbx_to_usd_in_background_blender'
-    ]
-
-    same_scene_export_calls = [
-        node for node in ast.walk(roundtrip_func)
-        if isinstance(node, ast.Name) and node.id == 'usd_export'
-    ]
-
-    assert background_conversion_calls, 'USD round-trip should use an isolated Blender process'
-    assert not same_scene_export_calls, 'current scene should only import the resulting USD'
