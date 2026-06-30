@@ -141,12 +141,11 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 
 1. Open **Other Tools → EDR Data Importer / Entry**.
 2. Select the target object.
-3. Choose **Yaw Rate** or **Steering Wheel Angle** input mode.
-4. If using steering angle, set wheelbase and steering gear ratio.
-5. Optionally enable slip estimate and tune slip gain / maximum slip.
-6. Set the frame rate.
-7. Under **Import CSV (map columns)**, click **Load CSV File**, review the auto-detected **Time / Speed / Yaw Rate / Steering** column dropdowns, then click **Import Mapped Data**. You can also enter rows manually.
-8. Click **Animate Object**.
+3. Choose the input mode — **Yaw Rate**, **Steering Wheel Angle**, or **Path Follow**. The inputs shown below the selector change to match the chosen mode.
+4. If using **Steering Wheel Angle**, set wheelbase and steering gear ratio. For **Yaw Rate** or **Steering Wheel Angle** you can also enable slip estimate and tune slip gain / maximum slip. For **Path Follow**, pick the **Path Object** (a curve or polyline mesh) and optionally enable **Align to Path** with a **Path Yaw Offset**.
+5. Set the frame rate.
+6. Under **Import CSV (map columns)**, click **Load CSV File**, review the auto-detected **Time / Speed** column dropdowns (plus **Yaw Rate** or **Steering** for those modes), then click **Import Mapped Data**. You can also enter rows manually.
+7. Click **Animate Object** (or **Animate Along Path** in Path Follow mode).
 
 CSV formats:
 
@@ -164,10 +163,10 @@ You can also load a single CSV that holds several of these columns at once (for 
 
 In Imperial scenes, speeds are treated as mph and converted internally. In Metric scenes, speeds are treated as m/s.
 
-To drive the object along a path you already have (an imported point polyline, a drawn curve, etc.) rather than a yaw-rate-generated trajectory:
+To drive the object along a path you already have (an imported point polyline, a drawn curve, etc.) rather than a yaw-rate-generated trajectory, set the input mode to **Path Follow**:
 
-1. Import or enter the `Time, Speed` data as above (the yaw-rate / steering column is ignored for this mode).
-2. In the **Animate Along Existing Path** sub-panel, pick the **Path Object** (a curve or polyline mesh).
+1. Import or enter the `Time, Speed` data as above (no yaw-rate / steering column is needed for this mode).
+2. In the **Path Follow** sub-panel, pick the **Path Object** (a curve or polyline mesh).
 3. Optionally enable **Align to Path** and set a **Path Yaw Offset** so the object faces its direction of travel.
 4. Click **Animate Along Path**. The cumulative distance from the speed profile is mapped onto the path arc length, so the object speeds up, slows down, and stops exactly where the speed data says — while staying on the path geometry. If the speed profile would travel farther than the path is long, the object stops at the end of the path and a warning is shown.
 
@@ -176,12 +175,13 @@ To drive the object along a path you already have (an imported point polyline, a
 1. Open **Other Tools → Motion Data Importer**.
 2. Select the motion target object.
 3. Set frame rate and extrapolation mode.
-4. Click **Import and Animate Object**.
-5. Choose a CSV with this row format:
+4. Click **Import and Animate Object** and choose a CSV with this row format:
 
 ```csv
 Time,X,Y,Z,Roll,Pitch,Yaw
 ```
+
+Alternatively, use **Import CSV (map columns)** when your file has the same fields in a different order or under different header names. Click **Load CSV File**, review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (generic `Column N` labels appear when the file has no header row), then click **Import Mapped Data**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
 
 ### 7. Import XYZ points
 

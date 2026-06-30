@@ -8,26 +8,9 @@ module_ast = ast.parse(source)
 
 ns = {}
 for node in module_ast.body:
-    if isinstance(node, ast.FunctionDef) and node.name == "iter_action_fcurves":
+    if isinstance(node, ast.FunctionDef) and node.name in {"iter_action_fcurves", "set_extrapolation"}:
         code = compile(ast.Module([node], []), filename="<ast>", mode="exec")
         exec(code, ns)
-
-for node in module_ast.body:
-    if isinstance(node, ast.ClassDef) and node.name == "ImportCSVAnimationOperator":
-        for class_node in node.body:
-            if isinstance(class_node, ast.FunctionDef) and class_node.name == "set_extrapolation":
-                class_node = ast.FunctionDef(
-                    name="set_extrapolation",
-                    args=class_node.args,
-                    body=class_node.body,
-                    decorator_list=[],
-                    returns=class_node.returns,
-                    type_comment=class_node.type_comment,
-                )
-                module = ast.Module([class_node], [])
-                module = ast.fix_missing_locations(module)
-                code = compile(module, filename="<ast>", mode="exec")
-                exec(code, ns)
 
 
 iter_action_fcurves = ns["iter_action_fcurves"]
@@ -96,6 +79,6 @@ def test_set_extrapolation_updates_layered_action_curves():
     )()
     obj = _build_obj_with_action(action)
 
-    set_extrapolation(None, obj, "LINEAR")
+    set_extrapolation(obj, "LINEAR")
 
     assert layered_curve.extrapolation == "LINEAR"

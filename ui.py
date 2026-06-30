@@ -613,34 +613,49 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
 
         l = self.layout
         c = l.column()
+
+        # Mode-specific CSV format hint
         if edr_mode == 'STEERING_WHEEL_ANGLE':
             c.label(text="CSV Format: Time,Speed,SteeringWheelAngle")
+        elif edr_mode == 'PATH_FOLLOW':
+            c.label(text="CSV Format: Time,Speed (path sets heading)")
         else:
             c.label(text="CSV Format: Time,Speed,YawRate")
+
         c.label(text="Select EDR Object:")
-        c.prop(scene.anim_settings, "edr_anim_object")
-        c.prop(scene.anim_settings, "edr_input_mode")
+        c.prop(anim_settings, "edr_anim_object")
+        c.prop(anim_settings, "edr_input_mode")
 
-        needs_wheelbase = (edr_mode == 'STEERING_WHEEL_ANGLE') or scene.anim_settings.edr_use_slip_estimate
-        if needs_wheelbase:
-            c.prop(scene.anim_settings, "edr_wheelbase")
+        # --- Inputs that depend on the selected mode ---
+        if edr_mode == 'PATH_FOLLOW':
+            path_box = l.box()
+            path_box.label(text="Path Follow", icon='CURVE_PATH')
+            path_box.label(text="Speed-Time data sets position along the path")
+            path_box.prop(anim_settings, "edr_path_object")
+            path_box.prop(anim_settings, "edr_path_align_orientation")
+            if anim_settings.edr_path_align_orientation:
+                path_box.prop(anim_settings, "edr_path_yaw_offset")
+        else:
+            needs_wheelbase = (edr_mode == 'STEERING_WHEEL_ANGLE') or anim_settings.edr_use_slip_estimate
+            if needs_wheelbase:
+                c.prop(anim_settings, "edr_wheelbase")
 
-        if edr_mode == 'STEERING_WHEEL_ANGLE':
-            c.prop(scene.anim_settings, "edr_steering_gear_ratio")
-            c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
-            c.label(text="Tip: lower steering ratio increases computed yaw rate.", icon='INFO')
-
-        c.prop(scene.anim_settings, "edr_use_slip_estimate")
-        if scene.anim_settings.edr_use_slip_estimate:
-            c.prop(scene.anim_settings, "edr_slip_gain")
-            c.prop(scene.anim_settings, "edr_slip_max_deg")
-            c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
-            c.label(text="Tip: start with small gain and increase gradually.", icon='INFO')
             if edr_mode == 'STEERING_WHEEL_ANGLE':
-                c.label(text="(yaw_rate is first estimated from steering)")
+                c.prop(anim_settings, "edr_steering_gear_ratio")
+                c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
+                c.label(text="Tip: lower steering ratio increases computed yaw rate.", icon='INFO')
+
+            c.prop(anim_settings, "edr_use_slip_estimate")
+            if anim_settings.edr_use_slip_estimate:
+                c.prop(anim_settings, "edr_slip_gain")
+                c.prop(anim_settings, "edr_slip_max_deg")
+                c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
+                c.label(text="Tip: start with small gain and increase gradually.", icon='INFO')
+                if edr_mode == 'STEERING_WHEEL_ANGLE':
+                    c.label(text="(yaw_rate is first estimated from steering)")
 
         c.label(text="Frame Rate:")
-        c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field
+        c.prop(anim_settings, "anim_fps")  # Editable FPS field
 
         c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
         c.separator()
@@ -655,12 +670,21 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
                 import_box.label(text="No header row detected - map columns below", icon='INFO')
             import_box.prop(anim_settings, "edr_col_time")
             import_box.prop(anim_settings, "edr_col_speed")
-            import_box.prop(anim_settings, "edr_col_yaw_rate")
-            import_box.prop(anim_settings, "edr_col_steering")
+            # Only the active mode's third column is relevant; Path Follow needs
+            # just Time and Speed.
+            if edr_mode == 'YAW_RATE':
+                import_box.prop(anim_settings, "edr_col_yaw_rate")
+            elif edr_mode == 'STEERING_WHEEL_ANGLE':
+                import_box.prop(anim_settings, "edr_col_steering")
             import_box.operator("object.import_edr_mapped_csv", text="Import Mapped Data")
 
         c.separator()
-        c.operator("object.animate_vehicle", text="Animate Object")
+
+        # --- Animate using the chosen mode ---
+        if edr_mode == 'PATH_FOLLOW':
+            c.operator("object.animate_path_from_speed", text="Animate Along Path")
+        else:
+            c.operator("object.animate_vehicle", text="Animate Object")
 
         if target_obj:
             c.label(text=f"Entries for: {target_obj.name}")
@@ -675,23 +699,12 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
             row.prop(entry, "speed", text="Speed")
             if edr_mode == 'STEERING_WHEEL_ANGLE':
                 row.prop(entry, "steering_wheel_angle", text="Steering Wheel Angle (°)")
-            else:
+            elif edr_mode == 'YAW_RATE':
                 row.prop(entry, "yaw_rate", text="Yaw Rate (°/s)")
 
         c.operator("object.add_path_entry", text="Add Entry")
         c.operator("object.remove_path_entry", text="Remove Last Entry")
         c.operator("object.remove_all_entries", text="Remove All Entries")
-
-        # --- Animate along an existing path using the speed-time profile ---
-        c.separator()
-        box = l.box()
-        box.label(text="Animate Along Existing Path", icon='CURVE_PATH')
-        box.label(text="Speed-Time data sets position along the path")
-        box.prop(scene.anim_settings, "edr_path_object")
-        box.prop(scene.anim_settings, "edr_path_align_orientation")
-        if scene.anim_settings.edr_path_align_orientation:
-            box.prop(scene.anim_settings, "edr_path_yaw_offset")
-        box.operator("object.animate_path_from_speed", text="Animate Along Path")
 
 
  
@@ -708,17 +721,18 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
-        target_obj = scene.anim_settings.motion_anim_object
+        anim_settings = scene.anim_settings
+        target_obj = anim_settings.motion_anim_object
         l = self.layout
         c = l.column()
         c.label(text="CSV Format: Time,X,Y,Z,Roll,Pitch,Yaw")
         c.label(text="Select Motion Object:")
-        c.prop(scene.anim_settings, "motion_anim_object")
+        c.prop(anim_settings, "motion_anim_object")
 
         c.label(text="Frame Rate:")
-        c.prop(scene.anim_settings, "anim_fps")  # Editable FPS field
+        c.prop(anim_settings, "anim_fps")  # Editable FPS field
         c.label(text="Extrapolation Mode:")
-        c.prop(scene.anim_settings, "extrapolation_mode")  # 🔹 User selects extrapolation type
+        c.prop(anim_settings, "extrapolation_mode")  # 🔹 User selects extrapolation type
 
         c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
         if target_obj:
@@ -726,6 +740,24 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
         else:
             c.label(text="No target object selected")
         c.operator("import_anim.csv", text="Import and Animate Object", icon='IMPORT')
+
+        # --- Flexible CSV import: load a file, map columns, then import ---
+        c.separator()
+        map_box = l.box()
+        map_box.label(text="Import CSV (map columns)", icon='IMPORT')
+        map_box.operator("import_anim.load_motion_csv_headers", text="Load CSV File")
+        if anim_settings.motion_csv_filepath:
+            map_box.label(text=f"File: {os.path.basename(anim_settings.motion_csv_filepath)}")
+            if not anim_settings.motion_csv_has_header:
+                map_box.label(text="No header row detected - map columns below", icon='INFO')
+            map_box.prop(anim_settings, "motion_col_time")
+            map_box.prop(anim_settings, "motion_col_x")
+            map_box.prop(anim_settings, "motion_col_y")
+            map_box.prop(anim_settings, "motion_col_z")
+            map_box.prop(anim_settings, "motion_col_roll")
+            map_box.prop(anim_settings, "motion_col_pitch")
+            map_box.prop(anim_settings, "motion_col_yaw")
+            map_box.operator("import_anim.import_mapped_motion_csv", text="Import Mapped Data")
         
 class HVE_PT_motion_paths(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'

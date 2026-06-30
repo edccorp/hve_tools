@@ -128,11 +128,34 @@ def _edr_column_items(self, context):
     return items
 
 
+# Separate cache for the motion-importer column dropdowns (see note above).
+_motion_column_enum_cache = []
+
+
+def _motion_column_items(self, context):
+    """Build EnumProperty items from the loaded motion CSV header names."""
+    global _motion_column_enum_cache
+    items = [("-1", "(None)", "Column not present in the file")]
+
+    scene = getattr(context, "scene", None)
+    settings = getattr(scene, "anim_settings", None) if scene else None
+    header_str = getattr(settings, "motion_csv_headers", "") if settings else ""
+
+    if header_str:
+        for i, name in enumerate(header_str.split("\t")):
+            label = name if name else f"Column {i + 1}"
+            items.append((str(i), label, f"Use column {i + 1}: {label}"))
+
+    _motion_column_enum_cache = items
+    return items
+
+
 class AnimationSettings(PropertyGroup):
     """Property group for CSV Animation settings"""
     EDR_INPUT_MODE_ITEMS = [
         ('YAW_RATE', "Yaw Rate", "Time, Speed, Yaw Rate (deg/s)"),
         ('STEERING_WHEEL_ANGLE', "Steering Wheel Angle", "Time, Speed, Steering Wheel Angle (deg)"),
+        ('PATH_FOLLOW', "Path Follow", "Time, Speed; the object follows a selected path that supplies the heading"),
     ]
 
     def update_fps(self, context):
@@ -352,6 +375,68 @@ class AnimationSettings(PropertyGroup):
         name="Steering Column",
         description="CSV column to read Steering Wheel Angle (deg) from; set to (None) if absent",
         items=_edr_column_items,
+    )
+
+    # --- Flexible motion CSV column mapping ---
+    motion_csv_filepath: StringProperty(
+        name="Motion CSV File",
+        description="Path of the motion CSV file loaded for column mapping",
+        default="",
+        subtype='FILE_PATH',
+    )
+
+    motion_csv_headers: StringProperty(
+        name="Motion CSV Headers",
+        description="Tab-separated list of column names from the loaded motion CSV",
+        default="",
+    )
+
+    motion_csv_has_header: BoolProperty(
+        name="Motion CSV Has Header Row",
+        description="Whether the loaded motion CSV starts with a text header row",
+        default=False,
+    )
+
+    motion_col_time: EnumProperty(
+        name="Time Column",
+        description="CSV column to read Time (s) from",
+        items=_motion_column_items,
+    )
+
+    motion_col_x: EnumProperty(
+        name="X Column",
+        description="CSV column to read the X position from",
+        items=_motion_column_items,
+    )
+
+    motion_col_y: EnumProperty(
+        name="Y Column",
+        description="CSV column to read the Y position from",
+        items=_motion_column_items,
+    )
+
+    motion_col_z: EnumProperty(
+        name="Z Column",
+        description="CSV column to read the Z position from",
+        items=_motion_column_items,
+    )
+
+    motion_col_roll: EnumProperty(
+        name="Roll Column",
+        description="CSV column to read Roll (deg) from; set to (None) if absent",
+        items=_motion_column_items,
+    )
+
+    motion_col_pitch: EnumProperty(
+        name="Pitch Column",
+        description="CSV column to read Pitch (deg) from; set to (None) if absent",
+        items=_motion_column_items,
+    )
+
+    motion_col_yaw: EnumProperty(
+        name="Yaw Column",
+        description="CSV column to read Yaw (deg) from; set to (None) if absent",
+        items=_motion_column_items,
     )
 
 
