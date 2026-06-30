@@ -644,7 +644,21 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
 
         c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
         c.separator()
-        c.operator("object.import_csv", text="Import CSV")
+
+        # --- Flexible CSV import: load a file, map columns, then import ---
+        import_box = l.box()
+        import_box.label(text="Import CSV (map columns)", icon='IMPORT')
+        import_box.operator("object.load_edr_csv_headers", text="Load CSV File")
+        if anim_settings.edr_csv_filepath:
+            import_box.label(text=f"File: {os.path.basename(anim_settings.edr_csv_filepath)}")
+            if not anim_settings.edr_csv_has_header:
+                import_box.label(text="No header row detected - map columns below", icon='INFO')
+            import_box.prop(anim_settings, "edr_col_time")
+            import_box.prop(anim_settings, "edr_col_speed")
+            import_box.prop(anim_settings, "edr_col_yaw_rate")
+            import_box.prop(anim_settings, "edr_col_steering")
+            import_box.operator("object.import_edr_mapped_csv", text="Import Mapped Data")
+
         c.separator()
         c.operator("object.animate_vehicle", text="Animate Object")
 

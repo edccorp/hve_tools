@@ -104,6 +104,30 @@ class HVE_env_props(PropertyGroup):
     def unregister(cls):
         del bpy.types.Object.hve_env_props
 
+# Module-level cache to hold a reference to the dynamically generated enum
+# items. Blender can show garbage / crash if the strings returned by an
+# EnumProperty items callback are garbage collected, so keep them alive here.
+_edr_column_enum_cache = []
+
+
+def _edr_column_items(self, context):
+    """Build EnumProperty items from the loaded CSV header names."""
+    global _edr_column_enum_cache
+    items = [("-1", "(None)", "Column not present in the file")]
+
+    scene = getattr(context, "scene", None)
+    settings = getattr(scene, "anim_settings", None) if scene else None
+    header_str = getattr(settings, "edr_csv_headers", "") if settings else ""
+
+    if header_str:
+        for i, name in enumerate(header_str.split("\t")):
+            label = name if name else f"Column {i + 1}"
+            items.append((str(i), label, f"Use column {i + 1}: {label}"))
+
+    _edr_column_enum_cache = items
+    return items
+
+
 class AnimationSettings(PropertyGroup):
     """Property group for CSV Animation settings"""
     EDR_INPUT_MODE_ITEMS = [
@@ -284,6 +308,50 @@ class AnimationSettings(PropertyGroup):
         default=0.0,
         soft_min=-180.0,
         soft_max=180.0,
+    )
+
+    # --- Flexible CSV column mapping ---
+    edr_csv_filepath: StringProperty(
+        name="CSV File",
+        description="Path of the CSV file loaded for column mapping",
+        default="",
+        subtype='FILE_PATH',
+    )
+
+    edr_csv_headers: StringProperty(
+        name="CSV Headers",
+        description="Tab-separated list of column names from the loaded CSV",
+        default="",
+    )
+
+    edr_csv_has_header: BoolProperty(
+        name="CSV Has Header Row",
+        description="Whether the loaded CSV starts with a text header row",
+        default=False,
+    )
+
+    edr_col_time: EnumProperty(
+        name="Time Column",
+        description="CSV column to read Time (s) from",
+        items=_edr_column_items,
+    )
+
+    edr_col_speed: EnumProperty(
+        name="Speed Column",
+        description="CSV column to read Speed from (mph or m/s based on unit system)",
+        items=_edr_column_items,
+    )
+
+    edr_col_yaw_rate: EnumProperty(
+        name="Yaw Rate Column",
+        description="CSV column to read Yaw Rate (deg/s) from; set to (None) if absent",
+        items=_edr_column_items,
+    )
+
+    edr_col_steering: EnumProperty(
+        name="Steering Column",
+        description="CSV column to read Steering Wheel Angle (deg) from; set to (None) if absent",
+        items=_edr_column_items,
     )
 
 

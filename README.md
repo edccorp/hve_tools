@@ -49,6 +49,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### EDR and motion animation tools
 
 - **EDR data importer / entry**:
+  - Import a single CSV that contains any of `Time, Speed, Yaw Rate, Steering Wheel Angle` columns in any order. Columns are auto-matched by header name, and a column dropdown lets you reassign each field when the headers don't match (or when the file has no header row).
   - Import or manually enter rows of `Time, Speed, YawRate`.
   - Import or manually enter rows of `Time, Speed, SteeringWheelAngle`.
   - Select a target object to animate.
@@ -144,7 +145,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 4. If using steering angle, set wheelbase and steering gear ratio.
 5. Optionally enable slip estimate and tune slip gain / maximum slip.
 6. Set the frame rate.
-7. Click **Import CSV** or enter rows manually.
+7. Under **Import CSV (map columns)**, click **Load CSV File**, review the auto-detected **Time / Speed / Yaw Rate / Steering** column dropdowns, then click **Import Mapped Data**. You can also enter rows manually.
 8. Click **Animate Object**.
 
 CSV formats:
@@ -158,6 +159,8 @@ or:
 ```csv
 Time,Speed,SteeringWheelAngle
 ```
+
+You can also load a single CSV that holds several of these columns at once (for example `Time, Speed, Yaw Rate, Steering Wheel Angle`) in any order. When the file has a header row, the columns are matched automatically by name; otherwise generic `Column N` labels are shown and you map them yourself with the dropdowns. Both the yaw-rate and steering columns are stored when present, so you can switch the input mode and re-animate without re-importing.
 
 In Imperial scenes, speeds are treated as mph and converted internally. In Metric scenes, speeds are treated as m/s.
 
@@ -224,6 +227,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 - `XYZRPY_Example.csv` — sample `Time,X,Y,Z,Roll,Pitch,Yaw` motion data.
 - `EDR_YawRate_Example.csv` — sample EDR yaw-rate data.
 - `EDR_SteeringAngle_Example.csv` — sample EDR steering-angle data.
+- `EDR_Combined_Example.csv` — sample EDR data with `Time, Speed, Yaw Rate, Steering Wheel Angle` columns for the column-mapping import.
 - `hve_presets/Asphalt_Normal.json` — environment preset.
 - `hve_presets/Asphalt_New.json` — environment preset.
 - `hve_presets/Asphalt_Well_Traveled.json` — environment preset.

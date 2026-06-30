@@ -12,6 +12,7 @@ import bpy
 import math
 import numpy as np
 import csv
+import re
 import mathutils
 from bpy.props import FloatProperty, CollectionProperty, StringProperty
 from bpy.types import Operator, Panel, PropertyGroup
@@ -185,6 +186,197 @@ def import_csv_data(filepath, context):
     # Adjust Blender timeline to start at frame 0
     context.scene.frame_start = 0
     print(f"Imported {len(entries)} entries to '{target_obj.name}' from {filepath}, time offset applied: {min_time:.2f}, timeline set to start at frame 0.")
+
+# ---------------------------------------------------------------------------
+# Flexible CSV column mapping
+#
+# Lets a single CSV (with or without a header row) provide Time, Speed,
+# Yaw Rate and Steering Wheel Angle columns in any order. Columns are
+# auto-matched by header name when possible, and the user can override the
+# mapping in the panel. The helpers below are plain-Python and unit tested.
+# ---------------------------------------------------------------------------
+
+# Field -> ordered list of header keywords (most specific first). The animation
+# fields the entries can hold; "time" and "speed" are required to import.
+EDR_COLUMN_FIELDS = ("time", "speed", "yaw_rate", "steering_wheel_angle")
+
+EDR_COLUMN_KEYWORDS = {
+    "time": ["time", "timestamp", "elapsed", "seconds", "second", "sec", "t"],
+    "steering_wheel_angle": [
+        "steering wheel angle", "steering angle", "hand wheel", "handwheel",
+        "steering", "steer", "swa",
+    ],
+    "yaw_rate": ["yaw rate", "yawrate", "yaw velocity", "heading rate", "yaw", "r"],
+    "speed": ["speed", "velocity", "vel", "mph", "kph", "kmh", "v"],
+}
+
+
+def normalize_header(text):
+    """Lower-case a header and strip units/punctuation for keyword matching."""
+    text = (text or "").strip().lower()
+    # Drop anything inside parentheses/brackets/braces (usually units).
+    text = re.sub(r"[\(\[\{].*?[\)\]\}]", " ", text)
+    # Collapse any remaining non-alphanumeric characters to single spaces.
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return text.strip()
+
+
+def detect_header_row(row):
+    """Return True if ``row`` looks like a text header rather than numeric data.
+
+    Any non-empty cell that cannot be parsed as a float marks the row as a
+    header. Empty cells are ignored.
+    """
+    for cell in row:
+        cell = (cell or "").strip()
+        if cell == "":
+            continue
+        try:
+            float(cell)
+        except ValueError:
+            return True
+    return False
+
+
+def auto_map_columns(headers):
+    """Best-effort map of EDR fields to column indices using header names.
+
+    Returns a dict ``{field: index}`` where ``index`` is -1 when no column
+    matched. More specific fields are resolved first so, e.g., a "Steering"
+    column is not claimed by the generic yaw "r" keyword.
+    """
+    normalized = [normalize_header(h) for h in headers]
+    mapping = {field: -1 for field in EDR_COLUMN_FIELDS}
+    used = set()
+
+    def find(keywords):
+        for kw in keywords:
+            for i, header in enumerate(normalized):
+                if i in used or not header:
+                    continue
+                tokens = header.split()
+                # Short keywords must match a whole token (avoids "t" hitting
+                # "throttle"); longer ones may match as a substring.
+                if kw in tokens or (len(kw) > 2 and kw in header):
+                    return i
+        return -1
+
+    # Resolve order: time, then steering (specific) before yaw, then speed.
+    for field in ("time", "steering_wheel_angle", "yaw_rate", "speed"):
+        idx = find(EDR_COLUMN_KEYWORDS[field])
+        mapping[field] = idx
+        if idx >= 0:
+            used.add(idx)
+    return mapping
+
+
+def default_positional_mapping(num_columns, edr_input_mode):
+    """Fallback mapping for header-less CSVs: Time, Speed, then mode column."""
+    mapping = {field: -1 for field in EDR_COLUMN_FIELDS}
+    if num_columns > 0:
+        mapping["time"] = 0
+    if num_columns > 1:
+        mapping["speed"] = 1
+    if num_columns > 2:
+        if edr_input_mode == 'STEERING_WHEEL_ANGLE':
+            mapping["steering_wheel_angle"] = 2
+        else:
+            mapping["yaw_rate"] = 2
+    return mapping
+
+
+def read_csv_headers(filepath):
+    """Read a CSV and return ``(has_header, headers)``.
+
+    When the first row is numeric data, generic ``Column N`` labels are
+    generated so the user can still map columns manually.
+    """
+    with open(filepath, newline='') as csvfile:
+        rows = [row for row in csv.reader(csvfile) if any((c or '').strip() for c in row)]
+
+    if not rows:
+        return False, []
+
+    first = rows[0]
+    has_header = detect_header_row(first)
+    if has_header:
+        headers = [(c or '').strip() or f"Column {i + 1}" for i, c in enumerate(first)]
+    else:
+        num_columns = max(len(row) for row in rows)
+        headers = [f"Column {i + 1}" for i in range(num_columns)]
+    return has_header, headers
+
+
+def import_mapped_csv_data(filepath, mapping, has_header, context):
+    """Fill the Speed-Time table from ``filepath`` using a column ``mapping``.
+
+    ``mapping`` maps each EDR field to a 0-based column index (or -1 to skip).
+    Returns ``(count, error_message)``; ``error_message`` is None on success.
+    """
+    scene = context.scene
+    target_obj, entries = get_vehicle_path_entries(context)
+
+    if target_obj is None:
+        return 0, "No target object selected for EDR import."
+
+    time_idx = mapping.get("time", -1)
+    speed_idx = mapping.get("speed", -1)
+    yaw_idx = mapping.get("yaw_rate", -1)
+    steer_idx = mapping.get("steering_wheel_angle", -1)
+
+    if time_idx < 0 or speed_idx < 0:
+        return 0, "Assign both a Time column and a Speed column before importing."
+
+    with open(filepath, newline='') as csvfile:
+        rows = list(csv.reader(csvfile))
+
+    if has_header and rows:
+        rows = rows[1:]
+
+    entries.clear()
+    times = []
+    max_idx = max(time_idx, speed_idx, yaw_idx, steer_idx)
+
+    for row in rows:
+        if len(row) <= max_idx:
+            continue
+        try:
+            time_val = float(row[time_idx])
+            speed_val = float(row[speed_idx])
+        except (ValueError, IndexError):
+            continue
+
+        def optional(idx):
+            if idx < 0:
+                return 0.0
+            try:
+                return float(row[idx])
+            except (ValueError, IndexError):
+                return 0.0
+
+        entry = entries.add()
+        entry.time = time_val
+        entry.speed = speed_val
+        entry.yaw_rate = optional(yaw_idx)
+        entry.steering_wheel_angle = optional(steer_idx)
+        times.append(time_val)
+
+    if not times:
+        return 0, "No valid numerical rows found with the selected columns."
+
+    # Offset time so the first sample sits at zero if it starts negative.
+    min_time = min(times)
+    if min_time < 0:
+        for entry in entries:
+            entry.time -= min_time
+
+    scene.frame_start = 0
+    print(
+        f"Imported {len(times)} rows to '{target_obj.name}' from {filepath} "
+        f"(time={time_idx}, speed={speed_idx}, yaw={yaw_idx}, steering={steer_idx})."
+    )
+    return len(times), None
+
 
 def update_motion_path(obj):
     """Check if an object has a motion path and update it."""
@@ -698,6 +890,84 @@ class HVE_OT_ImportCSV(Operator, ImportHelper):
         return {'FINISHED'}
 
 
+class HVE_OT_LoadCSVHeaders(Operator, ImportHelper):
+    """Load a CSV file and auto-map its columns (Time, Speed, Yaw Rate, Steering) by header name"""
+    bl_idname = "object.load_edr_csv_headers"
+    bl_label = "Load CSV File"
+    filename_ext = ".csv"
+
+    filter_glob: StringProperty(default="*.csv", options={'HIDDEN'})
+
+    def execute(self, context):
+        settings = context.scene.anim_settings
+
+        try:
+            has_header, headers = read_csv_headers(self.filepath)
+        except Exception as exc:  # noqa: BLE001 - surface any read error to the user
+            self.report({'ERROR'}, f"Could not read CSV file: {exc}")
+            return {'CANCELLED'}
+
+        if not headers:
+            self.report({'WARNING'}, "CSV file appears to be empty.")
+            return {'CANCELLED'}
+
+        # Store the loaded state so the panel dropdowns can list the columns.
+        settings.edr_csv_filepath = self.filepath
+        settings.edr_csv_has_header = has_header
+        settings.edr_csv_headers = "\t".join(headers)
+
+        if has_header:
+            mapping = auto_map_columns(headers)
+        else:
+            mapping = default_positional_mapping(len(headers), settings.edr_input_mode)
+
+        # Assign enum values after the headers string is stored so the items
+        # callback already exposes these identifiers.
+        settings.edr_col_time = str(mapping["time"])
+        settings.edr_col_speed = str(mapping["speed"])
+        settings.edr_col_yaw_rate = str(mapping["yaw_rate"])
+        settings.edr_col_steering = str(mapping["steering_wheel_angle"])
+
+        if has_header:
+            self.report({'INFO'}, "Headers detected and auto-mapped. Review the columns, then Import.")
+        else:
+            self.report({'INFO'}, "No header row found; using positional columns. Adjust if needed, then Import.")
+        return {'FINISHED'}
+
+
+class HVE_OT_ImportMappedCSV(Operator):
+    """Import the loaded CSV using the selected column mapping"""
+    bl_idname = "object.import_edr_mapped_csv"
+    bl_label = "Import Mapped Data"
+
+    def execute(self, context):
+        settings = context.scene.anim_settings
+
+        if get_target_object(context) is None:
+            self.report({'WARNING'}, "Select a target object before importing CSV data.")
+            return {'CANCELLED'}
+
+        filepath = settings.edr_csv_filepath
+        if not filepath:
+            self.report({'WARNING'}, "Load a CSV file first.")
+            return {'CANCELLED'}
+
+        mapping = {
+            "time": int(settings.edr_col_time),
+            "speed": int(settings.edr_col_speed),
+            "yaw_rate": int(settings.edr_col_yaw_rate),
+            "steering_wheel_angle": int(settings.edr_col_steering),
+        }
+
+        count, error = import_mapped_csv_data(filepath, mapping, settings.edr_csv_has_header, context)
+        if error:
+            self.report({'WARNING'}, error)
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, f"Imported {count} rows from the mapped CSV.")
+        return {'FINISHED'}
+
+
 class HVE_OT_AddPathEntry(Operator):
     """Add a new Time-Speed-Yaw Rate entry"""
     bl_idname = "object.add_path_entry"
@@ -772,6 +1042,8 @@ class HVE_OT_AnimatePathFromSpeed(Operator):
 ### Registering Add-on ###
 classes = [
     HVE_OT_ImportCSV,
+    HVE_OT_LoadCSVHeaders,
+    HVE_OT_ImportMappedCSV,
     HVE_OT_AddPathEntry,
     HVE_OT_RemovePathEntry,
     HVE_OT_RemoveAllPathEntries,
