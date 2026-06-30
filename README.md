@@ -57,6 +57,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Optionally enable a slip-angle estimate with gain and maximum slip clamp.
   - Animate the target object by integrating speed and yaw-rate / steering-derived yaw-rate over time.
   - Add, remove, or clear table entries directly in Blender.
+  - **Animate along an existing path**: instead of generating the trajectory from yaw-rate, follow a selected curve or polyline mesh and use the imported `Speed, Time` data to determine how far along the path the object travels at each frame (position = integral of speed). Optionally align the object to the path heading with a yaw offset.
 - **Motion data importer** (`.csv`): import `Time,X,Y,Z,Roll,Pitch,Yaw` rows and animate a selected object.
   - Choose a target object.
   - Set the frame rate.
@@ -159,6 +160,13 @@ Time,Speed,SteeringWheelAngle
 ```
 
 In Imperial scenes, speeds are treated as mph and converted internally. In Metric scenes, speeds are treated as m/s.
+
+To drive the object along a path you already have (an imported point polyline, a drawn curve, etc.) rather than a yaw-rate-generated trajectory:
+
+1. Import or enter the `Time, Speed` data as above (the yaw-rate / steering column is ignored for this mode).
+2. In the **Animate Along Existing Path** sub-panel, pick the **Path Object** (a curve or polyline mesh).
+3. Optionally enable **Align to Path** and set a **Path Yaw Offset** so the object faces its direction of travel.
+4. Click **Animate Along Path**. The cumulative distance from the speed profile is mapped onto the path arc length, so the object speeds up, slows down, and stops exactly where the speed data says — while staying on the path geometry. If the speed profile would travel farther than the path is long, the object stops at the end of the path and a warning is shown.
 
 ### 6. Animate from XYZ/RPY motion data
 

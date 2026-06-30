@@ -668,6 +668,17 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
         c.operator("object.remove_path_entry", text="Remove Last Entry")
         c.operator("object.remove_all_entries", text="Remove All Entries")
 
+        # --- Animate along an existing path using the speed-time profile ---
+        c.separator()
+        box = l.box()
+        box.label(text="Animate Along Existing Path", icon='CURVE_PATH')
+        box.label(text="Speed-Time data sets position along the path")
+        box.prop(scene.anim_settings, "edr_path_object")
+        box.prop(scene.anim_settings, "edr_path_align_orientation")
+        if scene.anim_settings.edr_path_align_orientation:
+            box.prop(scene.anim_settings, "edr_path_yaw_offset")
+        box.operator("object.animate_path_from_speed", text="Animate Along Path")
+
 
  
 class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):

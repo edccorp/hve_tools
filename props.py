@@ -261,6 +261,31 @@ class AnimationSettings(PropertyGroup):
         update=update_edr_slip_max_deg,
     )
 
+    def _edr_path_object_poll(self, obj):
+        """Only allow curve or mesh objects to be picked as a follow path."""
+        return obj is not None and obj.type in {'CURVE', 'MESH'}
+
+    edr_path_object: PointerProperty(
+        name="Path Object",
+        type=bpy.types.Object,
+        description="Curve or polyline mesh the object follows; the Speed-Time profile sets how far along it travels",
+        poll=_edr_path_object_poll,
+    )
+
+    edr_path_align_orientation: BoolProperty(
+        name="Align to Path",
+        description="Rotate the object so it faces along the path's direction of travel",
+        default=True,
+    )
+
+    edr_path_yaw_offset: FloatProperty(
+        name="Path Yaw Offset (deg)",
+        description="Additional yaw rotation applied when aligning the object to the path",
+        default=0.0,
+        soft_min=-180.0,
+        soft_max=180.0,
+    )
+
 
 # Store all classes in a list for batch registration
        

@@ -9,8 +9,10 @@ bl_info = {
 }
 
 import bpy
+import math
 import numpy as np
 import csv
+import mathutils
 from bpy.props import FloatProperty, CollectionProperty, StringProperty
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy_extras.io_utils import ImportHelper
@@ -376,6 +378,309 @@ def animate_vehicle(self, context):
 
     print(f"Animation created from {len(time)} samples, last frame: {final_frame}")
 
+# ---------------------------------------------------------------------------
+# Path-following from a speed-time profile
+#
+# These helpers are intentionally written with plain Python numbers/tuples (no
+# bpy / mathutils dependency) so they can be unit tested outside Blender, the
+# same way the integrate_step / slip helpers above are tested.
+# ---------------------------------------------------------------------------
+
+def _vector_sub(a, b):
+    """Component-wise a - b for 3-tuples."""
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def order_vertices_along_edges(edges, vert_count):
+    """Return vertex indices ordered as a connected chain following ``edges``.
+
+    ``edges`` is a list of (a, b) index pairs. Works for an open polyline
+    (starts from an endpoint with a single edge) or a closed loop (starts at
+    index 0). Any vertices not reachable through the edge chain are appended at
+    the end so no point is silently dropped.
+    """
+    adjacency = {}
+    for a, b in edges:
+        adjacency.setdefault(a, []).append(b)
+        adjacency.setdefault(b, []).append(a)
+
+    start = None
+    for v in range(vert_count):
+        if len(adjacency.get(v, [])) == 1:
+            start = v
+            break
+    if start is None:
+        start = 0
+
+    order = [start]
+    visited = {start}
+    prev = None
+    current = start
+    while True:
+        neighbors = [n for n in adjacency.get(current, []) if n != prev and n not in visited]
+        if not neighbors:
+            neighbors = [n for n in adjacency.get(current, []) if n not in visited]
+        if not neighbors:
+            break
+        nxt = neighbors[0]
+        order.append(nxt)
+        visited.add(nxt)
+        prev, current = current, nxt
+
+    if len(order) < vert_count:
+        for v in range(vert_count):
+            if v not in visited:
+                order.append(v)
+    return order
+
+
+def cumulative_path_lengths(points):
+    """Cumulative arc length at each point along the polyline ``points``."""
+    cum = [0.0]
+    for i in range(1, len(points)):
+        dx = points[i][0] - points[i - 1][0]
+        dy = points[i][1] - points[i - 1][1]
+        dz = points[i][2] - points[i - 1][2]
+        cum.append(cum[-1] + math.sqrt(dx * dx + dy * dy + dz * dz))
+    return cum
+
+
+def cumulative_distance_from_speed(time_arr, speed_arr):
+    """Trapezoidal cumulative distance travelled at each sample time."""
+    cum = [0.0]
+    for i in range(1, len(time_arr)):
+        dt = time_arr[i] - time_arr[i - 1]
+        if dt < 0:
+            dt = 0.0
+        cum.append(cum[-1] + 0.5 * (speed_arr[i - 1] + speed_arr[i]) * dt)
+    return cum
+
+
+def distance_at_time(time_arr, speed_arr, cum_dist, t):
+    """Distance travelled at time ``t`` assuming piecewise-linear speed.
+
+    ``cum_dist`` is the output of :func:`cumulative_distance_from_speed`.
+    Times before the first / after the last sample clamp to the endpoints.
+    """
+    n = len(time_arr)
+    if t <= time_arr[0]:
+        return 0.0
+    if t >= time_arr[-1]:
+        return cum_dist[-1]
+
+    # Locate segment i with time_arr[i] <= t < time_arr[i + 1].
+    lo, hi = 0, n - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if time_arr[mid] <= t:
+            lo = mid + 1
+        else:
+            hi = mid
+    i = lo - 1
+
+    seg_dt = time_arr[i + 1] - time_arr[i]
+    tau = t - time_arr[i]
+    if seg_dt <= 0:
+        return cum_dist[i]
+    accel = (speed_arr[i + 1] - speed_arr[i]) / seg_dt
+    return cum_dist[i] + speed_arr[i] * tau + 0.5 * accel * tau * tau
+
+
+def sample_point_on_path(points, cum, dist):
+    """Return ``(point, tangent)`` at arc length ``dist`` along the polyline.
+
+    ``point`` is the interpolated (x, y, z) position; ``tangent`` is the
+    (unnormalized) direction of the segment containing ``dist``. ``cum`` is the
+    output of :func:`cumulative_path_lengths`.
+    """
+    total = cum[-1]
+    n = len(points)
+    if dist <= 0.0:
+        return points[0], _vector_sub(points[1], points[0])
+    if dist >= total:
+        return points[-1], _vector_sub(points[-1], points[-2])
+
+    lo, hi = 0, n - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if cum[mid] < dist:
+            lo = mid + 1
+        else:
+            hi = mid
+    i = lo  # cum[i] >= dist
+    seg = i - 1
+    seg_len = cum[i] - cum[seg]
+    frac = 0.0 if seg_len <= 0 else (dist - cum[seg]) / seg_len
+    p0 = points[seg]
+    p1 = points[i]
+    point = (
+        p0[0] + (p1[0] - p0[0]) * frac,
+        p0[1] + (p1[1] - p0[1]) * frac,
+        p0[2] + (p1[2] - p0[2]) * frac,
+    )
+    return point, _vector_sub(p1, p0)
+
+
+def extract_path_points(path_obj, depsgraph):
+    """Return ordered world-space (x, y, z) tuples for a curve or mesh path.
+
+    Returns ``None`` if the object has fewer than two usable points.
+    """
+    eval_obj = path_obj.evaluated_get(depsgraph)
+    mesh = eval_obj.to_mesh()
+    try:
+        coords = [v.co.copy() for v in mesh.vertices]
+        edges = [tuple(e.vertices) for e in mesh.edges]
+    finally:
+        eval_obj.to_mesh_clear()
+
+    if len(coords) < 2:
+        return None
+
+    if edges:
+        order = order_vertices_along_edges(edges, len(coords))
+    else:
+        order = list(range(len(coords)))
+
+    matrix = path_obj.matrix_world
+    return [tuple(matrix @ coords[i]) for i in order]
+
+
+def animate_path_from_speed(self, context):
+    """Animate the EDR object along an existing path using the speed-time table.
+
+    The path geometry (a curve or polyline mesh) defines *where* the object
+    travels; the imported Speed vs. Time data defines *how far* along the path
+    it has travelled at each frame (distance = integral of speed). Yaw rate /
+    steering columns are ignored here - the path itself supplies the heading.
+    """
+    obj, entries = get_vehicle_path_entries(context)
+    scene = context.scene
+    settings = scene.anim_settings
+
+    if not obj:
+        self.report({"WARNING"}, "No EDR target object selected to animate.")
+        return
+
+    path_obj = settings.edr_path_object
+    if not path_obj:
+        self.report({"WARNING"}, "Select a path object for the object to follow.")
+        return
+    if path_obj == obj:
+        self.report({"WARNING"}, "Path object must be different from the animated object.")
+        return
+    if len(entries) < 2:
+        self.report({"WARNING"}, "At least two speed-time data points are required.")
+        return
+
+    # Build sorted, unit-converted (m/s) speed-time samples.
+    speed_conversion = get_speed_conversion_factor()
+    samples = sorted(
+        ((float(e.time), float(e.speed) * speed_conversion) for e in entries),
+        key=lambda s: s[0],
+    )
+    time_arr = [s[0] for s in samples]
+    speed_arr = [s[1] for s in samples]
+
+    if not all(math.isfinite(t) for t in time_arr) or not all(math.isfinite(v) for v in speed_arr):
+        self.report({"WARNING"}, "Non-finite values found in the speed-time table (NaN/Inf).")
+        return
+
+    # Offset so the first sample sits at t = 0.
+    t0 = time_arr[0]
+    if t0 != 0.0:
+        time_arr = [t - t0 for t in time_arr]
+
+    depsgraph = context.evaluated_depsgraph_get()
+    points = extract_path_points(path_obj, depsgraph)
+    if not points:
+        self.report({"WARNING"}, f"Path object '{path_obj.name}' needs at least two connected points.")
+        return
+
+    path_cum = cumulative_path_lengths(points)
+    total_len = path_cum[-1]
+    if total_len <= 0:
+        self.report({"WARNING"}, "Selected path has zero length.")
+        return
+
+    speed_cum = cumulative_distance_from_speed(time_arr, speed_arr)
+    distance_needed = speed_cum[-1]
+
+    # Clear previous animation so we start clean.
+    obj.animation_data_clear()
+
+    # Convert world-space path points into the object's local space so the
+    # keyframed location is correct even when the object has a parent.
+    if obj.parent is not None:
+        basis = obj.parent.matrix_world @ obj.matrix_parent_inverse
+        basis_inv = basis.inverted()
+    else:
+        basis_inv = None
+
+    fps = scene.render.fps
+    align = bool(settings.edr_path_align_orientation)
+    yaw_offset = math.radians(float(settings.edr_path_yaw_offset))
+
+    end_frame = int(round(time_arr[-1] * fps))
+    if end_frame < 1:
+        end_frame = 1
+
+    prev_yaw = None
+    overran = False
+
+    scene.frame_start = 0
+
+    for frame in range(0, end_frame + 1):
+        t = frame / fps
+        dist = distance_at_time(time_arr, speed_arr, speed_cum, t)
+        if dist > total_len:
+            dist = total_len
+            overran = True
+        elif dist < 0.0:
+            dist = 0.0
+
+        point, tangent = sample_point_on_path(points, path_cum, dist)
+
+        world_loc = mathutils.Vector(point)
+        local_loc = basis_inv @ world_loc if basis_inv is not None else world_loc
+        obj.location = local_loc
+        obj.keyframe_insert(data_path="location", frame=frame)
+
+        if align:
+            if tangent[0] != 0.0 or tangent[1] != 0.0:
+                yaw = math.atan2(tangent[1], tangent[0]) + yaw_offset
+                # Unwrap relative to the previous yaw to avoid a fast spin when
+                # the heading crosses the +/-pi boundary.
+                if prev_yaw is not None:
+                    while yaw - prev_yaw > math.pi:
+                        yaw -= 2.0 * math.pi
+                    while yaw - prev_yaw < -math.pi:
+                        yaw += 2.0 * math.pi
+                prev_yaw = yaw
+            elif prev_yaw is not None:
+                yaw = prev_yaw
+            else:
+                yaw = yaw_offset
+            obj.rotation_euler.z = yaw
+            obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+    if end_frame > scene.frame_end:
+        scene.frame_end = end_frame
+
+    if overran:
+        self.report(
+            {'WARNING'},
+            f"Speed profile covers {distance_needed:.2f} m but path is only "
+            f"{total_len:.2f} m; object stops at the path end.",
+        )
+
+    print(
+        f"Path-follow animation created on '{obj.name}' along '{path_obj.name}': "
+        f"{end_frame + 1} keyframes, path length {total_len:.2f} m, "
+        f"distance travelled {min(distance_needed, total_len):.2f} m."
+    )
+
+
 class HVE_OT_ImportCSV(Operator, ImportHelper):
     """Import CSV with Time, Speed, and Yaw Rate"""
     bl_idname = "object.import_csv"
@@ -452,6 +757,17 @@ class HVE_OT_AnimateVehicle(Operator):
         return {"FINISHED"}
 
 
+### Operator to Animate Object Along an Existing Path ###
+class HVE_OT_AnimatePathFromSpeed(Operator):
+    """Animate the EDR object along a selected path, using the Speed-Time table to set how far along the path it travels"""
+    bl_idname = "object.animate_path_from_speed"
+    bl_label = "Animate Along Path"
+
+    def execute(self, context):
+        animate_path_from_speed(self, context)
+        return {"FINISHED"}
+
+
 
 ### Registering Add-on ###
 classes = [
@@ -460,5 +776,6 @@ classes = [
     HVE_OT_RemovePathEntry,
     HVE_OT_RemoveAllPathEntries,
     HVE_OT_AnimateVehicle,
+    HVE_OT_AnimatePathFromSpeed,
 
 ]
