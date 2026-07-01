@@ -49,6 +49,25 @@ def get_hve_vehicle_names():
     return names
 
 
+def is_body_mesh_collection(self, collection):
+    """PointerProperty filter: only offer HVE body mesh collections in the picker."""
+    return collection.name.startswith("Body Mesh: ")
+
+
+def get_target_vehicle_names(context):
+    """Vehicle names the post-process operators should act on.
+
+    If the user picked a specific Body Mesh collection in the panel, restrict to
+    that collection's vehicle; otherwise fall back to every imported vehicle.
+    """
+    chosen = getattr(context.scene, "fbx_process_collection", None)
+    if chosen is not None and chosen.name.startswith("Body Mesh: "):
+        parts = chosen.name.split(": ")
+        if len(parts) >= 2:
+            return [parts[1]]
+    return get_hve_vehicle_names()
+
+
 def iter_body_mesh_objects(vehicle_names):
     """Yield every MESH object in the ``Body Mesh:`` collections of the given vehicles."""
     for col in bpy.data.collections:
@@ -137,7 +156,7 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        vehicle_names = get_target_vehicle_names(context)
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
@@ -157,7 +176,7 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        vehicle_names = get_target_vehicle_names(context)
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
@@ -180,7 +199,7 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        vehicle_names = get_target_vehicle_names(context)
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}
@@ -200,7 +219,7 @@ class FBX_OT_process_all(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        vehicle_names = get_target_vehicle_names(context)
         if not vehicle_names:
             self.report({'WARNING'}, "No HVE body mesh collections found")
             return {'CANCELLED'}

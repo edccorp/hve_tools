@@ -574,6 +574,9 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
 
         l.separator()
         l.prop(scene, "fbx_shape_key_max_samples", text="Max Shape Key Samples")
+        l.prop(scene, "fbx_process_collection", text="Vehicle")
+        if scene.fbx_process_collection is None:
+            l.label(text="Empty = process all imported vehicles", icon='INFO')
         l.label(text="Process: Reduce Keys → Merge Meshes → Smooth", icon='INFO')
         l.operator("import_hve.process_all", text="Process Imported FBX", icon='PLAY')
 

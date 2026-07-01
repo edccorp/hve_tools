@@ -1741,8 +1741,13 @@ def add_x_rotation_offset_from_frame(obj, start_frame=0, degrees=180.0):
                     kp.handle_right.y += delta
 
 
-def set_new_materials_metallic_zero(new_materials):
-    """Set Principled BSDF metallic to zero for a sequence of imported materials."""
+def normalize_new_materials(new_materials):
+    """Normalize Principled BSDF inputs on freshly imported materials.
+
+    - Metallic is forced to 0 (HVE FBX materials import with unwanted metallic).
+    - Emission Strength is forced to 0.  Blender defaults it to 1.0, which the
+      HVE exporter reads as a genuine emissive surface and mishandles on export.
+    """
     for mat in new_materials:
         node_tree = getattr(mat, "node_tree", None)
         if not node_tree:
@@ -1754,6 +1759,9 @@ def set_new_materials_metallic_zero(new_materials):
             metallic_input = node.inputs.get('Metallic')
             if metallic_input is not None:
                 metallic_input.default_value = 0.0
+            emission_strength_input = node.inputs.get('Emission Strength')
+            if emission_strength_input is not None:
+                emission_strength_input.default_value = 0.0
 
 
 
@@ -1786,12 +1794,12 @@ def import_fbx(
 
         report_import_progress(progress, "Detecting imported objects and materials")
         with timing_report.phase("post-import object/material detection"):
-            # Set metallic to zero for any materials created by this import.
+            # Normalize metallic + emission strength on materials created by this import.
             new_materials = [
                 mat for mat in bpy.data.materials
                 if mat.as_pointer() not in pre_import_material_ids
             ]
-            set_new_materials_metallic_zero(new_materials)
+            normalize_new_materials(new_materials)
 
             # Determine which objects were added by the import
             post_import_objects = list(bpy.context.scene.objects)

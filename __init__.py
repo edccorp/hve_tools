@@ -217,6 +217,13 @@ try:
             default=24, min=0, soft_max=200,
         )
 
+        bpy.types.Scene.fbx_process_collection = PointerProperty(
+            name="Vehicle",
+            description="Body mesh collection to post-process. Leave empty to process all imported vehicles",
+            type=bpy.types.Collection,
+            poll=fbx_importer_ui.is_body_mesh_collection,
+        )
+
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
         bpy.types.Object.edr_input_mode_preference = EnumProperty(
@@ -256,6 +263,7 @@ try:
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water
         del bpy.types.Scene.fbx_shape_key_max_samples
+        del bpy.types.Scene.fbx_process_collection
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
