@@ -240,9 +240,9 @@ pose per timestamp.
    order or abbreviated (`t`, `x`, `y`, `z`, `r`, `p`, `y`).
 4. Click **Import and Animate**.
 
-**Time, X, Y, Z are required.** Roll, Pitch, and Yaw default to 0 when set to
-**(None)**. Position values are converted from feet to meters in Imperial
-scenes. Sample file: `XYZRPY_Example.csv`.
+**Only Time is required.** X, Y, Z, Roll, Pitch, and Yaw each default to 0 when
+their column is set to **(None)** or absent. Position values are converted from
+feet to meters in Imperial scenes. Sample file: `XYZRPY_Example.csv`.
 
 ### 4.7 Import survey / point data
 
@@ -254,11 +254,12 @@ Open **Other Tools → Point Importer** to place markers from a coordinate list.
 2. Set the **Scale Factor** (default `0.3048` converts feet to meters).
 3. Click **Import Points**.
 
-**X, Y, Z are required.** Point Number falls back to a running counter and
-Description to "No Description" when their column is **(None)**. The importer
-creates a circle, a number label, and a description label at each point in an
-**Imported Points** collection, and connects points that share a description
-into a polyline. Sample file: `XYZ_Points_Example.csv`.
+**Every field is optional.** X, Y, and Z each default to 0 when their column is
+**(None)**; Point Number falls back to a running counter and Description to
+"No Description". The importer creates a circle, a number label, and a
+description label at each point in an **Imported Points** collection, and
+connects points that share a description into a polyline. Sample file:
+`XYZ_Points_Example.csv`.
 
 ### 4.8 Motion path tools
 

@@ -181,7 +181,7 @@ To drive the object along a path you already have (an imported point polyline, a
 Time,X,Y,Z,Roll,Pitch,Yaw
 ```
 
-5. Review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (fields may be in any order or under different header names; short `R` / `P` / `Y` headers are recognized as Roll / Pitch / Yaw, and generic `Column N` labels appear when the file has no header row), then click **Import and Animate**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
+5. Review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (fields may be in any order or under different header names; short `R` / `P` / `Y` headers are recognized as Roll / Pitch / Yaw, and generic `Column N` labels appear when the file has no header row), then click **Import and Animate**. Only Time is required; X, Y, Z, Roll, Pitch and Yaw each default to 0 when their column is set to **(None)**.
 
 ### 7. Import XYZ points
 
@@ -192,7 +192,7 @@ Time,X,Y,Z,Roll,Pitch,Yaw
 PointNumber,X,Y,Z,Description
 ```
 
-3. Review the auto-detected **Point Number / X / Y / Z / Description** column dropdowns (fields may be in any order or under different header names; generic `Column N` labels appear when the file has no header row), set the **Scale Factor**, then click **Import Points**. X, Y and Z are required; Point Number falls back to a running counter and Description to "No Description" when their column is set to **(None)**.
+3. Review the auto-detected **Point Number / X / Y / Z / Description** column dropdowns (fields may be in any order or under different header names; generic `Column N` labels appear when the file has no header row), set the **Scale Factor**, then click **Import Points**. Every field is optional: X, Y and Z each default to 0 when their column is set to **(None)**, Point Number falls back to a running counter, and Description to "No Description".
 
 The importer creates point markers, labels, descriptions, and a polyline in the **Imported Points** collection.
 

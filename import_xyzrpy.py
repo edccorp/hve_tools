@@ -133,17 +133,17 @@ def import_mapped_motion_data(filepath, mapping, has_header, target_obj):
     """Fill ``target_obj.motion_data_entries`` from ``filepath`` using ``mapping``.
 
     ``mapping`` maps each motion field to a 0-based column index (or -1 to skip).
-    Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when absent.
+    Only Time is required; X, Y, Z, Roll, Pitch and Yaw each default to 0 when
+    their column is absent.
     Returns ``(count, error_message)``; ``error_message`` is None on success.
     """
     time_idx = mapping.get("time", -1)
+    if time_idx < 0:
+        return 0, "Assign a Time column before importing."
+
     x_idx = mapping.get("x", -1)
     y_idx = mapping.get("y", -1)
     z_idx = mapping.get("z", -1)
-
-    if min(time_idx, x_idx, y_idx, z_idx) < 0:
-        return 0, "Assign Time, X, Y and Z columns before importing."
-
     roll_idx = mapping.get("roll", -1)
     pitch_idx = mapping.get("pitch", -1)
     yaw_idx = mapping.get("yaw", -1)
@@ -163,9 +163,6 @@ def import_mapped_motion_data(filepath, mapping, has_header, target_obj):
             continue
         try:
             time = float(row[time_idx])
-            x = float(row[x_idx])
-            y = float(row[y_idx])
-            z = float(row[z_idx])
         except (ValueError, IndexError):
             continue
 
@@ -179,9 +176,9 @@ def import_mapped_motion_data(filepath, mapping, has_header, target_obj):
 
         entry = target_obj.motion_data_entries.add()
         entry.time = time
-        entry.x = x
-        entry.y = y
-        entry.z = z
+        entry.x = optional(x_idx)
+        entry.y = optional(y_idx)
+        entry.z = optional(z_idx)
         entry.roll = optional(roll_idx)
         entry.pitch = optional(pitch_idx)
         entry.yaw = optional(yaw_idx)

@@ -113,19 +113,16 @@ def read_points_mapped(filepath, mapping, has_header):
     """Read points from ``filepath`` using a column ``mapping``.
 
     ``mapping`` maps each point field to a 0-based column index (or -1 to skip).
-    X, Y and Z are required; Point Number falls back to a running counter and
-    Description to "No Description" when their column is absent. Returns
+    Every field is optional: X, Y and Z each default to 0 when their column is
+    absent (or a cell does not parse), Point Number falls back to a running
+    counter, and Description to "No Description". Returns
     ``(points, error_message)``; ``error_message`` is None on success.
     """
     x_idx = mapping.get("x", -1)
     y_idx = mapping.get("y", -1)
     z_idx = mapping.get("z", -1)
-    if min(x_idx, y_idx, z_idx) < 0:
-        return None, "Assign X, Y and Z columns before importing."
-
     num_idx = mapping.get("point_number", -1)
     desc_idx = mapping.get("description", -1)
-    max_core = max(x_idx, y_idx, z_idx)
 
     with open(filepath, 'r', newline='', encoding='utf-8') as file:
         rows = list(csv.reader(file))
@@ -135,14 +132,21 @@ def read_points_mapped(filepath, mapping, has_header):
     points = []
     auto_number = 0
     for row in rows:
-        if len(row) <= max_core:
+        # Skip entirely blank rows.
+        if not any((cell or '').strip() for cell in row):
             continue
-        try:
-            x = float(row[x_idx])
-            y = float(row[y_idx])
-            z = float(row[z_idx])
-        except (ValueError, IndexError):
-            continue
+
+        def optional(idx):
+            if idx < 0:
+                return 0.0
+            try:
+                return float(row[idx])
+            except (ValueError, IndexError):
+                return 0.0
+
+        x = optional(x_idx)
+        y = optional(y_idx)
+        z = optional(z_idx)
 
         auto_number += 1
         point_number = auto_number
@@ -159,7 +163,7 @@ def read_points_mapped(filepath, mapping, has_header):
         points.append((point_number, (x, y, z), description))
 
     if not points:
-        return None, "No valid numerical rows found with the selected columns."
+        return None, "No data rows found in the CSV file."
     return points, None
 
 
