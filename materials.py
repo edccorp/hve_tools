@@ -22,6 +22,12 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
+# Portions of this file (the NodeTree helper and the MakeHuman-style material
+# builder) originate from Thomas Larsson's GPL-licensed work. The HVE material
+# builders and operators are copyright (C) Engineering Dynamics Company (EDC)
+# and are likewise licensed under the GNU General Public License, version 2 or
+# later.
+
 import bpy
 import os
 import math

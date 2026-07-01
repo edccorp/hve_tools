@@ -1,4 +1,28 @@
-# ##### 
+# ##### BEGIN GPL LICENSE BLOCK #####
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+# ##### END GPL LICENSE BLOCK #####
+
+# This file is derived from Blender's X3D/VRML exporter
+# (io_scene_x3d/export_x3d.py), copyright the Blender Foundation and its
+# contributors (Campbell Barton, Bart, Bastien Montagne, and others),
+# licensed under the GNU General Public License, version 2 or later.
+#
+# HVE H3D export modifications copyright (C) Engineering Dynamics Company (EDC).
+
 """
 This script exports to H3D format.
 

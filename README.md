@@ -265,4 +265,6 @@ Useful development notes:
 
 ## License
 
-These tools are distributed under the terms of the GNU General Public License, version 2 or later, as noted in the source headers.
+HVE Tools is free software, licensed under the **GNU General Public License, version 2 or later** — see [`LICENSE`](LICENSE). Parts of it are derived from other GPL-licensed software: the H3D exporters (`export_environment.py`, `export_vehicle.py`) are derived from Blender's X3D/VRML exporter (© the Blender Foundation and contributors), and `materials.py` includes material code from Thomas Larsson. As a Blender add-on, the combined work is distributed under the GPL.
+
+Under the GPL you may use, modify, and redistribute the software. EDC provides official builds, updates, and support to HVE customers as part of their purchase and support/maintenance fee — see [`COMMERCIAL.md`](COMMERCIAL.md) for how that access/support model works alongside the GPL.
