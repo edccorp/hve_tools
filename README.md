@@ -85,7 +85,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Set the grid **resolution** (cell size), shown in the scene's length units.
   - Sample ground height per cell using a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
   - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
-  - Optionally transfer the point cloud's per-point colour onto the surface as a color attribute.
+  - Optionally transfer the point cloud's per-point colour onto the surface as a color attribute, and build a material that drives Base Color from it.
   - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.

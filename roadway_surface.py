@@ -216,6 +216,30 @@ def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_h
 MAX_GRID_VERTS = 8_000_000
 
 
+def _build_color_attribute_material(name, attribute_name):
+    """Create a material whose Base Color is driven by a color attribute."""
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    tree = material.node_tree
+    tree.nodes.clear()
+
+    output = tree.nodes.new('ShaderNodeOutputMaterial')
+    output.location = (300, 0)
+    principled = tree.nodes.new('ShaderNodeBsdfPrincipled')
+    principled.location = (0, 0)
+    attribute = tree.nodes.new('ShaderNodeAttribute')
+    attribute.location = (-300, 0)
+    attribute.attribute_name = attribute_name
+    try:
+        attribute.attribute_type = 'GEOMETRY'
+    except (AttributeError, TypeError):
+        pass
+
+    tree.links.new(attribute.outputs['Color'], principled.inputs['Base Color'])
+    tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
+    return material
+
+
 def _find_point_color_attribute(mesh):
     """Return a POINT-domain colour attribute on ``mesh``, preferring the active one."""
     color_attributes = getattr(mesh, "color_attributes", None)
@@ -313,6 +337,9 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             if "colors" in result:
                 color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
+                if bool(scene.roadway_create_material):
+                    material = _build_color_attribute_material(f"Roadway Surface: {source.name}", "Col")
+                    new_mesh.materials.append(material)
 
             new_obj = bpy.data.objects.new(mesh_name, new_mesh)
             context.collection.objects.link(new_obj)

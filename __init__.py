@@ -260,6 +260,11 @@ try:
             description="Average the point cloud's per-point colour into each cell and store it on the surface as a color attribute",
             default=True,
         )
+        bpy.types.Scene.roadway_create_material = bpy.props.BoolProperty(
+            name="Create Material",
+            description="Create a material whose Base Color is driven by the transferred Col color attribute, and assign it to the surface",
+            default=True,
+        )
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
@@ -306,6 +311,7 @@ try:
         del bpy.types.Scene.roadway_ground_percentile
         del bpy.types.Scene.roadway_fill_holes
         del bpy.types.Scene.roadway_transfer_color
+        del bpy.types.Scene.roadway_create_material
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

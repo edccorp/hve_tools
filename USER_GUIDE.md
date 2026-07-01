@@ -334,7 +334,10 @@ geometry in vehicle simulations.
    reaches; 0 = unlimited.
 6. Leave **Transfer Point Color** on to carry the cloud's per-point colour onto
    the surface (averaged per cell) as a `Col` color attribute — handy for PLYs
-   with RGB. It's ignored if the cloud has no colour.
+   with RGB. It's ignored if the cloud has no colour. With it on, **Create
+   Material** (default) also builds a material whose Base Color is driven by the
+   `Col` attribute and assigns it, so the colours show in material/rendered view
+   with no extra setup.
 7. Click **Create Roadway Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
