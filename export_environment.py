@@ -167,6 +167,54 @@ def active_color_layer(mesh):
     return None
 
 
+def environment_vertex_colors(mesh):
+    """Return a per-vertex ``(r, g, b)`` list (len == len(mesh.vertices)) or None.
+
+    Prefers a POINT-domain colour attribute (one colour per vertex, direct, as
+    written by the Roadway Surface tool); otherwise falls back to a CORNER layer,
+    taking each vertex's colour from the first loop that references it.
+    """
+    color_attrs = getattr(mesh, "color_attributes", None)
+    vert_count = len(mesh.vertices)
+    if color_attrs:
+        point_attr = None
+        active = getattr(color_attrs, "active_color", None)
+        if active is not None and getattr(active, "domain", None) == 'POINT':
+            point_attr = active
+        else:
+            for cand in color_attrs:
+                if getattr(cand, "domain", None) == 'POINT':
+                    point_attr = cand
+                    break
+        if point_attr is not None and len(point_attr.data) == vert_count:
+            return [tuple(point_attr.data[i].color[:3]) for i in range(vert_count)]
+
+    layer = active_color_layer(mesh)
+    if layer is None:
+        return None
+    loops_col = layer.data
+    vert_color = [None] * vert_count
+    for poly in mesh.polygons:
+        for lidx in poly.loop_indices:
+            vi = mesh.loops[lidx].vertex_index
+            if vert_color[vi] is None:
+                vert_color[vi] = tuple(loops_col[lidx].color[:3])
+    return [c if c is not None else (1.0, 1.0, 1.0) for c in vert_color]
+
+
+def format_diffuse_color_array(colors, indent="\t\t  "):
+    """Build the Open Inventor ``diffuseColor [ N, r g b, ... ]`` body (per-vertex).
+
+    Plain-Python (no bpy) so it can be unit tested. ``colors`` is a sequence of
+    (r, g, b) tuples aligned with the vertex order written to ``Coordinate3``.
+    """
+    parts = ["%sdiffuseColor [ %s,\n" % (indent, len(colors))]
+    for r, g, b in colors:
+        parts.append("%s%.4f %.4f %.4f ,\n" % (indent, r, g, b))
+    parts.append("%s]\n" % indent)
+    return "".join(parts)
+
+
 def build_hierarchy(objects):
     """ returns parent child relationships, skipping
     """
@@ -249,6 +297,7 @@ def export_env(file, dirname,
            use_mesh_modifiers=True,
            use_selection=True,
            use_normals=False,
+           use_vertex_colors=False,
            path_mode='AUTO',
            name_decorations=True,
            ):
@@ -675,6 +724,15 @@ def export_env(file, dirname,
                             is_col = color_layer is not None
                             mesh_loops_col = color_layer.data if is_col else None
 
+                            # Optional per-vertex colour export (Open Inventor
+                            # PER_VERTEX_INDEXED). Handles POINT-domain colour
+                            # attributes (e.g. the Roadway Surface tool) as well
+                            # as CORNER layers.
+                            surface_vertex_colors = (
+                                environment_vertex_colors(mesh) if use_vertex_colors else None
+                            )
+                            write_vertex_colors = surface_vertex_colors is not None
+
                             if is_col:
                                 def calc_vertex_color():
                                     vert_color = [None] * len(mesh.vertices)
@@ -794,8 +852,10 @@ def export_env(file, dirname,
                                     fw('		 AppearanceKit { \n' )
                                     fw('		  lightModel \n' )
                                     fw('		  LightModel {\n' )
-                                    fw('			 model PHONG\n' )
-                                    fw('		  }\n' ) 
+                                    # BASE_COLOR shows the raw per-vertex colours unlit;
+                                    # PHONG is the normal shaded appearance.
+                                    fw('			 model %s\n' % ('BASE_COLOR' if write_vertex_colors else 'PHONG'))
+                                    fw('		  }\n' )
                                     fw('		 shapeHints  \n' )
                                     fw('		 ShapeHints {\n' )
                                     fw('		  vertexOrdering COUNTERCLOCKWISE\n' )
@@ -946,7 +1006,10 @@ def export_env(file, dirname,
                                             
                                         fw('		  material \n')
                                         fw('		  Material { #beginMaterial\n')
-                                        fw('		  diffuseColor %.3f %.3f %.3f\n' % clight_color(diffuseColor))
+                                        if write_vertex_colors:
+                                            fw(format_diffuse_color_array(surface_vertex_colors))
+                                        else:
+                                            fw('		  diffuseColor %.3f %.3f %.3f\n' % clight_color(diffuseColor))
                                         fw('		  specularColor %.3f %.3f %.3f\n' % clight_color(specularColor))
                                         fw('		  emissiveColor %.3f %.3f %.3f\n' % clight_color(emissiveColor))
                                         fw('		  ambientColor %.3f %.3f %.3f\n' % clight_color(ambientColor))
@@ -1008,12 +1071,19 @@ def export_env(file, dirname,
                                     # --- Write IndexedFaceSet
 
                                     if use_normals or use_normals_obj:
-                                        # use normals binding, if enabled.  
-                                        fw('		  normalbinding\n')                           
-                                        fw('		  NormalBinding { #beginNormalBinding\n')                        
+                                        # use normals binding, if enabled.
+                                        fw('		  normalbinding\n')
+                                        fw('		  NormalBinding { #beginNormalBinding\n')
                                         fw('		  value PER_VERTEX_INDEXED\n')
-                                        fw('		  } #endNormalBinding\n')        
-                                                                
+                                        fw('		  } #endNormalBinding\n')
+
+                                    if write_vertex_colors:
+                                        # Bind the per-vertex diffuseColor array to vertices.
+                                        fw('		  materialbinding\n')
+                                        fw('		  MaterialBinding { #beginMaterialBinding\n')
+                                        fw('		  value PER_VERTEX_INDEXED\n')
+                                        fw('		  } #endMaterialBinding\n')
+
                                     # --- Write IndexedFaceSet Elements
                                     if True:
                                         fw('		  coordinate3 \n')
@@ -1071,6 +1141,22 @@ def export_env(file, dirname,
                                         fw( '          ]\n')
                                         if use_normals or use_normals_obj:
                                             fw('          normalIndex [ ')
+                                            k = 0
+                                            for i in polygons_group:
+                                                k += 1
+                                                poly_verts = mesh_polygons_vertices[i]
+                                                for i in poly_verts:
+                                                    k += 1
+                                            fw('%s ,\n' % k)
+                                            for i in polygons_group:
+                                                poly_verts = mesh_polygons_vertices[i]
+                                                fw('		  %s , -1 ' % ', '.join((str(i) for i in poly_verts)))
+                                                fw('         ,\n')
+                                            fw('          ]\n')
+                                        if write_vertex_colors:
+                                            # materialIndex mirrors coordIndex: each vertex
+                                            # picks its own colour from the diffuseColor array.
+                                            fw('          materialIndex [ ')
                                             k = 0
                                             for i in polygons_group:
                                                 k += 1
@@ -1239,6 +1325,7 @@ def save(context,
          use_selection=True,
          use_mesh_modifiers=True,
          use_normals=False,
+         use_vertex_colors=False,
          use_compress=False,
          global_matrix=None,
          path_mode='AUTO',
@@ -1270,6 +1357,7 @@ def save(context,
                use_mesh_modifiers=use_mesh_modifiers,
                use_selection=use_selection,
                use_normals=use_normals,
+               use_vertex_colors=use_vertex_colors,
                path_mode=path_mode,
                name_decorations=name_decorations,
                )
@@ -1283,6 +1371,7 @@ def save(context,
                use_mesh_modifiers=use_mesh_modifiers,
                use_selection=use_selection,
                use_normals=use_normals,
+               use_vertex_colors=use_vertex_colors,
                path_mode=path_mode,
                name_decorations=name_decorations,
                )

@@ -342,7 +342,9 @@ geometry in vehicle simulations.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
-object so it flows into the H3D environment export. It shows a wait cursor and
+object so it flows into the H3D environment export. To carry the colours into
+HVE, enable **Vertex Colors** in the H3D export options (Export to HVE →
+Geometry); it writes the colours as Open Inventor per-vertex material. It shows a wait cursor and
 progress while it runs, and the report line notes the grid size and how many
 cells were sampled — if it warns that no cells had enough points, increase the
 cell size.
