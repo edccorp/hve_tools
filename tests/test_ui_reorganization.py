@@ -62,7 +62,10 @@ def test_fbx_importer_exposes_post_process_operators():
     assert "class FBX_OT_apply_mesh_cleanup" in fbx_ui_source
     assert "class FBX_OT_process_all" in fbx_ui_source
     assert "import_hve.process_all" in fbx_ui_source
-    # The FBX -> USD round-trip and MDD deformation storage have been removed.
+    # The FBX -> USD round-trip and the MDD deformation-storage import option
+    # were removed from the UI. (The MDD helper functions
+    # write_mdd_file / export_body_shape_key_animations_to_mdd remain in
+    # fbx_importer.py, currently unwired, and are kept for possible future use.)
     assert "import_via_usd" not in fbx_ui_source
     assert "deformation_storage" not in fbx_ui_source
     assert "roundtrip_imported_objects_through_usd" not in fbx_importer_source
