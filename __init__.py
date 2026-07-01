@@ -229,21 +229,23 @@ try:
         )
         bpy.types.Scene.roadway_cell_size = FloatProperty(
             name="Resolution (Cell Size)",
-            description="Spacing of the generated surface grid in scene units; smaller is finer and slower",
+            description="Spacing of the generated surface grid, in the scene's units; smaller is finer and slower",
             default=0.5,
             min=0.001,
             soft_max=10.0,
+            unit='LENGTH',
         )
-        bpy.types.Scene.roadway_search_radius = FloatProperty(
-            name="Search Radius",
-            description="Radius around each grid vertex used to gather nearby cloud points; should be at least the cell size",
-            default=0.75,
-            min=0.001,
-            soft_max=20.0,
+        bpy.types.Scene.roadway_fill_distance = FloatProperty(
+            name="Max Fill Distance",
+            description="How far, in the scene's units, to interpolate across empty grid cells; 0 = unlimited",
+            default=2.0,
+            min=0.0,
+            soft_max=50.0,
+            unit='LENGTH',
         )
         bpy.types.Scene.roadway_ground_percentile = FloatProperty(
             name="Ground Percentile",
-            description="Percentile of nearby point heights taken as ground (low = from below); rejects overhead noise and stray low outliers",
+            description="Percentile of each cell's point heights taken as ground (low = from below); rejects overhead noise and stray low outliers",
             default=5.0,
             min=0.0,
             max=100.0,
@@ -251,6 +253,11 @@ try:
         bpy.types.Scene.roadway_fill_holes = bpy.props.BoolProperty(
             name="Fill Holes",
             description="Interpolate empty grid cells from their neighbours so sparse spots do not leave gaps",
+            default=True,
+        )
+        bpy.types.Scene.roadway_transfer_color = bpy.props.BoolProperty(
+            name="Transfer Point Color",
+            description="Average the point cloud's per-point colour into each cell and store it on the surface as a color attribute",
             default=True,
         )
 
@@ -295,9 +302,10 @@ try:
         del bpy.types.Scene.fbx_shape_key_max_samples
         del bpy.types.Scene.roadway_source_object
         del bpy.types.Scene.roadway_cell_size
-        del bpy.types.Scene.roadway_search_radius
+        del bpy.types.Scene.roadway_fill_distance
         del bpy.types.Scene.roadway_ground_percentile
         del bpy.types.Scene.roadway_fill_holes
+        del bpy.types.Scene.roadway_transfer_color
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

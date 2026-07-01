@@ -81,10 +81,11 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Convert selected motion paths to 3D curve objects in a **Motion Paths** collection.
   - Toggle the motion-path overlay in the active 3D View.
 - **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
-- **Roadway surface from point cloud**: build a draped ground surface mesh from a point-cloud object (e.g. an imported PLY) for vehicle simulations.
-  - Set the grid **resolution** (cell size) and a **search radius** for gathering nearby points.
+- **Roadway surface from point cloud**: build a draped ground surface mesh from a point-cloud object (e.g. an imported PLY) for vehicle simulations. Numpy-vectorized, so it stays fast on million-point clouds.
+  - Set the grid **resolution** (cell size), shown in the scene's length units.
   - Sample ground height per cell using a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
-  - Optionally fill sparse holes from neighbours.
+  - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
+  - Optionally transfer the point cloud's per-point colour onto the surface as a color attribute.
   - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.
@@ -233,7 +234,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 
 1. Import a roadway point cloud as a mesh object (a PLY imports as mesh vertices).
 2. Open **Other Tools → Roadway Surface** and select the cloud (or set it as the **Point Cloud**).
-3. Set the **Resolution (Cell Size)**, **Search Radius**, and **Ground Percentile** (low = "from below"; rejects overhead noise), and leave **Fill Holes** on for sparse clouds.
+3. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds, and leave **Transfer Point Color** on to carry PLY colours onto the surface.
 4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export.
 
 ## Included examples

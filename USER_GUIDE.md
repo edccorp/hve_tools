@@ -325,27 +325,38 @@ geometry in vehicle simulations.
 1. Import your point cloud as a mesh object (a PLY imports as mesh vertices).
 2. Select it, or set it explicitly in **Point Cloud** (leave empty to use the
    active object).
-3. Set **Resolution (Cell Size)** — the spacing of the output grid. Smaller is
-   finer and slower.
-4. Set **Search Radius** — how far around each grid vertex to gather nearby
-   points. Keep it at least the cell size; increase it for sparse clouds.
-5. Set **Ground Percentile** — the low percentile of nearby point heights taken
-   as the ground (default 5). This is the "from below" step: a low percentile
-   grabs the road surface and ignores overhead noise (vehicles, foliage) while
-   still rejecting stray below-ground points. Use 0 for the strict minimum.
-6. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
-   gaps.
+3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
+   (metres or feet, matching your unit setup). Smaller is finer and slower.
+4. Set **Ground Percentile** — how the height of each grid cell is chosen from
+   the point heights that land in it (see below). Default 5.
+5. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
+   gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
+   reaches; 0 = unlimited.
+6. Leave **Transfer Point Color** on to carry the cloud's per-point colour onto
+   the surface (averaged per cell) as a `Col` color attribute — handy for PLYs
+   with RGB. It's ignored if the cloud has no colour.
 7. Click **Create Roadway Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
-object so it flows into the H3D environment export. The report line notes the
-grid size and how many cells were sampled — if it warns that no cells had enough
-points, increase the search radius or cell size.
+object so it flows into the H3D environment export. It shows a wait cursor and
+progress while it runs, and the report line notes the grid size and how many
+cells were sampled — if it warns that no cells had enough points, increase the
+cell size.
+
+**How Ground Percentile works.** For every grid cell, the tool looks at the Z of
+all points that fall in that cell and takes the value at the chosen percentile.
+A low value (5) picks near the bottom of that stack — the road surface — so it
+naturally ignores anything *above* the road (vehicles, foliage, wires). `0` is
+the strict minimum (most aggressive "from below", but sensitive to a single
+spurious low point); raising it a little (5–15) rejects stray below-ground
+returns as long as the cell has enough points. Denser clouds reject outliers
+better, since a percentile only skips outliers when there are several points per
+cell.
 
 > This is a first version that uses the cloud's rectangular (bounding-box)
-> extent. Cells with no nearby points become holes (or are filled from
-> neighbours); very isolated cells may leave a flat spot at Z 0.
+> extent. Cells with no points become holes (or are filled from neighbours);
+> very isolated cells may leave a flat spot at Z 0.
 
 ---
 

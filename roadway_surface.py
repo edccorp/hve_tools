@@ -1,210 +1,234 @@
 bl_info = {
     "name": "Roadway Surface from Point Cloud",
     "author": "EDC",
-    "version": (1, 0),
+    "version": (1, 2),
     "blender": (3, 0, 0),
     "location": "View3D > Sidebar > HVE > Other Tools > Roadway Surface",
     "description": "Build a draped ground surface mesh from a point-cloud object for vehicle simulations",
     "category": "Object",
 }
 
+import warnings
+
 import bpy
-import math
+import numpy as np
 
 # ---------------------------------------------------------------------------
-# Heightfield core
+# Heightfield core (numpy-vectorized)
 #
-# These helpers are plain-Python (no bpy / mathutils) so the sampling and mesh
-# generation can be unit tested outside Blender, matching the other tools in
-# this add-on. The operator below feeds them world-space point tuples.
+# These helpers are bpy-free so the sampling and mesh generation can be unit
+# tested outside Blender, matching the other tools in this add-on. The operator
+# below feeds them an (N, 3) array of world-space points.
 #
 # The approach reproduces a "shrink-wrap from below" drape without needing a
-# target surface: lay a regular XY grid at the chosen resolution, and for each
-# grid vertex take a low percentile of the Z of nearby cloud points. The low
-# percentile grabs the ground and ignores overhead noise (vehicles, foliage)
-# while still rejecting the occasional spurious below-ground point.
+# target surface, and is fully vectorized so it stays fast on million-point
+# clouds: bin every point into a regular XY grid cell (the resolution), and for
+# each cell take a low percentile of the point heights. The low percentile grabs
+# the ground and ignores overhead noise (vehicles, foliage) while still
+# rejecting the occasional spurious below-ground point. Empty cells are then
+# filled from their neighbours. Optional per-point colours are averaged per cell
+# and carried onto the surface.
 # ---------------------------------------------------------------------------
 
 
-def compute_xy_bounds(points):
-    """Return ``(min_x, min_y, max_x, max_y)`` over 3D points, or None if empty."""
-    if not points:
-        return None
-    min_x = min_y = float("inf")
-    max_x = max_y = float("-inf")
-    for p in points:
-        x, y = p[0], p[1]
-        if x < min_x:
-            min_x = x
-        if x > max_x:
-            max_x = x
-        if y < min_y:
-            min_y = y
-        if y > max_y:
-            max_y = y
-    return (min_x, min_y, max_x, max_y)
-
-
-def grid_dimensions(min_x, min_y, max_x, max_y, cell_size):
-    """Number of grid vertices along X and Y for ``cell_size`` (each at least 2)."""
+def build_grid_spec(points, cell_size):
+    """Return ``(min_x, min_y, nx, ny)`` for a grid over the points' XY extent."""
     if cell_size <= 0:
         raise ValueError("cell_size must be positive")
-    span_x = max(max_x - min_x, 0.0)
-    span_y = max(max_y - min_y, 0.0)
-    nx = int(math.floor(span_x / cell_size)) + 1
-    ny = int(math.floor(span_y / cell_size)) + 1
-    return max(nx, 2), max(ny, 2)
+    pts = np.asarray(points, dtype=np.float64)
+    min_x = float(pts[:, 0].min())
+    min_y = float(pts[:, 1].min())
+    max_x = float(pts[:, 0].max())
+    max_y = float(pts[:, 1].max())
+    nx = max(int(np.floor((max_x - min_x) / cell_size)) + 1, 2)
+    ny = max(int(np.floor((max_y - min_y) / cell_size)) + 1, 2)
+    return min_x, min_y, nx, ny
 
 
-def percentile(values, q):
-    """Linear-interpolation percentile of ``values``; ``q`` in [0, 100]."""
-    if not values:
-        raise ValueError("percentile of empty sequence")
-    ordered = sorted(values)
-    if len(ordered) == 1:
-        return ordered[0]
-    q = min(max(q, 0.0), 100.0)
-    rank = (q / 100.0) * (len(ordered) - 1)
-    lo = int(math.floor(rank))
-    hi = int(math.ceil(rank))
-    if lo == hi:
-        return ordered[lo]
-    frac = rank - lo
-    return ordered[lo] * (1.0 - frac) + ordered[hi] * frac
+def cell_indices(points, min_x, min_y, nx, ny, cell_size):
+    """Flat ``iy * nx + ix`` cell index for each point (clamped to the grid)."""
+    pts = np.asarray(points, dtype=np.float64)
+    ix = np.clip(np.floor((pts[:, 0] - min_x) / cell_size).astype(np.int64), 0, nx - 1)
+    iy = np.clip(np.floor((pts[:, 1] - min_y) / cell_size).astype(np.int64), 0, ny - 1)
+    return iy * nx + ix
 
 
-def _build_xy_bins(points, bin_size):
-    """Bucket points into a dict keyed by integer ``(ix, iy)`` XY bin."""
-    bins = {}
-    for p in points:
-        key = (int(math.floor(p[0] / bin_size)), int(math.floor(p[1] / bin_size)))
-        bins.setdefault(key, []).append(p)
-    return bins
+def cell_percentile_grid(points, min_x, min_y, nx, ny, cell_size, ground_percentile):
+    """Per-cell low-percentile ground height as an ``(ny, nx)`` array (NaN = empty).
 
-
-def _neighbor_z(bins, bin_size, x, y, radius):
-    """Return the Z values of points within ``radius`` (XY) of ``(x, y)``."""
-    r2 = radius * radius
-    cx = int(math.floor(x / bin_size))
-    cy = int(math.floor(y / bin_size))
-    span = int(math.ceil(radius / bin_size))
-    zs = []
-    for ix in range(cx - span, cx + span + 1):
-        for iy in range(cy - span, cy + span + 1):
-            for p in bins.get((ix, iy), ()):
-                dx = p[0] - x
-                dy = p[1] - y
-                if dx * dx + dy * dy <= r2:
-                    zs.append(p[2])
-    return zs
-
-
-def sample_heightfield(points, cell_size, search_radius, ground_percentile):
-    """Sample a grid of ground Z from a point cloud.
-
-    Returns a dict ``{origin_x, origin_y, cell_size, nx, ny, z_grid}`` where
-    ``z_grid`` is a row-major list of length ``nx * ny``; each entry is a float
-    ground height, or None where no points fell within ``search_radius`` of that
-    grid vertex. Returns None when ``points`` is empty.
+    Vectorized: points are binned to cells, sorted once by (cell, z), and the
+    percentile sample per cell is gathered by index.
     """
-    bounds = compute_xy_bounds(points)
-    if bounds is None:
+    pts = np.asarray(points, dtype=np.float64)
+    z = pts[:, 2]
+    flat = cell_indices(pts, min_x, min_y, nx, ny, cell_size)
+
+    order = np.lexsort((z, flat))  # sort by cell, then ascending z within cell
+    flat_sorted = flat[order]
+    z_sorted = z[order]
+
+    cells, starts, counts = np.unique(flat_sorted, return_index=True, return_counts=True)
+    q = min(max(float(ground_percentile), 0.0), 100.0)
+    offset = np.floor((q / 100.0) * (counts - 1)).astype(np.int64)
+    values = z_sorted[starts + offset]
+
+    grid = np.full(nx * ny, np.nan, dtype=np.float64)
+    grid[cells] = values
+    return grid.reshape(ny, nx)
+
+
+def cell_mean_grid(flat, values, nx, ny):
+    """Per-cell mean of ``values`` (indexed by flat cell id) as ``(ny, nx)``; NaN = empty."""
+    values = np.asarray(values, dtype=np.float64)
+    sums = np.bincount(flat, weights=values, minlength=nx * ny)
+    counts = np.bincount(flat, minlength=nx * ny)
+    grid = np.full(nx * ny, np.nan, dtype=np.float64)
+    nonzero = counts > 0
+    grid[nonzero] = sums[nonzero] / counts[nonzero]
+    return grid.reshape(ny, nx)
+
+
+def _shift(grid, dj, di):
+    """Return ``grid`` shifted by (dj, di) with NaN padding at the edges."""
+    out = np.full_like(grid, np.nan)
+    ny, nx = grid.shape
+    sy0, sy1 = max(0, -dj), ny - max(0, dj)
+    sx0, sx1 = max(0, -di), nx - max(0, di)
+    dy0, dy1 = max(0, dj), ny - max(0, -dj)
+    dx0, dx1 = max(0, di), nx - max(0, -di)
+    out[dy0:dy1, dx0:dx1] = grid[sy0:sy1, sx0:sx1]
+    return out
+
+
+def fill_holes_grid(grid, max_passes):
+    """Iteratively fill NaN cells from the mean of their filled 4-neighbours.
+
+    ``max_passes`` bounds how far filling reaches (in cells). Cells that remain
+    unreachable stay NaN.
+    """
+    filled = grid.copy()
+    for _ in range(max(int(max_passes), 0)):
+        nan_mask = np.isnan(filled)
+        if not nan_mask.any():
+            break
+        stack = np.stack(
+            [_shift(filled, 1, 0), _shift(filled, -1, 0), _shift(filled, 0, 1), _shift(filled, 0, -1)],
+            axis=0,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            neighbour_mean = np.nanmean(stack, axis=0)
+        fillable = nan_mask & ~np.isnan(neighbour_mean)
+        if not fillable.any():
+            break
+        filled[fillable] = neighbour_mean[fillable]
+    return filled
+
+
+def build_mesh_arrays(min_x, min_y, cell_size, z_grid):
+    """Turn a height grid into ``(verts, faces)`` numpy arrays.
+
+    A quad is emitted only where all four of its corners have a height, so gaps
+    in the cloud leave holes rather than spikes. NaN vertices are placed at Z 0
+    but are not referenced by any face.
+    """
+    z_grid = np.asarray(z_grid, dtype=np.float64)
+    ny, nx = z_grid.shape
+
+    xs = min_x + np.arange(nx, dtype=np.float64) * cell_size
+    ys = min_y + np.arange(ny, dtype=np.float64) * cell_size
+    gx, gy = np.meshgrid(xs, ys)
+    gz = np.where(np.isnan(z_grid), 0.0, z_grid)
+    verts = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
+
+    a = (np.arange(ny - 1)[:, None] * nx + np.arange(nx - 1)[None, :])
+    b = a + 1
+    c = a + nx + 1
+    d = a + nx
+    valid = ~np.isnan(z_grid)
+    cell_valid = valid[:-1, :-1] & valid[:-1, 1:] & valid[1:, 1:] & valid[1:, :-1]
+    mask = cell_valid.ravel()
+    faces = np.column_stack([a.ravel(), b.ravel(), c.ravel(), d.ravel()])[mask]
+    return verts, faces
+
+
+def _color_grid(points, colors, min_x, min_y, nx, ny, cell_size, max_passes):
+    """Per-vertex colour array (nx*ny, C) from per-point colours; averaged per cell."""
+    col = np.asarray(colors, dtype=np.float64)
+    flat = cell_indices(points, min_x, min_y, nx, ny, cell_size)
+    channels = []
+    for c in range(col.shape[1]):
+        chan = cell_mean_grid(flat, col[:, c], nx, ny)
+        if max_passes > 0:
+            chan = fill_holes_grid(chan, max_passes)
+        channels.append(chan)
+    stacked = np.stack(channels, axis=-1)  # (ny, nx, C)
+    stacked = np.where(np.isnan(stacked), 0.5, stacked)  # unresolved cells -> mid grey
+    return stacked.reshape(nx * ny, col.shape[1])
+
+
+def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None):
+    """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
+
+    When ``colors`` (an (N, C) array of per-point colour) is given, the result
+    also includes a per-vertex ``colors`` array aligned with ``verts``. Returns
+    None when fewer than three points are supplied.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 3:
         return None
-    min_x, min_y, max_x, max_y = bounds
-    nx, ny = grid_dimensions(min_x, min_y, max_x, max_y, cell_size)
 
-    bin_size = max(search_radius, cell_size)
-    bins = _build_xy_bins(points, bin_size)
+    min_x, min_y, nx, ny = build_grid_spec(pts, cell_size)
+    grid = cell_percentile_grid(pts, min_x, min_y, nx, ny, cell_size, ground_percentile)
+    sampled = int(np.count_nonzero(~np.isnan(grid)))
 
-    z_grid = [None] * (nx * ny)
-    for j in range(ny):
-        gy = min_y + j * cell_size
-        for i in range(nx):
-            gx = min_x + i * cell_size
-            zs = _neighbor_z(bins, bin_size, gx, gy, search_radius)
-            if zs:
-                z_grid[j * nx + i] = percentile(zs, ground_percentile)
+    if fill_holes:
+        if fill_distance and fill_distance > 0:
+            max_passes = max(1, int(round(fill_distance / cell_size)))
+        else:
+            max_passes = nx + ny  # effectively unlimited for a connected region
+    else:
+        max_passes = 0
 
-    return {
-        "origin_x": min_x,
-        "origin_y": min_y,
-        "cell_size": cell_size,
+    if max_passes > 0:
+        grid = fill_holes_grid(grid, max_passes)
+
+    verts, faces = build_mesh_arrays(min_x, min_y, cell_size, grid)
+    result = {
+        "verts": verts,
+        "faces": faces,
         "nx": nx,
         "ny": ny,
-        "z_grid": z_grid,
+        "sampled": sampled,
+        "total": nx * ny,
     }
-
-
-def fill_missing_heights(z_grid, nx, ny, max_passes=100):
-    """Fill None cells from the average of their filled 4-neighbours, iterating.
-
-    Returns a new list. Cells that stay unreachable (fully isolated regions)
-    remain None.
-    """
-    grid = list(z_grid)
-    for _ in range(max_passes):
-        holes = [k for k, v in enumerate(grid) if v is None]
-        if not holes:
-            break
-        updates = {}
-        for k in holes:
-            i = k % nx
-            j = k // nx
-            vals = []
-            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                ni, nj = i + di, j + dj
-                if 0 <= ni < nx and 0 <= nj < ny:
-                    nv = grid[nj * nx + ni]
-                    if nv is not None:
-                        vals.append(nv)
-            if vals:
-                updates[k] = sum(vals) / len(vals)
-        if not updates:
-            break
-        for k, v in updates.items():
-            grid[k] = v
-    return grid
-
-
-def build_surface_mesh(sample, fill_holes=True):
-    """Turn a :func:`sample_heightfield` result into ``(verts, faces, filled, total)``.
-
-    ``verts`` is a list of ``(x, y, z)``; ``faces`` a list of quad index tuples.
-    A quad is emitted only when all four of its corners have a height, so gaps in
-    the cloud leave holes rather than spikes. ``filled`` / ``total`` report how
-    many grid cells were sampled.
-    """
-    nx = sample["nx"]
-    ny = sample["ny"]
-    cs = sample["cell_size"]
-    ox = sample["origin_x"]
-    oy = sample["origin_y"]
-
-    heights = fill_missing_heights(sample["z_grid"], nx, ny) if fill_holes else list(sample["z_grid"])
-
-    verts = []
-    for j in range(ny):
-        for i in range(nx):
-            zz = heights[j * nx + i]
-            verts.append((ox + i * cs, oy + j * cs, zz if zz is not None else 0.0))
-
-    faces = []
-    for j in range(ny - 1):
-        for i in range(nx - 1):
-            a = j * nx + i
-            b = j * nx + (i + 1)
-            c = (j + 1) * nx + (i + 1)
-            d = (j + 1) * nx + i
-            if all(heights[idx] is not None for idx in (a, b, c, d)):
-                faces.append((a, b, c, d))
-
-    filled = sum(1 for v in heights if v is not None)
-    return verts, faces, filled, len(heights)
+    if colors is not None:
+        result["colors"] = _color_grid(pts, colors, min_x, min_y, nx, ny, cell_size, max_passes)
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Operator
 # ---------------------------------------------------------------------------
+
+# Guard against accidental multi-hundred-million-vertex grids (tiny cell size on
+# a huge extent) that would exhaust memory before mesh creation.
+MAX_GRID_VERTS = 8_000_000
+
+
+def _find_point_color_attribute(mesh):
+    """Return a POINT-domain colour attribute on ``mesh``, preferring the active one."""
+    color_attributes = getattr(mesh, "color_attributes", None)
+    if not color_attributes:
+        return None
+    active = getattr(color_attributes, "active_color", None)
+    if active is not None and getattr(active, "domain", None) == 'POINT':
+        return active
+    for attr in color_attributes:
+        if getattr(attr, "domain", None) == 'POINT':
+            return attr
+    return None
+
 
 class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
     """Build a draped ground surface from a selected point-cloud object (e.g. a PLY)"""
@@ -220,66 +244,104 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             self.report({'ERROR'}, "Select a mesh point-cloud object (e.g. an imported PLY).")
             return {'CANCELLED'}
 
-        depsgraph = context.evaluated_depsgraph_get()
-        eval_obj = source.evaluated_get(depsgraph)
-        mesh = eval_obj.to_mesh()
+        wm = context.window_manager
+        window = context.window
+        wm.progress_begin(0, 100)
+        if window is not None:
+            window.cursor_set('WAIT')
+
         try:
-            matrix = source.matrix_world
-            points = [tuple(matrix @ v.co) for v in mesh.vertices]
-        finally:
-            eval_obj.to_mesh_clear()
+            wm.progress_update(5)
+            depsgraph = context.evaluated_depsgraph_get()
+            eval_obj = source.evaluated_get(depsgraph)
+            mesh = eval_obj.to_mesh()
+            try:
+                count = len(mesh.vertices)
+                if count < 3:
+                    eval_obj.to_mesh_clear()
+                    self.report({'ERROR'}, "Source object has too few vertices for a surface.")
+                    return {'CANCELLED'}
+                # Bulk-read coordinates (fast even for millions of vertices).
+                local = np.empty(count * 3, dtype=np.float64)
+                mesh.vertices.foreach_get("co", local)
+                local = local.reshape(count, 3)
 
-        if len(points) < 3:
-            self.report({'ERROR'}, "Source object has too few vertices for a surface.")
-            return {'CANCELLED'}
+                colors = None
+                if bool(scene.roadway_transfer_color):
+                    color_attr = _find_point_color_attribute(mesh)
+                    if color_attr is not None:
+                        raw = np.empty(count * 4, dtype=np.float64)
+                        color_attr.data.foreach_get("color", raw)
+                        colors = raw.reshape(count, 4)
+            finally:
+                eval_obj.to_mesh_clear()
 
-        cell_size = float(scene.roadway_cell_size)
-        search_radius = float(scene.roadway_search_radius)
-        ground_percentile = float(scene.roadway_ground_percentile)
-        fill_holes = bool(scene.roadway_fill_holes)
+            wm.progress_update(25)
 
-        if search_radius < cell_size:
-            self.report({'WARNING'}, "Search radius smaller than cell size may leave gaps.")
+            # Transform to world space with a single vectorized matrix multiply.
+            matrix = np.array(source.matrix_world, dtype=np.float64)
+            points = local @ matrix[:3, :3].T + matrix[:3, 3]
 
-        sample = sample_heightfield(points, cell_size, search_radius, ground_percentile)
-        if sample is None:
-            self.report({'ERROR'}, "Could not sample the point cloud.")
-            return {'CANCELLED'}
+            cell_size = float(scene.roadway_cell_size)
+            fill_distance = float(scene.roadway_fill_distance)
+            ground_percentile = float(scene.roadway_ground_percentile)
+            fill_holes = bool(scene.roadway_fill_holes)
 
-        verts, faces, filled, total = build_surface_mesh(sample, fill_holes=fill_holes)
-        if not faces:
-            self.report(
-                {'WARNING'},
-                "No cells had enough points; increase the search radius or cell size.",
+            # Reject grids that would be too large before doing the heavy work.
+            min_x, min_y, nx, ny = build_grid_spec(points, cell_size)
+            if nx * ny > MAX_GRID_VERTS:
+                self.report({'ERROR'}, f"Grid would be {nx}x{ny} vertices; increase the cell size.")
+                return {'CANCELLED'}
+
+            wm.progress_update(45)
+            result = generate_surface(
+                points, cell_size, fill_distance, ground_percentile, fill_holes, colors=colors
             )
-            return {'CANCELLED'}
+            if result is None or len(result["faces"]) == 0:
+                self.report(
+                    {'WARNING'},
+                    "No surface cells were produced; try a larger cell size or fill distance.",
+                )
+                return {'CANCELLED'}
 
-        mesh_name = f"Roadway Surface: {source.name}"
-        new_mesh = bpy.data.meshes.new(mesh_name)
-        new_mesh.from_pydata(verts, [], [tuple(f) for f in faces])
-        new_mesh.update()
+            wm.progress_update(75)
+            mesh_name = f"Roadway Surface: {source.name}"
+            new_mesh = bpy.data.meshes.new(mesh_name)
+            new_mesh.from_pydata(result["verts"].tolist(), [], result["faces"].tolist())
+            new_mesh.update()
 
-        new_obj = bpy.data.objects.new(mesh_name, new_mesh)
-        context.collection.objects.link(new_obj)
+            if "colors" in result:
+                color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
+                color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
 
-        # Classify as an HVE Environment object so it flows into H3D environment
-        # export for vehicle simulations.
-        try:
-            new_obj.hve_type.set_type.type = 'ENVIRONMENT'
-        except (AttributeError, TypeError):
-            pass
+            new_obj = bpy.data.objects.new(mesh_name, new_mesh)
+            context.collection.objects.link(new_obj)
 
-        for obj in list(context.selected_objects):
-            obj.select_set(False)
-        new_obj.select_set(True)
-        context.view_layer.objects.active = new_obj
+            # Classify as an HVE Environment object so it flows into H3D
+            # environment export for vehicle simulations.
+            try:
+                new_obj.hve_type.set_type.type = 'ENVIRONMENT'
+            except (AttributeError, TypeError):
+                pass
 
-        self.report(
-            {'INFO'},
-            f"Roadway surface: {sample['nx']}x{sample['ny']} grid, {len(faces)} faces, "
-            f"{filled}/{total} cells sampled from {len(points)} points.",
-        )
-        return {'FINISHED'}
+            for obj in list(context.selected_objects):
+                obj.select_set(False)
+            new_obj.select_set(True)
+            context.view_layer.objects.active = new_obj
+
+            wm.progress_update(100)
+            colored = " (coloured)" if "colors" in result else ""
+            self.report(
+                {'INFO'},
+                f"Roadway surface{colored}: {result['nx']}x{result['ny']} grid, "
+                f"{len(result['faces'])} faces, {result['sampled']}/{result['total']} cells "
+                f"sampled from {len(points)} points.",
+            )
+            return {'FINISHED'}
+        finally:
+            wm.progress_end()
+            if window is not None:
+                window.cursor_set('DEFAULT')
 
 
 classes = [

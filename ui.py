@@ -965,9 +965,11 @@ class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
         c.prop(scene, "roadway_source_object")
 
         c.prop(scene, "roadway_cell_size")
-        c.prop(scene, "roadway_search_radius")
         c.prop(scene, "roadway_ground_percentile")
         c.prop(scene, "roadway_fill_holes")
+        if scene.roadway_fill_holes:
+            c.prop(scene, "roadway_fill_distance")
+        c.prop(scene, "roadway_transfer_color")
 
         c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
         c.label(text="Result is classified as Environment", icon='WORLD')
