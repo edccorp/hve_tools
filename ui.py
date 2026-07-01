@@ -872,12 +872,28 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
+        anim_settings = scene.anim_settings
         l = self.layout
         c = l.column()
 
         c.label(text="Point Importer", icon="TOOL_SETTINGS")  # Section title with an icon
-        c.label(text="CSV Format: PointNumber,X, Y, Z, Description")        
-        c.operator("import_xyz.csv", text="Import Points")
+        c.label(text="CSV Format: PointNumber,X,Y,Z,Description")
+
+        # --- Load a CSV, map its columns, then import ---
+        map_box = l.box()
+        map_box.label(text="Import CSV (map columns)", icon='IMPORT')
+        map_box.operator("import_xyz.load_point_csv_headers", text="Load CSV File")
+        if anim_settings.point_csv_filepath:
+            map_box.label(text=f"File: {os.path.basename(anim_settings.point_csv_filepath)}")
+            if not anim_settings.point_csv_has_header:
+                map_box.label(text="No header row detected - map columns below", icon='INFO')
+            map_box.prop(anim_settings, "point_col_number")
+            map_box.prop(anim_settings, "point_col_x")
+            map_box.prop(anim_settings, "point_col_y")
+            map_box.prop(anim_settings, "point_col_z")
+            map_box.prop(anim_settings, "point_col_description")
+            map_box.prop(anim_settings, "point_scale_factor")
+            map_box.operator("import_xyz.import_mapped_points", text="Import Points")
 
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):

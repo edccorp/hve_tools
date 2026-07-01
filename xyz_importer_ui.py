@@ -13,6 +13,7 @@ if "bpy" in locals():
     if "xyz_importer" in locals():
         importlib.reload(xyz_importer)
 
+import os
 import bpy
 from bpy.props import (
         BoolProperty,
@@ -85,10 +86,99 @@ class ImportPoints(bpy.types.Operator, ImportHelper):
     def draw(self, context):
         pass
 
+class HVE_OT_LoadPointCSVHeaders(bpy.types.Operator, ImportHelper):
+    """Load a points CSV file and auto-map its columns (Point Number, X, Y, Z, Description) by header name"""
+    bl_idname = "import_xyz.load_point_csv_headers"
+    bl_label = "Load CSV File"
+    filename_ext = ".csv"
+    filter_glob: StringProperty(default="*.csv", options={'HIDDEN'}, maxlen=255)
+
+    def execute(self, context):
+        from . import xyz_importer
+
+        settings = context.scene.anim_settings
+
+        try:
+            has_header, headers = xyz_importer.read_csv_headers(self.filepath)
+        except Exception as exc:  # noqa: BLE001 - surface any read error to the user
+            self.report({'ERROR'}, f"Could not read CSV file: {exc}")
+            return {'CANCELLED'}
+
+        if not headers:
+            self.report({'WARNING'}, "CSV file appears to be empty.")
+            return {'CANCELLED'}
+
+        # Store the loaded state so the panel dropdowns can list the columns.
+        settings.point_csv_filepath = self.filepath
+        settings.point_csv_has_header = has_header
+        settings.point_csv_headers = "\t".join(headers)
+
+        if has_header:
+            mapping = xyz_importer.auto_map_point_columns(headers)
+        else:
+            mapping = xyz_importer.default_point_positional_mapping(len(headers))
+
+        # Assign enum values after the headers string is stored so the items
+        # callback already exposes these identifiers.
+        settings.point_col_number = str(mapping["point_number"])
+        settings.point_col_x = str(mapping["x"])
+        settings.point_col_y = str(mapping["y"])
+        settings.point_col_z = str(mapping["z"])
+        settings.point_col_description = str(mapping["description"])
+
+        if has_header:
+            self.report({'INFO'}, "Headers detected and auto-mapped. Review the columns, then Import.")
+        else:
+            self.report({'INFO'}, "No header row found; using positional columns. Adjust if needed, then Import.")
+        return {'FINISHED'}
+
+
+class HVE_OT_ImportMappedPoints(bpy.types.Operator):
+    """Import the loaded points CSV using the selected column mapping"""
+    bl_idname = "import_xyz.import_mapped_points"
+    bl_label = "Import Points"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from . import xyz_importer
+
+        settings = context.scene.anim_settings
+
+        filepath = settings.point_csv_filepath
+        if not filepath:
+            self.report({'WARNING'}, "Load a CSV file first.")
+            return {'CANCELLED'}
+        if not os.path.exists(filepath):
+            self.report({'ERROR'}, "File not found")
+            return {'CANCELLED'}
+
+        mapping = {
+            "point_number": int(settings.point_col_number),
+            "x": int(settings.point_col_x),
+            "y": int(settings.point_col_y),
+            "z": int(settings.point_col_z),
+            "description": int(settings.point_col_description),
+        }
+
+        points, error = xyz_importer.read_points_mapped(filepath, mapping, settings.point_csv_has_header)
+        if error:
+            self.report({'WARNING'}, error)
+            return {'CANCELLED'}
+
+        if bpy.ops.object.mode_set.poll():
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        xyz_importer.create_point_objects(context, points, settings.point_scale_factor)
+        self.report({'INFO'}, f"Imported {len(points)} points.")
+        return {'FINISHED'}
+
+
 def menu_func_export(self, context):
     self.layout.operator(ImportPoints.bl_idname,
                          text="Points (.csv)")
 classes = (
 ImportPoints,
-CSV_PT_xyz_importer_include
+CSV_PT_xyz_importer_include,
+HVE_OT_LoadPointCSVHeaders,
+HVE_OT_ImportMappedPoints,
 )

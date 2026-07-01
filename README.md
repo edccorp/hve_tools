@@ -186,12 +186,13 @@ Time,X,Y,Z,Roll,Pitch,Yaw
 ### 7. Import XYZ points
 
 1. Open **Other Tools → Point Importer**.
-2. Click **Import Points**.
-3. Choose a CSV with this row format:
+2. Under **Import CSV (map columns)**, click **Load CSV File** and choose a CSV. A typical file has this row format:
 
 ```csv
 PointNumber,X,Y,Z,Description
 ```
+
+3. Review the auto-detected **Point Number / X / Y / Z / Description** column dropdowns (fields may be in any order or under different header names; generic `Column N` labels appear when the file has no header row), set the **Scale Factor**, then click **Import Points**. X, Y and Z are required; Point Number falls back to a running counter and Description to "No Description" when their column is set to **(None)**.
 
 The importer creates point markers, labels, descriptions, and a polyline in the **Imported Points** collection.
 

@@ -150,6 +150,28 @@ def _motion_column_items(self, context):
     return items
 
 
+# Separate cache for the point-importer column dropdowns (see note above).
+_point_column_enum_cache = []
+
+
+def _point_column_items(self, context):
+    """Build EnumProperty items from the loaded point CSV header names."""
+    global _point_column_enum_cache
+    items = [("-1", "(None)", "Column not present in the file")]
+
+    scene = getattr(context, "scene", None)
+    settings = getattr(scene, "anim_settings", None) if scene else None
+    header_str = getattr(settings, "point_csv_headers", "") if settings else ""
+
+    if header_str:
+        for i, name in enumerate(header_str.split("\t")):
+            label = name if name else f"Column {i + 1}"
+            items.append((str(i), label, f"Use column {i + 1}: {label}"))
+
+    _point_column_enum_cache = items
+    return items
+
+
 class AnimationSettings(PropertyGroup):
     """Property group for CSV Animation settings"""
     EDR_INPUT_MODE_ITEMS = [
@@ -437,6 +459,63 @@ class AnimationSettings(PropertyGroup):
         name="Yaw Column",
         description="CSV column to read Yaw (deg) from; set to (None) if absent",
         items=_motion_column_items,
+    )
+
+    # --- Flexible point CSV column mapping ---
+    point_csv_filepath: StringProperty(
+        name="Point CSV File",
+        description="Path of the point CSV file loaded for column mapping",
+        default="",
+        subtype='FILE_PATH',
+    )
+
+    point_csv_headers: StringProperty(
+        name="Point CSV Headers",
+        description="Tab-separated list of column names from the loaded point CSV",
+        default="",
+    )
+
+    point_csv_has_header: BoolProperty(
+        name="Point CSV Has Header Row",
+        description="Whether the loaded point CSV starts with a text header row",
+        default=False,
+    )
+
+    point_scale_factor: FloatProperty(
+        name="Scale Factor",
+        description="Scale applied to imported point coordinates (default converts feet to meters)",
+        default=0.3048,
+        precision=6,
+    )
+
+    point_col_number: EnumProperty(
+        name="Point Number Column",
+        description="CSV column to read the Point Number from; set to (None) to auto-number",
+        items=_point_column_items,
+    )
+
+    point_col_x: EnumProperty(
+        name="X Column",
+        description="CSV column to read the X coordinate from",
+        items=_point_column_items,
+    )
+
+    point_col_y: EnumProperty(
+        name="Y Column",
+        description="CSV column to read the Y coordinate from",
+        items=_point_column_items,
+    )
+
+    point_col_z: EnumProperty(
+        name="Z Column",
+        description="CSV column to read the Z coordinate from",
+        items=_point_column_items,
+    )
+
+    point_col_description: EnumProperty(
+        name="Description Column",
+        description="CSV column to read the Description from; set to (None) if absent",
+        items=_point_column_items,
     )
 
 
