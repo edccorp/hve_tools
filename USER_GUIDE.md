@@ -13,17 +13,19 @@ tasks step by step. For a terse feature-by-feature reference, see
 2. [Install and find the panels](#2-install-and-find-the-panels)
 3. [How the sidebar is organized](#3-how-the-sidebar-is-organized)
 4. [Task guides](#4-task-guides)
-   - [4.1 Quick start: animate a vehicle from EDR data](#41-quick-start-animate-a-vehicle-from-edr-data)
-   - [4.2 Understanding the CSV column mapping](#42-understanding-the-csv-column-mapping)
-   - [4.3 Prepare objects for HVE export](#43-prepare-objects-for-hve-export)
-   - [4.4 Export H3D files](#44-export-h3d-files)
-   - [4.5 Import post-simulation results](#45-import-post-simulation-results)
-   - [4.6 Animate from EDR data](#46-animate-from-edr-data)
-   - [4.7 Animate from XYZ/RPY motion data](#47-animate-from-xyzrpy-motion-data)
-   - [4.8 Import survey / point data](#48-import-survey--point-data)
-   - [4.9 Motion path tools](#49-motion-path-tools)
-   - [4.10 Scale an object to a known distance](#410-scale-an-object-to-a-known-distance)
-   - [4.11 Bake speed and acceleration](#411-bake-speed-and-acceleration)
+   - **Pre-Simulation Setup**
+     - [4.1 Prepare objects for HVE export](#41-prepare-objects-for-hve-export)
+     - [4.2 Export H3D files](#42-export-h3d-files)
+   - **Post-Simulation Processing**
+     - [4.3 Import post-simulation results](#43-import-post-simulation-results)
+   - **Other Tools**
+     - [4.4 Understanding the CSV column mapping](#44-understanding-the-csv-column-mapping)
+     - [4.5 Animate from EDR data](#45-animate-from-edr-data)
+     - [4.6 Animate from XYZ/RPY motion data](#46-animate-from-xyzrpy-motion-data)
+     - [4.7 Import survey / point data](#47-import-survey--point-data)
+     - [4.8 Motion path tools](#48-motion-path-tools)
+     - [4.9 Scale an object to a known distance](#49-scale-an-object-to-a-known-distance)
+     - [4.10 Bake speed and acceleration](#410-bake-speed-and-acceleration)
 5. [Units and scale](#5-units-and-scale)
 6. [Troubleshooting](#6-troubleshooting)
 7. [Example files](#7-example-files)
@@ -74,44 +76,87 @@ The **HVE** tab groups everything into three top-level panels:
 | Panel | Use it for | Sub-panels |
 |-------|-----------|------------|
 | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
-| **Post-Simulation Processing** | Bringing HVE results back into Blender | **Variable Output Importer**, **HVE FBX Importer**, **RaceRender Converter** |
+| **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
 | **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Scale Objects**, **Speed + Acceleration** |
 
-Most panels are collapsed by default — click a panel header to expand it.
+Most panels are collapsed by default — click a panel header to expand it. The
+task guides below follow this same order: Pre-Simulation Setup, then
+Post-Simulation Processing, then Other Tools.
 
 ---
 
 ## 4. Task guides
 
-Each subsection below is a self-contained task. If you're brand new, start with
-the **Quick start** to get a fast win, skim **Understanding the CSV column
-mapping** (a workflow shared by three importers), then jump to whatever task you
-need.
+Each subsection below is a self-contained task, ordered to match the panels in
+the sidebar. If you just want a fast first result, jump to the quick start at
+the top of [4.5 Animate from EDR data](#45-animate-from-edr-data); if you'll be
+loading CSVs, skim [4.4 Understanding the CSV column mapping](#44-understanding-the-csv-column-mapping)
+first.
 
-### 4.1 Quick start: animate a vehicle from EDR data
+### Pre-Simulation Setup
 
-This five-minute walkthrough uses the bundled `EDR_YawRate_Example.csv` to turn
-speed/yaw-rate data into a moving object. See
-[4.6 Animate from EDR data](#46-animate-from-edr-data) for the full set of
-options.
+### 4.1 Prepare objects for HVE export
 
-1. Add or select an object to drive (e.g. **Add → Mesh → Cube**, or a vehicle
-   you've imported).
-2. Open **Other Tools → EDR Data Importer / Entry**.
-3. Set **Select EDR Object** to your object.
-4. Leave **EDR Input Mode** on **Yaw Rate**.
-5. Set **Frame Rate** to match your data cadence (the example is 0.1 s samples,
-   so 10 fps reproduces it exactly; any frame rate is resampled).
-6. Under **Import CSV (map columns)**, click **Load CSV File** and pick
-   `EDR_YawRate_Example.csv`. The **Time / Speed / Yaw Rate** dropdowns fill in
-   automatically from the header row.
-7. Click **Import Mapped Data**. The table below fills with rows.
-8. Click **Animate Object**.
+Open **Pre-Simulation Setup → H3D Setup**, then:
 
-Scrub the timeline — the object accelerates and turns according to the data. If
-it drives the wrong way, see [Troubleshooting](#6-troubleshooting).
+1. **Add Materials** — expand and click **Add Materials** to create the generic,
+   standard, and HVE light material sets.
+2. **Object Type** — expand and classify the selected object as **Environment**,
+   **Vehicle**, or **GATB Surface**. If you selected several objects of mixed
+   types, use the one-click reclassify buttons shown in the warning.
+3. **Vehicle Lighting** (vehicles only) — tag light objects (headlights, brake,
+   turn, fog, reverse, tail, etc.) so HVE knows their function.
+4. **Terrain Properties** (environments only) — set:
+   - **Surface**: type (Road / Friction Zone / Curb / Water / Other), overlay
+     label, material name, friction multiplier. The **Copy Type + Overlay to
+     Selected** button pushes surface type and overlay from the active object to
+     the rest of the selection.
+   - **Water**: depth and static-water flag.
+   - **Soil**: Bekker exponent, frictional/cohesive modifiers, moisture,
+     macrotexture.
+   - **Forces**: constant, linear, quadratic, cubic, unloading, damping.
+5. Optionally **Save Preset** / **Load Preset**, or pick one from **Apply
+   Preset**, to reuse terrain settings (presets live in `hve_presets/`).
 
-### 4.2 Understanding the CSV column mapping
+### 4.2 Export H3D files
+
+1. Select the object(s) to export and confirm their HVE type in **H3D Setup**.
+2. Open **Pre-Simulation Setup → Export to HVE**. The button adapts to the
+   selected type:
+   - **Export Vehicle** → `.h3d`
+   - **Export Environment** → `.h3d`
+   - **Export GATB Surfaces** → `.csv`
+3. If a mixed selection is detected, classify everything as one type first
+   (the panel offers buttons to do this).
+4. In the file browser, set options (selection-only, hierarchy, normals,
+   compression, axis conversion, global scale) and save.
+
+### Post-Simulation Processing
+
+### 4.3 Import post-simulation results
+
+Open **Post-Simulation Processing** and pick the matching importer:
+
+- **HVE FBX Importer** — import an HVE `.fbx`. Options include:
+  - **Convert FBX Through USD** (recommended for reliable geometry / shape-key
+    data — round-trips through a temporary USD file).
+  - **Merge Body Mesh** to join a vehicle's body objects.
+  - Deformation storage as **Shape Keys** or an **External MDD File**.
+  - **Apply Merge by Distance and Smooth** mesh cleanup.
+  - **Find Missing Files** to locate assets in the public HVE support path.
+
+  After import, run **Process Imported FBX** to apply the reduce → merge →
+  smooth pipeline. Imported data is organized into HVE collections by event,
+  vehicle, wheels, and body.
+- **Variable Output Importer** — import an HVE `.hvo`/`.csv` of time plus
+  variable-output columns. Choose **feet or meters**, optionally override the
+  **scale factor**, and optionally **save separate vehicle CSV files**.
+- **RaceRender Converter** — convert HVE variable output into RaceRender-ready
+  `.csv` files.
+
+### Other Tools
+
+### 4.4 Understanding the CSV column mapping
 
 The **EDR Data Importer**, **Motion Data Importer**, and **Point Importer** all
 share the same "load a file, map its columns, import" pattern. Learn it once and
@@ -138,89 +183,42 @@ Notes:
 - Reordered columns and extra unrelated columns are fine — only the mapped
   columns are read.
 
-### 4.3 Prepare objects for HVE export
+### 4.5 Animate from EDR data
 
-Open **Pre-Simulation Setup → H3D Setup**, then:
+Open **Other Tools → EDR Data Importer / Entry** to turn speed with yaw-rate,
+steering-angle, or path data into motion.
 
-1. **Add Materials** — expand and click **Add Materials** to create the generic,
-   standard, and HVE light material sets.
-2. **Object Type** — expand and classify the selected object as **Environment**,
-   **Vehicle**, or **GATB Surface**. If you selected several objects of mixed
-   types, use the one-click reclassify buttons shown in the warning.
-3. **Vehicle Lighting** (vehicles only) — tag light objects (headlights, brake,
-   turn, fog, reverse, tail, etc.) so HVE knows their function.
-4. **Terrain Properties** (environments only) — set:
-   - **Surface**: type (Road / Friction Zone / Curb / Water / Other), overlay
-     label, material name, friction multiplier. The **Copy Type + Overlay to
-     Selected** button pushes surface type and overlay from the active object to
-     the rest of the selection.
-   - **Water**: depth and static-water flag.
-   - **Soil**: Bekker exponent, frictional/cohesive modifiers, moisture,
-     macrotexture.
-   - **Forces**: constant, linear, quadratic, cubic, unloading, damping.
-5. Optionally **Save Preset** / **Load Preset**, or pick one from **Apply
-   Preset**, to reuse terrain settings (presets live in `hve_presets/`).
+**First run (quick start).** For a fast result using the bundled
+`EDR_YawRate_Example.csv`:
 
-### 4.4 Export H3D files
+1. Add or select an object to drive (e.g. **Add → Mesh → Cube**).
+2. Set **Select EDR Object** to that object and leave **EDR Input Mode** on
+   **Yaw Rate**.
+3. Set **Frame Rate** (the example is 0.1 s samples, so 10 fps reproduces it
+   exactly; any frame rate is resampled).
+4. Under **Import CSV (map columns)**, click **Load CSV File**, pick the example,
+   then click **Import Mapped Data**.
+5. Click **Animate Object** and scrub the timeline.
 
-1. Select the object(s) to export and confirm their HVE type in **H3D Setup**.
-2. Open **Pre-Simulation Setup → Export to HVE**. The button adapts to the
-   selected type:
-   - **Export Vehicle** → `.h3d`
-   - **Export Environment** → `.h3d`
-   - **Export GATB Surfaces** → `.csv`
-3. If a mixed selection is detected, classify everything as one type first
-   (the panel offers buttons to do this).
-4. In the file browser, set options (selection-only, hierarchy, normals,
-   compression, axis conversion, global scale) and save.
+**Input modes.** The panel shows only the inputs relevant to the selected mode:
 
-### 4.5 Import post-simulation results
+- **Yaw Rate** — data is `Time, Speed, Yaw Rate` (deg/s). Optionally enable
+  **Use Slip Estimate** and tune **Slip Gain** / **Slip Max** to add an apparent
+  body-slip angle to the motion.
+- **Steering Wheel Angle** — data is `Time, Speed, Steering Wheel Angle` (deg).
+  Set **Wheelbase** and **Steering Gear Ratio**; yaw rate is derived with a
+  bicycle model: `yaw_rate = speed / wheelbase * tan(swa / gear_ratio)`. Slip
+  estimate is available here too.
+- **Path Follow** — data is just `Time, Speed`; an existing curve/mesh supplies
+  the heading. Pick a **Path Object** (curve or polyline mesh, different from the
+  animated object), and optionally **Align to Path** with a **Path Yaw Offset**
+  so the object faces its direction of travel.
 
-Open **Post-Simulation Processing** and pick the matching importer:
-
-- **Variable Output Importer** — import an HVE `.hvo`/`.csv` of time plus
-  variable-output columns. Choose **feet or meters**, optionally override the
-  **scale factor**, and optionally **save separate vehicle CSV files**.
-- **HVE FBX Importer** — import an HVE `.fbx`. Options include:
-  - **Convert FBX Through USD** (recommended for reliable geometry / shape-key
-    data — round-trips through a temporary USD file).
-  - **Merge Body Mesh** to join a vehicle's body objects.
-  - Deformation storage as **Shape Keys** or an **External MDD File**.
-  - **Apply Merge by Distance and Smooth** mesh cleanup.
-  - **Find Missing Files** to locate assets in the public HVE support path.
-
-  After import, run **Process Imported FBX** to apply the reduce → merge →
-  smooth pipeline. Imported data is organized into HVE collections by event,
-  vehicle, wheels, and body.
-- **RaceRender Converter** — convert HVE variable output into RaceRender-ready
-  `.csv` files.
-
-### 4.6 Animate from EDR data
-
-Open **Other Tools → EDR Data Importer / Entry** and choose an **EDR Input
-Mode**. The panel shows only the inputs relevant to that mode:
-
-**Yaw Rate** — data is `Time, Speed, Yaw Rate` (deg/s).
-- Optionally enable **Use Slip Estimate** and tune **Slip Gain** / **Slip Max**
-  to add an apparent body-slip angle to the motion.
-
-**Steering Wheel Angle** — data is `Time, Speed, Steering Wheel Angle` (deg).
-- Set **Wheelbase** and **Steering Gear Ratio**; yaw rate is derived with a
-  bicycle model: `yaw_rate = speed / wheelbase * tan(swa / gear_ratio)`.
-- Slip estimate is available here too.
-
-**Path Follow** — data is just `Time, Speed`; an existing curve/mesh supplies the
-heading.
-- Pick a **Path Object** (curve or polyline mesh, different from the animated
-  object).
-- Optionally **Align to Path** with a **Path Yaw Offset** so the object faces
-  its direction of travel.
-
-Common steps for every mode:
+**Common steps for every mode:**
 
 1. Set **Select EDR Object** and **Frame Rate**.
 2. **Import CSV (map columns)**: click **Load CSV File**, then **Import Mapped
-   Data** (see [4.2](#42-understanding-the-csv-column-mapping)). All four column
+   Data** (see [4.4](#44-understanding-the-csv-column-mapping)). All four column
    dropdowns (Time / Speed / Yaw Rate / Steering Wheel Angle) stay available
    regardless of mode, so both yaw-rate and steering values are stored — you can
    switch modes and re-animate without reloading. You can also add/edit/remove
@@ -233,7 +231,7 @@ Common steps for every mode:
 Try the examples: `EDR_YawRate_Example.csv`, `EDR_SteeringAngle_Example.csv`,
 or `EDR_Combined_Example.csv` (which carries all four columns at once).
 
-### 4.7 Animate from XYZ/RPY motion data
+### 4.6 Animate from XYZ/RPY motion data
 
 Open **Other Tools → Motion Data Importer** for data that already contains full
 pose per timestamp.
@@ -242,7 +240,7 @@ pose per timestamp.
 2. Choose **Extrapolation Mode** (Linear or Constant) for frames beyond the data.
 3. Under **Import CSV (map columns)**, **Load CSV File** and review the
    **Time / X / Y / Z / Roll / Pitch / Yaw** dropdowns
-   (see [4.2](#42-understanding-the-csv-column-mapping)). Headers may be in any
+   (see [4.4](#44-understanding-the-csv-column-mapping)). Headers may be in any
    order or abbreviated (`t`, `x`, `y`, `z`, `r`, `p`, `y`).
 4. Click **Import and Animate**.
 
@@ -250,13 +248,13 @@ pose per timestamp.
 **(None)**. Position values are converted from feet to meters in Imperial
 scenes. Sample file: `XYZRPY_Example.csv`.
 
-### 4.8 Import survey / point data
+### 4.7 Import survey / point data
 
 Open **Other Tools → Point Importer** to place markers from a coordinate list.
 
 1. Under **Import CSV (map columns)**, **Load CSV File** and review the
    **Point Number / X / Y / Z / Description** dropdowns
-   (see [4.2](#42-understanding-the-csv-column-mapping)).
+   (see [4.4](#44-understanding-the-csv-column-mapping)).
 2. Set the **Scale Factor** (default `0.3048` converts feet to meters).
 3. Click **Import Points**.
 
@@ -266,7 +264,7 @@ creates a circle, a number label, and a description label at each point in an
 **Imported Points** collection, and connects points that share a description
 into a polyline. Sample file: `XYZ_Points_Example.csv`.
 
-### 4.9 Motion path tools
+### 4.8 Motion path tools
 
 Open **Other Tools → Motion Path Tools** with animated object(s) selected:
 
@@ -281,7 +279,7 @@ Open **Other Tools → Motion Path Tools** with animated object(s) selected:
   interval, zero frame, size, forward axis, and yaw offset, then click
   **Create Location Markers**.
 
-### 4.10 Scale an object to a known distance
+### 4.9 Scale an object to a known distance
 
 Open **Other Tools → Scale Objects**:
 
@@ -291,7 +289,7 @@ Open **Other Tools → Scale Objects**:
 4. Click **Scale Object**. The object is uniformly scaled so the two vertices
    match the target distance.
 
-### 4.11 Bake speed and acceleration
+### 4.10 Bake speed and acceleration
 
 Open **Other Tools → Speed + Acceleration** with an animated object selected (or
 assign a **Source Object**):
