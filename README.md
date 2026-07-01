@@ -175,13 +175,13 @@ To drive the object along a path you already have (an imported point polyline, a
 1. Open **Other Tools → Motion Data Importer**.
 2. Select the motion target object.
 3. Set frame rate and extrapolation mode.
-4. Click **Import and Animate Object** and choose a CSV with this row format:
+4. Under **Import CSV (map columns)**, click **Load CSV File** and choose a CSV. A typical file has this row format:
 
 ```csv
 Time,X,Y,Z,Roll,Pitch,Yaw
 ```
 
-Alternatively, use **Import CSV (map columns)** when your file has the same fields in a different order or under different header names. Click **Load CSV File**, review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (generic `Column N` labels appear when the file has no header row), then click **Import Mapped Data**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
+5. Review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (fields may be in any order or under different header names; generic `Column N` labels appear when the file has no header row), then click **Import and Animate**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
 
 ### 7. Import XYZ points
 

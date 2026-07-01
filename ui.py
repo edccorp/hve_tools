@@ -739,9 +739,8 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
             c.label(text=f"Stored rows for {target_obj.name}: {len(target_obj.motion_data_entries)}")
         else:
             c.label(text="No target object selected")
-        c.operator("import_anim.csv", text="Import and Animate Object", icon='IMPORT')
 
-        # --- Flexible CSV import: load a file, map columns, then import ---
+        # --- Load a CSV, map its columns, then import + animate ---
         c.separator()
         map_box = l.box()
         map_box.label(text="Import CSV (map columns)", icon='IMPORT')
@@ -757,7 +756,7 @@ class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
             map_box.prop(anim_settings, "motion_col_roll")
             map_box.prop(anim_settings, "motion_col_pitch")
             map_box.prop(anim_settings, "motion_col_yaw")
-            map_box.operator("import_anim.import_mapped_motion_csv", text="Import Mapped Data")
+            map_box.operator("import_anim.import_mapped_motion_csv", text="Import and Animate", icon='IMPORT')
         
 class HVE_PT_motion_paths(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'

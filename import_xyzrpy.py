@@ -368,7 +368,7 @@ class HVE_OT_LoadMotionCSVHeaders(bpy.types.Operator, ImportHelper):
 class HVE_OT_ImportMappedMotionCSV(bpy.types.Operator):
     """Import the loaded motion CSV using the selected column mapping and animate the object"""
     bl_idname = "import_anim.import_mapped_motion_csv"
-    bl_label = "Import Mapped Data"
+    bl_label = "Import and Animate"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
