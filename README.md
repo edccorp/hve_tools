@@ -40,12 +40,10 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Override the scale factor.
   - Optionally save separate vehicle CSV files.
 - **HVE FBX importer** (`.fbx`): import HVE FBX motion and geometry data.
-  - Imports FBX files and can optionally round-trip the imported result through a temporary USD file before processing, matching Blender's native FBX-to-USD export path used for more reliable HVE FBX geometry and shape-key data.
   - Updates the scene timeline to include imported animation.
   - Renames imported HVE hierarchy components into cleaner labels.
   - Organizes imported data into HVE collections by event, vehicle, wheels, and body mesh.
-  - Can optionally apply mesh cleanup modifiers, join body mesh objects per vehicle, keep deformation as shape keys or bake it to external MDD point-cache files, and merge duplicate imported materials per vehicle.
-  - Sets newly imported material metallic values to zero and can optionally find missing files in the public HVE support-files path.
+  - Provides a post-import **Process Imported FBX** step that reduces shape keys (capped by **Max Shape Key Samples**), merges body meshes, and smooths geometry.
 - **RaceRender converter** (`.csv`): convert HVE variable-output data into RaceRender-ready CSV files.
 
 ### EDR and motion animation tools
@@ -136,7 +134,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### 4. Import HVE post-simulation files
 
 - For variable-output files, open **Post-Simulation Processing → Variable Output Importer**, choose the `.hvo` or `.csv`, set scale options, and import.
-- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, choose the `.fbx`, keep **Convert FBX Through USD** enabled when you want the importer to process a temporary USD version of the FBX result, optionally enable **Merge Body Mesh**, choose **Shape Keys** or **External MDD File** deformation storage, optionally enable **Apply Merge by Distance and Smooth** mesh cleanup, optionally enable **Find Missing Files**, and import.
+- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, click **Import FBX** and choose the `.fbx` (the hierarchy is renamed and sorted into HVE collections on import), then set **Max Shape Key Samples** and click **Process Imported FBX** to reduce shape keys, merge body meshes, and smooth the result.
 - For RaceRender conversion, open **Post-Simulation Processing → RaceRender Converter** and convert the HVE variable output into RaceRender-ready `.csv` files.
 
 ### 5. Animate from EDR data

@@ -137,17 +137,13 @@ Open **Pre-Simulation Setup → H3D Setup**, then:
 
 Open **Post-Simulation Processing** and pick the matching importer:
 
-- **HVE FBX Importer** — import an HVE `.fbx`. Options include:
-  - **Convert FBX Through USD** (recommended for reliable geometry / shape-key
-    data — round-trips through a temporary USD file).
-  - **Merge Body Mesh** to join a vehicle's body objects.
-  - Deformation storage as **Shape Keys** or an **External MDD File**.
-  - **Apply Merge by Distance and Smooth** mesh cleanup.
-  - **Find Missing Files** to locate assets in the public HVE support path.
-
-  After import, run **Process Imported FBX** to apply the reduce → merge →
-  smooth pipeline. Imported data is organized into HVE collections by event,
-  vehicle, wheels, and body.
+- **HVE FBX Importer** — click **Import FBX** and choose the `.fbx`. On import,
+  the HVE hierarchy is renamed into cleaner labels, the scene timeline is
+  extended to cover the animation, and objects are organized into HVE
+  collections by event, vehicle, wheels, and body. Then set **Max Shape Key
+  Samples** (the cap on shape keys kept per mesh; 0 = no cap) and click
+  **Process Imported FBX** to run the **Reduce Keys → Merge Meshes → Smooth**
+  cleanup pipeline.
 - **Variable Output Importer** — import an HVE `.hvo`/`.csv` of time plus
   variable-output columns. Choose **feet or meters**, optionally override the
   **scale factor**, and optionally **save separate vehicle CSV files**.
