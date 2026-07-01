@@ -4,7 +4,7 @@ HVE Tools is a Blender add-on package for Human Vehicle Environment (HVE) workfl
 
 The add-on targets Blender 4.x and uses Blender's bundled Python modules plus standard Python libraries. No separate Python package installation is required for normal Blender use.
 
-> **New to the add-on?** See the step-by-step [User Guide](USER_GUIDE.md) for a hands-on walkthrough of every tool. This README is a compact feature reference. Inside Blender you can open the guide any time with the **Open User Guide** button at the top of each HVE panel — it opens a bundled offline copy (`docs/USER_GUIDE.html`) in your browser, falling back to the online guide if the file is missing.
+> **New to the add-on?** See the step-by-step [User Guide](USER_GUIDE.md) for a hands-on walkthrough of every tool. This README is a compact feature reference. Inside Blender you can open the guide any time from the **Documentation** panel at the bottom of the HVE tab — its **Open User Guide** button opens a bundled offline copy (`docs/USER_GUIDE.html`) in your browser, falling back to the online guide if the file is missing.
 
 ## Capabilities
 

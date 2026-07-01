@@ -89,7 +89,7 @@ def sync_fps_with_scene(self, context):
         context.scene.anim_settings.anim_fps = context.scene.render.fps
         
 def update_panel_bl_category(self, context):
-    main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_other_tools)
+    main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_other_tools, HVE_PT_documentation)
     sub_panels = (
         HVE_PT_mechanist_setup,
         HVE_PT_mechanist_export,
@@ -312,8 +312,6 @@ class HVE_PT_pre(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
-        l.separator()
         col = l.column(align=True)
         col.label(text="Configure scene objects before export.", icon='INFO')
         col.label(text="Use H3D Setup, then run Export to HVE.")
@@ -555,8 +553,6 @@ class HVE_PT_post(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
-        l.separator()
         col = l.column(align=True)
         col.label(text="Import or export simulation results.", icon='INFO')
         col.label(text="Choose a tool below based on file type.")
@@ -617,8 +613,6 @@ class HVE_PT_other_tools(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
-        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
-        l.separator()
         col = l.column(align=True)
         col.label(text="Utilities for data prep and analysis.", icon='TOOL_SETTINGS')
         col.label(text="Select a utility panel below.")
@@ -961,6 +955,23 @@ class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
         c.operator("export_racerender.csv", text="Convert to RaceRender CSV", icon='EXPORT')
 
 
+class HVE_PT_documentation(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Documentation"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        l = self.layout
+        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
+        l.label(text="Opens the offline guide in your browser.", icon='INFO')
+
+
 classes = (
     HVE_PT_pre,
     HVE_PT_mechanist_setup,
@@ -977,6 +988,7 @@ classes = (
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
     HVE_PT_race_render_exporter,
+    HVE_PT_documentation,
     HVE_OT_save_preset,
     HVE_OT_load_preset,
     HVETOOLS_OT_set_selected_hve_type,
