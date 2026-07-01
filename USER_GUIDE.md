@@ -335,18 +335,22 @@ geometry in vehicle simulations.
    gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
    reaches; 0 = unlimited.
 6. Leave **Transfer Point Color** on to carry the cloud's per-point colour onto
-   the surface (averaged per cell) as a `Col` color attribute — handy for PLYs
-   with RGB. It's ignored if the cloud has no colour. With it on, **Create
-   Material** (default) also builds a material whose Base Color is driven by the
-   `Col` attribute and assigns it, so the colours show in material/rendered view
-   with no extra setup.
+   the surface (averaged per cell). It's ignored if the cloud has no colour. With
+   it on:
+   - **Bake Color to Texture** (default) bakes the colours to a JPG saved next to
+     your `.blend`, adds grid UVs, and builds an image-texture material. This is
+     the path that carries colour into HVE — it exports as a normal texture. Set
+     **Texture Size Cap** to limit the image's longest side (0 matches the grid
+     exactly). *You must save the `.blend` first* so the JPG has somewhere to go.
+   - Turn baking off to instead build a simpler material driven directly by the
+     `Col` color attribute (shows in Blender's material/rendered view, but does
+     not carry into HVE).
 7. Click **Create Roadway Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
-object so it flows into the H3D environment export. To carry the colours into
-HVE, enable **Vertex Colors** in the H3D export options (Export to HVE →
-Geometry); it writes the colours as Open Inventor per-vertex material. It shows a wait cursor and
+object so it flows into the H3D environment export (with the baked texture, if
+enabled). It shows a wait cursor and
 progress while it runs, and the report line notes the grid size and how many
 cells were sampled — if it warns that no cells had enough points, increase the
 cell size.

@@ -85,7 +85,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Set the grid **resolution** (cell size), shown in the scene's length units.
   - Sample ground height per cell using a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
   - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
-  - Optionally transfer the point cloud's per-point colour onto the surface as a color attribute, and build a material that drives Base Color from it.
+  - Optionally transfer the point cloud's per-point colour and bake it to a JPG texture (saved next to the .blend) with grid UVs and an image-texture material, so the colour exports to HVE through the standard texture path.
   - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.
@@ -234,8 +234,8 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 
 1. Import a roadway point cloud as a mesh object (a PLY imports as mesh vertices).
 2. Open **Other Tools → Roadway Surface** and select the cloud (or set it as the **Point Cloud**).
-3. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds, and leave **Transfer Point Color** on to carry PLY colours onto the surface.
-4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export.
+3. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds, and leave **Transfer Point Color** on. With **Bake Color to Texture** (default), save the `.blend` first so the JPG texture can be written next to it.
+4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export; with baking on it carries a texture that exports to HVE.
 
 ## Included examples
 

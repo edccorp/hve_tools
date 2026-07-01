@@ -8,6 +8,8 @@ bl_info = {
     "category": "Object",
 }
 
+import os
+import re
 import warnings
 
 import bpy
@@ -167,6 +169,45 @@ def _color_grid(points, colors, min_x, min_y, nx, ny, cell_size, max_passes):
     return stacked.reshape(nx * ny, col.shape[1])
 
 
+def color_grid_to_image(colors, nx, ny, max_size=0):
+    """Build an RGBA image from per-vertex colours for baking to a texture.
+
+    ``colors`` is an (nx*ny, C) array in vertex order (index ``j * nx + i``).
+    Returns ``(pixels, width, height)`` where ``pixels`` is a flat RGBA float
+    array of length ``width * height * 4`` laid out bottom-row-first (Blender's
+    image pixel order, matching v=0 at the grid's min-Y edge). When ``max_size``
+    is > 0 and the grid's larger side exceeds it, the image is nearest-sampled
+    down so its longest side is ``max_size``.
+    """
+    arr = np.asarray(colors, dtype=np.float64)
+    channels = arr.shape[1]
+    grid = arr.reshape(ny, nx, channels)
+    if channels < 4:
+        pad = np.ones((ny, nx, 4 - channels), dtype=np.float64)
+        grid = np.concatenate([grid, pad], axis=2)
+    else:
+        grid = grid[:, :, :4]
+
+    width, height = nx, ny
+    if max_size and max(nx, ny) > max_size:
+        scale = max_size / float(max(nx, ny))
+        width = max(1, int(round(nx * scale)))
+        height = max(1, int(round(ny * scale)))
+        yi = np.linspace(0, ny - 1, height).round().astype(np.int64)
+        xi = np.linspace(0, nx - 1, width).round().astype(np.int64)
+        grid = grid[yi][:, xi]
+
+    return grid.reshape(-1), width, height
+
+
+def grid_uvs(nx, ny):
+    """Per-vertex ``(u, v)`` for an ``nx*ny`` grid; vertex index is ``j * nx + i``."""
+    us = (np.arange(nx, dtype=np.float64) / (nx - 1)) if nx > 1 else np.zeros(nx)
+    vs = (np.arange(ny, dtype=np.float64) / (ny - 1)) if ny > 1 else np.zeros(ny)
+    uu, vv = np.meshgrid(us, vs)
+    return np.column_stack([uu.ravel(), vv.ravel()])
+
+
 def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None):
     """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
 
@@ -238,6 +279,60 @@ def _build_color_attribute_material(name, attribute_name):
     tree.links.new(attribute.outputs['Color'], principled.inputs['Base Color'])
     tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
     return material
+
+
+def _build_image_texture_material(name, image):
+    """Create a material whose Base Color comes from an Image Texture node."""
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    tree = material.node_tree
+    tree.nodes.clear()
+
+    output = tree.nodes.new('ShaderNodeOutputMaterial')
+    output.location = (400, 0)
+    principled = tree.nodes.new('ShaderNodeBsdfPrincipled')
+    principled.location = (100, 0)
+    tex = tree.nodes.new('ShaderNodeTexImage')
+    tex.location = (-300, 0)
+    tex.image = image
+
+    tree.links.new(tex.outputs['Color'], principled.inputs['Base Color'])
+    tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
+    return material
+
+
+def _safe_filename(name):
+    """Sanitize ``name`` into a safe base filename."""
+    cleaned = re.sub(r"[^\w\-]+", "_", name).strip("_")
+    return cleaned or "Roadway_Surface"
+
+
+def _apply_baked_texture(source_name, new_mesh, result, max_size, blend_dir):
+    """Bake the surface colours to a JPG, add grid UVs and an image material.
+
+    Returns the saved image file path.
+    """
+    nx, ny = result["nx"], result["ny"]
+    pixels, tw, th = color_grid_to_image(result["colors"], nx, ny, max_size)
+
+    image = bpy.data.images.new(f"Roadway Color: {source_name}", width=tw, height=th, alpha=True)
+    image.pixels.foreach_set(np.asarray(pixels, dtype=np.float32))
+
+    jpg_path = os.path.join(blend_dir, _safe_filename(f"Roadway_Color_{source_name}") + ".jpg")
+    image.filepath_raw = jpg_path
+    image.file_format = 'JPEG'
+    image.save()
+
+    # UVs: a per-vertex grid UV assigned to each loop by its vertex index.
+    vert_uv = grid_uvs(nx, ny)
+    uv_layer = new_mesh.uv_layers.new(name="UVMap")
+    loop_vi = np.empty(len(new_mesh.loops), dtype=np.int64)
+    new_mesh.loops.foreach_get("vertex_index", loop_vi)
+    uv_layer.data.foreach_set("uv", vert_uv[loop_vi].reshape(-1))
+
+    material = _build_image_texture_material(f"Roadway Surface: {source_name}", image)
+    new_mesh.materials.append(material)
+    return jpg_path
 
 
 def _find_point_color_attribute(mesh):
@@ -334,10 +429,27 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             new_mesh.from_pydata(result["verts"].tolist(), [], result["faces"].tolist())
             new_mesh.update()
 
+            baked_texture_path = None
             if "colors" in result:
                 color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
-                if bool(scene.roadway_create_material):
+
+                made_material = False
+                if bool(scene.roadway_bake_texture):
+                    if bpy.data.filepath:
+                        baked_texture_path = _apply_baked_texture(
+                            source.name, new_mesh, result,
+                            int(scene.roadway_texture_max_size),
+                            os.path.dirname(bpy.data.filepath),
+                        )
+                        made_material = True
+                    else:
+                        self.report(
+                            {'WARNING'},
+                            "Save the .blend first to bake the roadway texture; "
+                            "used a vertex-colour material instead.",
+                        )
+                if not made_material and (bool(scene.roadway_create_material) or bool(scene.roadway_bake_texture)):
                     material = _build_color_attribute_material(f"Roadway Surface: {source.name}", "Col")
                     new_mesh.materials.append(material)
 
@@ -358,11 +470,12 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
             wm.progress_update(100)
             colored = " (coloured)" if "colors" in result else ""
+            texture_note = f" Texture saved to {os.path.basename(baked_texture_path)}." if baked_texture_path else ""
             self.report(
                 {'INFO'},
                 f"Roadway surface{colored}: {result['nx']}x{result['ny']} grid, "
                 f"{len(result['faces'])} faces, {result['sampled']}/{result['total']} cells "
-                f"sampled from {len(points)} points.",
+                f"sampled from {len(points)} points.{texture_note}",
             )
             return {'FINISHED'}
         finally:

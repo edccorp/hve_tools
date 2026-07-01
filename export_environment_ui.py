@@ -106,7 +106,6 @@ class H3D_PT_export_environment_geometry(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, "use_normals")
-        layout.prop(operator, "use_vertex_colors")
         layout.prop(operator, "use_compress")
 
 
@@ -128,12 +127,6 @@ class ExportEnvironment(bpy.types.Operator, ExportHelper):
     use_normals: BoolProperty(
             name="Normals",
             description="Write normals with geometry",
-            default=False,
-            )
-    use_vertex_colors: BoolProperty(
-            name="Vertex Colors",
-            description=("Export per-vertex colours (from a color attribute such as the "
-                         "Roadway Surface tool's) as Open Inventor PER_VERTEX_INDEXED material"),
             default=False,
             )
     use_compress: BoolProperty(

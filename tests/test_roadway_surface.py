@@ -22,6 +22,8 @@ WANTED = {
     "build_mesh_arrays",
     "_color_grid",
     "generate_surface",
+    "color_grid_to_image",
+    "grid_uvs",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -36,6 +38,8 @@ cell_indices = ns["cell_indices"]
 fill_holes_grid = ns["fill_holes_grid"]
 build_mesh_arrays = ns["build_mesh_arrays"]
 generate_surface = ns["generate_surface"]
+color_grid_to_image = ns["color_grid_to_image"]
+grid_uvs = ns["grid_uvs"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -108,3 +112,35 @@ def test_generate_surface_end_to_end_with_color():
 
 def test_generate_surface_rejects_tiny_input():
     assert generate_surface(np.zeros((2, 3)), 1.0, 2.0, 5.0) is None
+
+
+def test_color_grid_to_image_orientation_and_size():
+    # 2x2 grid; vertex order is j*nx+i, so row 0 (bottom, j=0) is the first two.
+    colors = np.array([
+        [0.0, 0.0, 0.0, 1.0],  # (i0, j0)
+        [1.0, 0.0, 0.0, 1.0],  # (i1, j0)
+        [0.0, 1.0, 0.0, 1.0],  # (i0, j1)
+        [0.0, 0.0, 1.0, 1.0],  # (i1, j1)
+    ])
+    pixels, w, h = color_grid_to_image(colors, 2, 2, max_size=0)
+    assert (w, h) == (2, 2)
+    assert len(pixels) == 2 * 2 * 4
+    # Bottom row first: black then red.
+    assert list(pixels[:8]) == [0, 0, 0, 1, 1, 0, 0, 1]
+
+
+def test_color_grid_to_image_pads_rgb_and_caps_size():
+    rgb = np.tile([0.3, 0.4, 0.5], (8, 1))  # 4x2 grid, 3 channels
+    pixels, w, h = color_grid_to_image(rgb, 4, 2, max_size=2)
+    assert (w, h) == (2, 1)              # longest side capped to 2
+    assert len(pixels) == 2 * 1 * 4
+    assert list(pixels[:4]) == [0.3, 0.4, 0.5, 1.0]  # alpha padded
+
+
+def test_grid_uvs_corners():
+    uv = grid_uvs(3, 2)
+    assert uv.shape == (6, 2)
+    assert tuple(uv[0]) == (0.0, 0.0)
+    assert tuple(uv[2]) == (1.0, 0.0)
+    assert tuple(uv[3]) == (0.0, 1.0)
+    assert tuple(uv[5]) == (1.0, 1.0)

@@ -976,7 +976,13 @@ class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
             c.prop(scene, "roadway_fill_distance")
         c.prop(scene, "roadway_transfer_color")
         if scene.roadway_transfer_color:
-            c.prop(scene, "roadway_create_material")
+            c.prop(scene, "roadway_bake_texture")
+            if scene.roadway_bake_texture:
+                c.prop(scene, "roadway_texture_max_size")
+                if not bpy.data.filepath:
+                    c.label(text="Save the .blend to bake the texture", icon='ERROR')
+            else:
+                c.prop(scene, "roadway_create_material")
 
         c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
         c.label(text="Result is classified as Environment", icon='WORLD')

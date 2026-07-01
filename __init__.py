@@ -270,6 +270,18 @@ try:
             description="Create a material whose Base Color is driven by the transferred Col color attribute, and assign it to the surface",
             default=True,
         )
+        bpy.types.Scene.roadway_bake_texture = bpy.props.BoolProperty(
+            name="Bake Color to Texture",
+            description="Bake the per-cell colours to a JPG image (saved next to the .blend), add grid UVs, and build an image-texture material. Textures export to HVE more reliably than vertex colours",
+            default=True,
+        )
+        bpy.types.Scene.roadway_texture_max_size = IntProperty(
+            name="Texture Size Cap",
+            description="Cap on the baked texture's longest side in pixels; 0 matches the grid exactly",
+            default=4096,
+            min=0,
+            soft_max=16384,
+        )
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
@@ -318,6 +330,8 @@ try:
         del bpy.types.Scene.roadway_fill_holes
         del bpy.types.Scene.roadway_transfer_color
         del bpy.types.Scene.roadway_create_material
+        del bpy.types.Scene.roadway_bake_texture
+        del bpy.types.Scene.roadway_texture_max_size
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
