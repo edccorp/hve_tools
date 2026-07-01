@@ -668,14 +668,12 @@ class HVE_PT_edr_importer(HVE_PT_mechanist_base):
             import_box.label(text=f"File: {os.path.basename(anim_settings.edr_csv_filepath)}")
             if not anim_settings.edr_csv_has_header:
                 import_box.label(text="No header row detected - map columns below", icon='INFO')
+            # Always expose every column so the mapping is ready if you switch
+            # input methods later; unused columns are simply ignored per mode.
             import_box.prop(anim_settings, "edr_col_time")
             import_box.prop(anim_settings, "edr_col_speed")
-            # Only the active mode's third column is relevant; Path Follow needs
-            # just Time and Speed.
-            if edr_mode == 'YAW_RATE':
-                import_box.prop(anim_settings, "edr_col_yaw_rate")
-            elif edr_mode == 'STEERING_WHEEL_ANGLE':
-                import_box.prop(anim_settings, "edr_col_steering")
+            import_box.prop(anim_settings, "edr_col_yaw_rate")
+            import_box.prop(anim_settings, "edr_col_steering")
             import_box.operator("object.import_edr_mapped_csv", text="Import Mapped Data")
 
         c.separator()
