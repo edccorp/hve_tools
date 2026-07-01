@@ -27,6 +27,7 @@ tasks step by step. For a terse feature-by-feature reference, see
      - [4.9 Create timed location markers](#49-create-timed-location-markers)
      - [4.10 Scale an object to a known distance](#410-scale-an-object-to-a-known-distance)
      - [4.11 Bake speed and acceleration](#411-bake-speed-and-acceleration)
+     - [4.12 Build a roadway surface from a point cloud](#412-build-a-roadway-surface-from-a-point-cloud)
 5. [Units and scale](#5-units-and-scale)
 6. [Troubleshooting](#6-troubleshooting)
 7. [Example files](#7-example-files)
@@ -78,7 +79,7 @@ The **HVE** tab groups everything into three top-level panels:
 |-------|-----------|------------|
 | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
 | **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
-| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration** |
+| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration**, **Roadway Surface** |
 
 Most panels are collapsed by default — click a panel header to expand it. The
 task guides below follow this same order: Pre-Simulation Setup, then
@@ -314,6 +315,37 @@ assign a **Source Object**):
 Results are baked as animated custom properties (average speed, forward speed,
 forward/lateral/vertical acceleration) on a helper empty named
 `SpeedData_<object name>`.
+
+### 4.12 Build a roadway surface from a point cloud
+
+Open **Other Tools → Roadway Surface** to drape a clean ground surface over a
+point cloud (for example an imported PLY) so it can be used as environment
+geometry in vehicle simulations.
+
+1. Import your point cloud as a mesh object (a PLY imports as mesh vertices).
+2. Select it, or set it explicitly in **Point Cloud** (leave empty to use the
+   active object).
+3. Set **Resolution (Cell Size)** — the spacing of the output grid. Smaller is
+   finer and slower.
+4. Set **Search Radius** — how far around each grid vertex to gather nearby
+   points. Keep it at least the cell size; increase it for sparse clouds.
+5. Set **Ground Percentile** — the low percentile of nearby point heights taken
+   as the ground (default 5). This is the "from below" step: a low percentile
+   grabs the road surface and ignores overhead noise (vehicles, foliage) while
+   still rejecting stray below-ground points. Use 0 for the strict minimum.
+6. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
+   gaps.
+7. Click **Create Roadway Surface**.
+
+The tool lays a regular XY grid across the cloud's extent, samples the ground
+height per cell, builds the surface mesh, and classifies it as an **Environment**
+object so it flows into the H3D environment export. The report line notes the
+grid size and how many cells were sampled — if it warns that no cells had enough
+points, increase the search radius or cell size.
+
+> This is a first version that uses the cloud's rectangular (bounding-box)
+> extent. Cells with no nearby points become holes (or are filled from
+> neighbours); very isolated cells may leave a flat spot at Z 0.
 
 ---
 

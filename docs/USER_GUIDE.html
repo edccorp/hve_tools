@@ -62,6 +62,7 @@ li { margin: .2rem 0; }
 <li><a href="#49-create-timed-location-markers">4.9 Create timed location markers</a></li>
 <li><a href="#410-scale-an-object-to-a-known-distance">4.10 Scale an object to a known distance</a></li>
 <li><a href="#411-bake-speed-and-acceleration">4.11 Bake speed and acceleration</a></li>
+<li><a href="#412-build-a-roadway-surface-from-a-point-cloud">4.12 Build a roadway surface from a point cloud</a></li>
 </ul></li>
 </ul></li>
 <li><a href="#5-units-and-scale">Units and scale</a></li>
@@ -103,7 +104,7 @@ li { margin: .2rem 0; }
 <tbody>
 <tr><td><strong>Pre-Simulation Setup</strong></td><td>Getting Blender objects ready for HVE and exporting them</td><td><strong>H3D Setup</strong>, <strong>Export to HVE</strong></td></tr>
 <tr><td><strong>Post-Simulation Processing</strong></td><td>Bringing HVE results back into Blender</td><td><strong>HVE FBX Importer</strong>, <strong>Variable Output Importer</strong>, <strong>RaceRender Converter</strong></td></tr>
-<tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong></td></tr>
+<tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong>, <strong>Roadway Surface</strong></td></tr>
 </tbody></table>
 <p>Most panels are collapsed by default — click a panel header to expand it. The task guides below follow this same order: Pre-Simulation Setup, then Post-Simulation Processing, then Other Tools.</p>
 <hr>
@@ -237,6 +238,21 @@ li { margin: .2rem 0; }
 <li>Click <strong>Calculate Speed + Acceleration</strong>.</li>
 </ol>
 <p>Results are baked as animated custom properties (average speed, forward speed, forward/lateral/vertical acceleration) on a helper empty named <code>SpeedData_&lt;object name&gt;</code>.</p>
+<h3 id="412-build-a-roadway-surface-from-a-point-cloud">4.12 Build a roadway surface from a point cloud</h3>
+<p>Open <strong>Other Tools → Roadway Surface</strong> to drape a clean ground surface over a point cloud (for example an imported PLY) so it can be used as environment geometry in vehicle simulations.</p>
+<ol>
+<li>Import your point cloud as a mesh object (a PLY imports as mesh vertices).</li>
+<li>Select it, or set it explicitly in <strong>Point Cloud</strong> (leave empty to use the active object).</li>
+<li>Set <strong>Resolution (Cell Size)</strong> — the spacing of the output grid. Smaller is finer and slower.</li>
+<li>Set <strong>Search Radius</strong> — how far around each grid vertex to gather nearby points. Keep it at least the cell size; increase it for sparse clouds.</li>
+<li>Set <strong>Ground Percentile</strong> — the low percentile of nearby point heights taken as the ground (default 5). This is the "from below" step: a low percentile grabs the road surface and ignores overhead noise (vehicles, foliage) while still rejecting stray below-ground points. Use 0 for the strict minimum.</li>
+<li>Leave <strong>Fill Holes</strong> on to interpolate empty cells so sparse spots don't leave gaps.</li>
+<li>Click <strong>Create Roadway Surface</strong>.</li>
+</ol>
+<p>The tool lays a regular XY grid across the cloud's extent, samples the ground height per cell, builds the surface mesh, and classifies it as an <strong>Environment</strong> object so it flows into the H3D environment export. The report line notes the grid size and how many cells were sampled — if it warns that no cells had enough points, increase the search radius or cell size.</p>
+<blockquote>
+<p>This is a first version that uses the cloud's rectangular (bounding-box) extent. Cells with no nearby points become holes (or are filled from neighbours); very isolated cells may leave a flat spot at Z 0.</p>
+</blockquote>
 <hr>
 <h2 id="5-units-and-scale">5. Units and scale</h2>
 <ul>

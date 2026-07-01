@@ -20,6 +20,7 @@ try:
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
         edr_importer, scale_objects, speed_accel, import_xyzrpy,
+        roadway_surface,
 
     )
 
@@ -40,7 +41,7 @@ try:
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
         fbx_importer_ui, motionpaths, xyz_importer_ui, edr_importer, scale_objects,
-        import_xyzrpy, speed_accel,
+        import_xyzrpy, speed_accel, roadway_surface,
     ]
 
     # Aggregate all classes from modules
@@ -217,6 +218,42 @@ try:
             default=24, min=0, soft_max=200,
         )
 
+        def _roadway_source_poll(self, obj):
+            return obj is not None and obj.type == 'MESH'
+
+        bpy.types.Scene.roadway_source_object = PointerProperty(
+            name="Point Cloud",
+            description="Mesh object whose vertices are the roadway point cloud (e.g. an imported PLY); leave empty to use the active object",
+            type=bpy.types.Object,
+            poll=_roadway_source_poll,
+        )
+        bpy.types.Scene.roadway_cell_size = FloatProperty(
+            name="Resolution (Cell Size)",
+            description="Spacing of the generated surface grid in scene units; smaller is finer and slower",
+            default=0.5,
+            min=0.001,
+            soft_max=10.0,
+        )
+        bpy.types.Scene.roadway_search_radius = FloatProperty(
+            name="Search Radius",
+            description="Radius around each grid vertex used to gather nearby cloud points; should be at least the cell size",
+            default=0.75,
+            min=0.001,
+            soft_max=20.0,
+        )
+        bpy.types.Scene.roadway_ground_percentile = FloatProperty(
+            name="Ground Percentile",
+            description="Percentile of nearby point heights taken as ground (low = from below); rejects overhead noise and stray low outliers",
+            default=5.0,
+            min=0.0,
+            max=100.0,
+        )
+        bpy.types.Scene.roadway_fill_holes = bpy.props.BoolProperty(
+            name="Fill Holes",
+            description="Interpolate empty grid cells from their neighbours so sparse spots do not leave gaps",
+            default=True,
+        )
+
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
         bpy.types.Object.edr_input_mode_preference = EnumProperty(
@@ -256,6 +293,11 @@ try:
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water
         del bpy.types.Scene.fbx_shape_key_max_samples
+        del bpy.types.Scene.roadway_source_object
+        del bpy.types.Scene.roadway_cell_size
+        del bpy.types.Scene.roadway_search_radius
+        del bpy.types.Scene.roadway_ground_percentile
+        del bpy.types.Scene.roadway_fill_holes
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

@@ -103,6 +103,7 @@ def update_panel_bl_category(self, context):
         HVE_PT_timed_location_markers,
         HVE_PT_scale_objects,
         HVE_PT_speed_acceleration,
+        HVE_PT_roadway_surface,
         HVE_PT_race_render_exporter,
     )
 
@@ -936,6 +937,42 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
             map_box.operator("import_xyz.import_mapped_points", text="Import Points")
 
 
+class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Roadway Surface"
+    bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        scene = context.scene
+        l = self.layout
+        c = l.column()
+
+        c.label(text="Build a ground surface from a point cloud", icon="MESH_GRID")
+        c.label(text="Drapes a grid onto a PLY-style point cloud", icon='INFO')
+
+        if not scene.roadway_source_object:
+            active = context.object
+            if active and active.type == 'MESH':
+                c.label(text=f"Source: {active.name} (active)", icon="OBJECT_DATA")
+            else:
+                c.label(text="Select a mesh point cloud, or set one below", icon='INFO')
+        c.prop(scene, "roadway_source_object")
+
+        c.prop(scene, "roadway_cell_size")
+        c.prop(scene, "roadway_search_radius")
+        c.prop(scene, "roadway_ground_percentile")
+        c.prop(scene, "roadway_fill_holes")
+
+        c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
+        c.label(text="Result is classified as Environment", icon='WORLD')
+
+
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -987,6 +1024,7 @@ classes = (
     HVE_PT_scale_objects,
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
+    HVE_PT_roadway_surface,
     HVE_PT_race_render_exporter,
     HVE_PT_documentation,
     HVE_OT_save_preset,

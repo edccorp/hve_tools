@@ -81,6 +81,11 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Convert selected motion paths to 3D curve objects in a **Motion Paths** collection.
   - Toggle the motion-path overlay in the active 3D View.
 - **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
+- **Roadway surface from point cloud**: build a draped ground surface mesh from a point-cloud object (e.g. an imported PLY) for vehicle simulations.
+  - Set the grid **resolution** (cell size) and a **search radius** for gathering nearby points.
+  - Sample ground height per cell using a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
+  - Optionally fill sparse holes from neighbours.
+  - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.
   - Enter a target distance in scene units.
@@ -223,6 +228,13 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 4. Choose whether to use XY-only displacement, include acceleration outputs, and replace existing output curves.
 5. Click **Calculate Speed + Acceleration**.
 6. Read the animated custom properties on the generated `SpeedData_<object name>` helper empty.
+
+### 11. Build a roadway surface from a point cloud
+
+1. Import a roadway point cloud as a mesh object (a PLY imports as mesh vertices).
+2. Open **Other Tools → Roadway Surface** and select the cloud (or set it as the **Point Cloud**).
+3. Set the **Resolution (Cell Size)**, **Search Radius**, and **Ground Percentile** (low = "from below"; rejects overhead noise), and leave **Fill Holes** on for sparse clouds.
+4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export.
 
 ## Included examples
 
