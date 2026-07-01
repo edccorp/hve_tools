@@ -141,7 +141,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 ### 4. Import HVE post-simulation files
 
 - For variable-output files, open **Post-Simulation Processing → Variable Output Importer**, choose the `.hvo` or `.csv`, set scale options, and import.
-- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, click **Import FBX** and choose the `.fbx` (the hierarchy is renamed and sorted into HVE collections on import), then set **Max Shape Key Samples** and click **Process Imported FBX** to reduce shape keys, merge body meshes, and smooth the result.
+- For HVE FBX files, open **Post-Simulation Processing → HVE FBX Importer**, click **Import FBX** and choose the `.fbx` (the hierarchy is renamed and sorted into HVE collections on import), then set **Max Shape Key Samples** and click **Process Imported FBX** to reduce shape keys, merge body meshes, and smooth the result. Optionally set a **Process Collection** to limit processing to the body meshes under one collection.
 - For RaceRender conversion, open **Post-Simulation Processing → RaceRender Converter** and convert the HVE variable output into RaceRender-ready `.csv` files.
 
 ### 5. Animate from EDR data

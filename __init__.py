@@ -217,6 +217,11 @@ try:
             description="Maximum shape keys kept per mesh after adaptive reduction. 0 = no cap, tolerance controls quality",
             default=24, min=0, soft_max=200,
         )
+        bpy.types.Scene.fbx_process_collection = PointerProperty(
+            name="Process Collection",
+            description="Limit FBX post-processing to the body meshes nested under this collection; leave empty to process all imported vehicles",
+            type=bpy.types.Collection,
+        )
 
         def _roadway_source_poll(self, obj):
             return obj is not None and obj.type == 'MESH'
@@ -305,6 +310,7 @@ try:
         del bpy.types.Scene.hve_setup_show_soil
         del bpy.types.Scene.hve_setup_show_water
         del bpy.types.Scene.fbx_shape_key_max_samples
+        del bpy.types.Scene.fbx_process_collection
         del bpy.types.Scene.roadway_source_object
         del bpy.types.Scene.roadway_cell_size
         del bpy.types.Scene.roadway_fill_distance

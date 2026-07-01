@@ -35,11 +35,32 @@ def open_system_console():
             pass
 
 
-def get_hve_vehicle_names():
-    """Return vehicle names from all HVE FBX collections currently in the scene."""
+def _collection_and_descendant_names(collection):
+    """Return the set of names of ``collection`` and all collections nested under it."""
+    names = set()
+    stack = [collection]
+    while stack:
+        col = stack.pop()
+        if col.name in names:
+            continue
+        names.add(col.name)
+        stack.extend(col.children)
+    return names
+
+
+def get_hve_vehicle_names(scope_collection=None):
+    """Return vehicle names from HVE FBX body-mesh collections in the scene.
+
+    When ``scope_collection`` is given, only ``Body Mesh:`` collections nested
+    under it (at any depth) are considered, so processing can be limited to the
+    meshes in a chosen collection.
+    """
+    scope_names = _collection_and_descendant_names(scope_collection) if scope_collection else None
     names = []
     for col in bpy.data.collections:
         if col.name.startswith("Body Mesh: "):
+            if scope_names is not None and col.name not in scope_names:
+                continue
             # "Body Mesh: Toyota: SideFlip: FBX" -> vehicle name is "Toyota"
             parts = col.name.split(": ")
             if len(parts) >= 2:
@@ -47,6 +68,12 @@ def get_hve_vehicle_names():
                 if name not in names:
                     names.append(name)
     return names
+
+
+def _no_vehicles_message(scope_collection):
+    if scope_collection is not None:
+        return f"No HVE body meshes found in collection '{scope_collection.name}'"
+    return "No HVE body mesh collections found"
 
 
 def iter_body_mesh_objects(vehicle_names):
@@ -137,9 +164,10 @@ class FBX_OT_merge_body_mesh(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        scope = getattr(context.scene, "fbx_process_collection", None)
+        vehicle_names = get_hve_vehicle_names(scope)
         if not vehicle_names:
-            self.report({'WARNING'}, "No HVE body mesh collections found")
+            self.report({'WARNING'}, _no_vehicles_message(scope))
             return {'CANCELLED'}
         open_system_console()
         print(f"🔧 Merging body meshes for: {', '.join(vehicle_names)}")
@@ -157,9 +185,10 @@ class FBX_OT_reduce_shape_keys(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        scope = getattr(context.scene, "fbx_process_collection", None)
+        vehicle_names = get_hve_vehicle_names(scope)
         if not vehicle_names:
-            self.report({'WARNING'}, "No HVE body mesh collections found")
+            self.report({'WARNING'}, _no_vehicles_message(scope))
             return {'CANCELLED'}
         open_system_console()
         max_samples = context.scene.fbx_shape_key_max_samples
@@ -180,9 +209,10 @@ class FBX_OT_apply_mesh_cleanup(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        scope = getattr(context.scene, "fbx_process_collection", None)
+        vehicle_names = get_hve_vehicle_names(scope)
         if not vehicle_names:
-            self.report({'WARNING'}, "No HVE body mesh collections found")
+            self.report({'WARNING'}, _no_vehicles_message(scope))
             return {'CANCELLED'}
         open_system_console()
         print(f"🔧 Applying mesh cleanup (merge verts + smooth by angle) for: {', '.join(vehicle_names)}")
@@ -200,9 +230,10 @@ class FBX_OT_process_all(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        vehicle_names = get_hve_vehicle_names()
+        scope = getattr(context.scene, "fbx_process_collection", None)
+        vehicle_names = get_hve_vehicle_names(scope)
         if not vehicle_names:
-            self.report({'WARNING'}, "No HVE body mesh collections found")
+            self.report({'WARNING'}, _no_vehicles_message(scope))
             return {'CANCELLED'}
         open_system_console()
         t_total = time.perf_counter()

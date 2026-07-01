@@ -145,7 +145,9 @@ Open **Post-Simulation Processing** and pick the matching importer:
   collections by event, vehicle, wheels, and body. Then set **Max Shape Key
   Samples** (the cap on shape keys kept per mesh; 0 = no cap) and click
   **Process Imported FBX** to run the **Reduce Keys → Merge Meshes → Smooth**
-  cleanup pipeline.
+  cleanup pipeline. Use the **Process Collection** selector below the button to
+  limit processing to the body meshes nested under one collection (leave empty
+  to process every imported vehicle).
 - **Variable Output Importer** — import an HVE `.hvo`/`.csv` of time plus
   variable-output columns. Choose **feet or meters**, optionally override the
   **scale factor**, and optionally **save separate vehicle CSV files**.
