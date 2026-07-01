@@ -100,6 +100,7 @@ def update_panel_bl_category(self, context):
 
         HVE_PT_point_importer,
         HVE_PT_motion_paths,
+        HVE_PT_timed_location_markers,
         HVE_PT_scale_objects,
         HVE_PT_speed_acceleration,
         HVE_PT_race_render_exporter,
@@ -779,7 +780,23 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
         c.operator("object.convert_motion_path_selected", text="Convert Motion Paths To Curve")
         c.operator("object.toggle_motion_path_visibility", text="Show/Hide Motion Paths")
 
-        c.separator()
+
+class HVE_PT_timed_location_markers(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Timed Location Markers"
+    bl_parent_id = "HVE_PT_other_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        scene = context.scene
+        l = self.layout
+        c = l.column()
+
         c.label(text="Timed Location Markers", icon="EMPTY_SINGLE_ARROW")
         c.prop(scene, "motion_marker_interval_seconds")
         c.prop(scene, "motion_marker_zero_frame")
@@ -791,8 +808,8 @@ class HVE_PT_motion_paths(HVE_PT_mechanist_base):
             c.prop(scene, "motion_marker_label_size")
         c.prop(scene, "motion_marker_replace_existing")
         c.operator("object.create_timed_location_markers", text="Create Location Markers")
- 
- 
+
+
 class HVE_PT_scale_objects(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -926,6 +943,7 @@ classes = (
     HVE_PT_edr_importer,
     HVE_PT_xyzrpy_importer,
     HVE_PT_motion_paths,
+    HVE_PT_timed_location_markers,
     HVE_PT_scale_objects,
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,

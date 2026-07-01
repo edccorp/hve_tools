@@ -112,7 +112,7 @@ try:
         bpy.types.Scene.speed_accel_include_acceleration = bpy.props.BoolProperty(
             name="Include Acceleration",
             description="Bake forward, lateral, and vertical acceleration custom properties in addition to speed",
-            default=True,
+            default=False,
         )
         bpy.types.Scene.speed_accel_remove_old_curves = bpy.props.BoolProperty(
             name="Replace Existing Curves",

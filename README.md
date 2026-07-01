@@ -80,6 +80,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Remove motion paths from selected objects.
   - Convert selected motion paths to 3D curve objects in a **Motion Paths** collection.
   - Toggle the motion-path overlay in the active 3D View.
+- **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.
   - Enter a target distance in scene units.
@@ -91,7 +92,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Choose the local forward axis and yaw offset.
   - Choose the averaging window in frames.
   - Use scene units automatically, or force meters or feet.
-  - Optionally ignore vertical displacement, include acceleration outputs, replace prior curves, and parent the helper to the source object.
+  - Optionally ignore vertical displacement, include acceleration outputs (off by default), replace prior curves, and parent the helper to the source object.
 
 ## Installation
 
@@ -203,6 +204,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 3. Use **Generate Motion Paths** to create Blender motion paths.
 4. Use **Convert Motion Paths To Curve** to create editable curve objects.
 5. Use **Show/Hide Motion Paths** to toggle viewport display.
+6. To place time markers along the motion, use the separate **Other Tools → Timed Location Markers** panel: set the interval, zero frame, size, forward axis, and yaw offset, then click **Create Location Markers**.
 
 ### 9. Scale an object from two selected vertices
 

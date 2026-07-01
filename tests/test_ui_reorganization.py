@@ -84,6 +84,7 @@ def test_other_tools_child_panels_default_closed():
         "HVE_PT_edr_importer",
         "HVE_PT_xyzrpy_importer",
         "HVE_PT_motion_paths",
+        "HVE_PT_timed_location_markers",
         "HVE_PT_scale_objects",
         "HVE_PT_speed_acceleration",
         "HVE_PT_point_importer",

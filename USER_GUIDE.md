@@ -24,8 +24,9 @@ tasks step by step. For a terse feature-by-feature reference, see
      - [4.6 Animate from XYZ/RPY motion data](#46-animate-from-xyzrpy-motion-data)
      - [4.7 Import survey / point data](#47-import-survey--point-data)
      - [4.8 Motion path tools](#48-motion-path-tools)
-     - [4.9 Scale an object to a known distance](#49-scale-an-object-to-a-known-distance)
-     - [4.10 Bake speed and acceleration](#410-bake-speed-and-acceleration)
+     - [4.9 Create timed location markers](#49-create-timed-location-markers)
+     - [4.10 Scale an object to a known distance](#410-scale-an-object-to-a-known-distance)
+     - [4.11 Bake speed and acceleration](#411-bake-speed-and-acceleration)
 5. [Units and scale](#5-units-and-scale)
 6. [Troubleshooting](#6-troubleshooting)
 7. [Example files](#7-example-files)
@@ -77,7 +78,7 @@ The **HVE** tab groups everything into three top-level panels:
 |-------|-----------|------------|
 | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
 | **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
-| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Scale Objects**, **Speed + Acceleration** |
+| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration** |
 
 Most panels are collapsed by default — click a panel header to expand it. The
 task guides below follow this same order: Pre-Simulation Setup, then
@@ -271,12 +272,22 @@ Open **Other Tools → Motion Path Tools** with animated object(s) selected:
   a **Motion Paths** collection (handy as a Path Follow target back in the EDR
   tool).
 - **Show/Hide Motion Paths** — toggle the viewport overlay.
-- **Timed Location Markers** — drop triangle markers at a fixed time interval
-  along the motion, with optional time-value text labels. Configure the
-  interval, zero frame, size, forward axis, and yaw offset, then click
-  **Create Location Markers**.
 
-### 4.9 Scale an object to a known distance
+### 4.9 Create timed location markers
+
+Open **Other Tools → Timed Location Markers** with an animated object selected to
+drop triangle markers at a fixed time interval along the motion, with optional
+time-value text labels:
+
+1. Set the **Marker Interval (sec)** and **Zero Frame** (the frame treated as
+   time zero; markers are placed forward and backward from it).
+2. Set the **Marker Size**, **Marker Forward Direction** axis, and **Marker Yaw
+   Offset** so each triangle tip points along travel.
+3. Optionally enable **Create Time Labels** and set the **Time Label Size**.
+4. Optionally enable **Replace Existing Markers** to rebuild rather than add.
+5. Click **Create Location Markers**.
+
+### 4.10 Scale an object to a known distance
 
 Open **Other Tools → Scale Objects**:
 
@@ -286,7 +297,7 @@ Open **Other Tools → Scale Objects**:
 4. Click **Scale Object**. The object is uniformly scaled so the two vertices
    match the target distance.
 
-### 4.10 Bake speed and acceleration
+### 4.11 Bake speed and acceleration
 
 Open **Other Tools → Speed + Acceleration** with an animated object selected (or
 assign a **Source Object**):
@@ -295,7 +306,8 @@ assign a **Source Object**):
 2. Set the **Average Window (Frames)** — the centered sample count used to
    compute velocity (e.g. 3 compares the previous and next frames).
 3. Choose **Distance Units** (Auto / Meters / Feet) and toggles: **Use XY Only**,
-   **Include Acceleration**, **Replace Existing Curves**, **Parent Helper to
+   **Include Acceleration** (off by default — enable it to also bake the
+   acceleration properties), **Replace Existing Curves**, **Parent Helper to
    Source**.
 4. Click **Calculate Speed + Acceleration**.
 
