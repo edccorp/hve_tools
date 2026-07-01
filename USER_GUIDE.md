@@ -338,10 +338,13 @@ geometry in vehicle simulations.
    the surface (averaged per cell). It's ignored if the cloud has no colour. With
    it on:
    - **Bake Color to Texture** (default) bakes the colours to a JPG saved next to
-     your `.blend`, adds grid UVs, and builds an image-texture material. This is
-     the path that carries colour into HVE — it exports as a normal texture. Set
-     **Texture Size Cap** to limit the image's longest side (0 matches the grid
-     exactly). *You must save the `.blend` first* so the JPG has somewhere to go.
+     your `.blend`, adds UVs, and builds an image-texture material. This is the
+     path that carries colour into HVE — it exports as a normal texture. Set
+     **Texture Resolution** (longest side, in pixels): the texture is sampled
+     **directly from the point cloud**, so it can be far sharper than the surface
+     grid — a dense cloud keeps its colour detail even on a coarse mesh. 0
+     matches the grid resolution. *You must save the `.blend` first* so the JPG
+     has somewhere to go.
    - Turn baking off to instead build a simpler material driven directly by the
      `Col` color attribute (shows in Blender's material/rendered view, but does
      not carry into HVE).

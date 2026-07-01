@@ -978,7 +978,7 @@ class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
         if scene.roadway_transfer_color:
             c.prop(scene, "roadway_bake_texture")
             if scene.roadway_bake_texture:
-                c.prop(scene, "roadway_texture_max_size")
+                c.prop(scene, "roadway_texture_size")
                 if not bpy.data.filepath:
                     c.label(text="Save the .blend to bake the texture", icon='ERROR')
             else:

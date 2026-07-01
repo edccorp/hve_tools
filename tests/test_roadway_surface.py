@@ -22,7 +22,7 @@ WANTED = {
     "build_mesh_arrays",
     "_color_grid",
     "generate_surface",
-    "color_grid_to_image",
+    "bake_point_color_texture",
     "grid_uvs",
 }
 
@@ -38,7 +38,7 @@ cell_indices = ns["cell_indices"]
 fill_holes_grid = ns["fill_holes_grid"]
 build_mesh_arrays = ns["build_mesh_arrays"]
 generate_surface = ns["generate_surface"]
-color_grid_to_image = ns["color_grid_to_image"]
+bake_point_color_texture = ns["bake_point_color_texture"]
 grid_uvs = ns["grid_uvs"]
 
 
@@ -114,27 +114,37 @@ def test_generate_surface_rejects_tiny_input():
     assert generate_surface(np.zeros((2, 3)), 1.0, 2.0, 5.0) is None
 
 
-def test_color_grid_to_image_orientation_and_size():
-    # 2x2 grid; vertex order is j*nx+i, so row 0 (bottom, j=0) is the first two.
-    colors = np.array([
-        [0.0, 0.0, 0.0, 1.0],  # (i0, j0)
-        [1.0, 0.0, 0.0, 1.0],  # (i1, j0)
-        [0.0, 1.0, 0.0, 1.0],  # (i0, j1)
-        [0.0, 0.0, 1.0, 1.0],  # (i1, j1)
-    ])
-    pixels, w, h = color_grid_to_image(colors, 2, 2, max_size=0)
+def test_bake_texture_resolution_independent_of_grid():
+    # A tiny 3x3 grid (cell 1.0) but a dense red point cloud -> a bigger texture
+    # sampled from the points, not the 3x3 grid.
+    pts = []
+    colors = []
+    x = 0.0
+    while x <= 2.0:
+        y = 0.0
+        while y <= 2.0:
+            pts.append((x, y, 0.0))
+            colors.append((1.0, 0.0, 0.0, 1.0))
+            y += 0.05
+        x += 0.05
+    pixels, w, h = bake_point_color_texture(
+        np.array(pts), np.array(colors), 0.0, 0.0, 1.0, 3, 3, target_size=64
+    )
+    # Covered extent is square ((nx-1)*cell == (ny-1)*cell), so 64x64.
+    assert (w, h) == (64, 64)
+    assert len(pixels) == 64 * 64 * 4
+    # Everything sampled red.
+    px = np.asarray(pixels).reshape(-1, 4)
+    assert np.allclose(px[:, 0], 1.0)
+    assert np.allclose(px[:, 1], 0.0)
+
+
+def test_bake_texture_matches_grid_when_target_zero():
+    pts = np.array([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 1.0, 0.0)])
+    cols = np.tile([0.3, 0.4, 0.5, 1.0], (4, 1))
+    pixels, w, h = bake_point_color_texture(pts, cols, 0.0, 0.0, 1.0, 2, 2, target_size=0)
     assert (w, h) == (2, 2)
     assert len(pixels) == 2 * 2 * 4
-    # Bottom row first: black then red.
-    assert list(pixels[:8]) == [0, 0, 0, 1, 1, 0, 0, 1]
-
-
-def test_color_grid_to_image_pads_rgb_and_caps_size():
-    rgb = np.tile([0.3, 0.4, 0.5], (8, 1))  # 4x2 grid, 3 channels
-    pixels, w, h = color_grid_to_image(rgb, 4, 2, max_size=2)
-    assert (w, h) == (2, 1)              # longest side capped to 2
-    assert len(pixels) == 2 * 1 * 4
-    assert list(pixels[:4]) == [0.3, 0.4, 0.5, 1.0]  # alpha padded
 
 
 def test_grid_uvs_corners():

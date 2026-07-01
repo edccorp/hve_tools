@@ -85,7 +85,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Set the grid **resolution** (cell size), shown in the scene's length units.
   - Sample ground height per cell using a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
   - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
-  - Optionally transfer the point cloud's per-point colour and bake it to a JPG texture (saved next to the .blend) with grid UVs and an image-texture material, so the colour exports to HVE through the standard texture path.
+  - Optionally transfer the point cloud's per-point colour and bake it to a JPG texture (saved next to the .blend) with UVs and an image-texture material, so the colour exports to HVE through the standard texture path. The texture is sampled directly from the point cloud at a chosen **Texture Resolution**, so it can be sharper than the surface grid.
   - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.

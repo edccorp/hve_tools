@@ -169,37 +169,6 @@ def _color_grid(points, colors, min_x, min_y, nx, ny, cell_size, max_passes):
     return stacked.reshape(nx * ny, col.shape[1])
 
 
-def color_grid_to_image(colors, nx, ny, max_size=0):
-    """Build an RGBA image from per-vertex colours for baking to a texture.
-
-    ``colors`` is an (nx*ny, C) array in vertex order (index ``j * nx + i``).
-    Returns ``(pixels, width, height)`` where ``pixels`` is a flat RGBA float
-    array of length ``width * height * 4`` laid out bottom-row-first (Blender's
-    image pixel order, matching v=0 at the grid's min-Y edge). When ``max_size``
-    is > 0 and the grid's larger side exceeds it, the image is nearest-sampled
-    down so its longest side is ``max_size``.
-    """
-    arr = np.asarray(colors, dtype=np.float64)
-    channels = arr.shape[1]
-    grid = arr.reshape(ny, nx, channels)
-    if channels < 4:
-        pad = np.ones((ny, nx, 4 - channels), dtype=np.float64)
-        grid = np.concatenate([grid, pad], axis=2)
-    else:
-        grid = grid[:, :, :4]
-
-    width, height = nx, ny
-    if max_size and max(nx, ny) > max_size:
-        scale = max_size / float(max(nx, ny))
-        width = max(1, int(round(nx * scale)))
-        height = max(1, int(round(ny * scale)))
-        yi = np.linspace(0, ny - 1, height).round().astype(np.int64)
-        xi = np.linspace(0, nx - 1, width).round().astype(np.int64)
-        grid = grid[yi][:, xi]
-
-    return grid.reshape(-1), width, height
-
-
 def grid_uvs(nx, ny):
     """Per-vertex ``(u, v)`` for an ``nx*ny`` grid; vertex index is ``j * nx + i``."""
     us = (np.arange(nx, dtype=np.float64) / (nx - 1)) if nx > 1 else np.zeros(nx)
@@ -240,12 +209,64 @@ def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_h
         "faces": faces,
         "nx": nx,
         "ny": ny,
+        "min_x": min_x,
+        "min_y": min_y,
+        "cell_size": cell_size,
         "sampled": sampled,
         "total": nx * ny,
     }
     if colors is not None:
         result["colors"] = _color_grid(pts, colors, min_x, min_y, nx, ny, cell_size, max_passes)
     return result
+
+
+def bake_point_color_texture(points, colors, min_x, min_y, cell_size, nx, ny,
+                             target_size, fill_passes=256):
+    """Rasterize per-point colours into a texture, sampled from the full cloud.
+
+    The texture spans the surface's covered XY extent — ``(nx-1)*cell_size`` by
+    ``(ny-1)*cell_size`` — so it lines up with the surface's normalized UVs, but
+    its pixel resolution is set by ``target_size`` (the longest side, aspect
+    preserved) instead of the mesh grid. This lets a dense point cloud produce a
+    texture far sharper than the surface resolution. ``target_size`` of 0 falls
+    back to the grid resolution. Returns ``(pixels, width, height)`` with pixels
+    laid out bottom-row-first (Blender image order).
+    """
+    covered_w = max((nx - 1) * cell_size, 0.0)
+    covered_h = max((ny - 1) * cell_size, 0.0)
+
+    if target_size and target_size > 0 and covered_w > 0 and covered_h > 0:
+        if covered_w >= covered_h:
+            tex_w = int(target_size)
+            tex_h = max(1, int(round(target_size * covered_h / covered_w)))
+        else:
+            tex_h = int(target_size)
+            tex_w = max(1, int(round(target_size * covered_w / covered_h)))
+    else:
+        tex_w, tex_h = nx, ny
+
+    size_x = covered_w / tex_w if (tex_w and covered_w > 0) else cell_size
+    size_y = covered_h / tex_h if (tex_h and covered_h > 0) else cell_size
+
+    pts = np.asarray(points, dtype=np.float64)
+    ix = np.clip(np.floor((pts[:, 0] - min_x) / size_x).astype(np.int64), 0, tex_w - 1)
+    iy = np.clip(np.floor((pts[:, 1] - min_y) / size_y).astype(np.int64), 0, tex_h - 1)
+    flat = iy * tex_w + ix
+
+    col = np.asarray(colors, dtype=np.float64)
+    channels = min(col.shape[1], 4)
+    grids = []
+    for c in range(channels):
+        chan = cell_mean_grid(flat, col[:, c], tex_w, tex_h)
+        chan = fill_holes_grid(chan, fill_passes)
+        grids.append(chan)
+    grid = np.stack(grids, axis=-1)  # (tex_h, tex_w, channels)
+    if channels < 4:
+        pad = np.ones((tex_h, tex_w, 4 - channels), dtype=np.float64)
+        grid = np.concatenate([grid, pad], axis=2)
+    grid = np.where(np.isnan(grid), 0.5, grid)  # unresolved texels -> mid grey
+
+    return grid.reshape(-1), tex_w, tex_h
 
 
 # ---------------------------------------------------------------------------
@@ -307,13 +328,30 @@ def _safe_filename(name):
     return cleaned or "Roadway_Surface"
 
 
-def _apply_baked_texture(source_name, new_mesh, result, max_size, blend_dir):
-    """Bake the surface colours to a JPG, add grid UVs and an image material.
+def _apply_baked_texture(source_name, new_mesh, points, colors, result,
+                         target_size, fill_distance, blend_dir):
+    """Bake per-point colours to a JPG, add grid UVs and an image material.
 
-    Returns the saved image file path.
+    The texture is sampled directly from the point cloud at ``target_size``
+    resolution (independent of the mesh grid), then mapped onto the surface via
+    its grid UVs. Returns the saved image file path.
     """
     nx, ny = result["nx"], result["ny"]
-    pixels, tw, th = color_grid_to_image(result["colors"], nx, ny, max_size)
+    cell_size = result["cell_size"]
+
+    # Convert the fill distance (scene units) into texel passes.
+    covered_long = max((nx - 1) * cell_size, (ny - 1) * cell_size)
+    tex_long = target_size if target_size > 0 else max(nx, ny)
+    texel = (covered_long / tex_long) if tex_long else cell_size
+    if fill_distance and fill_distance > 0 and texel > 0:
+        fill_passes = min(1024, max(1, int(round(fill_distance / texel))))
+    else:
+        fill_passes = 256
+
+    pixels, tw, th = bake_point_color_texture(
+        points, colors, result["min_x"], result["min_y"], cell_size, nx, ny,
+        target_size, fill_passes,
+    )
 
     image = bpy.data.images.new(f"Roadway Color: {source_name}", width=tw, height=th, alpha=True)
     image.pixels.foreach_set(np.asarray(pixels, dtype=np.float32))
@@ -438,8 +476,9 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 if bool(scene.roadway_bake_texture):
                     if bpy.data.filepath:
                         baked_texture_path = _apply_baked_texture(
-                            source.name, new_mesh, result,
-                            int(scene.roadway_texture_max_size),
+                            source.name, new_mesh, points, colors, result,
+                            int(scene.roadway_texture_size),
+                            float(scene.roadway_fill_distance),
                             os.path.dirname(bpy.data.filepath),
                         )
                         made_material = True

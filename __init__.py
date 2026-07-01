@@ -275,9 +275,9 @@ try:
             description="Bake the per-cell colours to a JPG image (saved next to the .blend), add grid UVs, and build an image-texture material. Textures export to HVE more reliably than vertex colours",
             default=True,
         )
-        bpy.types.Scene.roadway_texture_max_size = IntProperty(
-            name="Texture Size Cap",
-            description="Cap on the baked texture's longest side in pixels; 0 matches the grid exactly",
+        bpy.types.Scene.roadway_texture_size = IntProperty(
+            name="Texture Resolution",
+            description="Longest side (pixels) of the baked texture, sampled directly from the point cloud so it can be sharper than the surface grid; 0 matches the grid resolution",
             default=4096,
             min=0,
             soft_max=16384,
@@ -331,7 +331,7 @@ try:
         del bpy.types.Scene.roadway_transfer_color
         del bpy.types.Scene.roadway_create_material
         del bpy.types.Scene.roadway_bake_texture
-        del bpy.types.Scene.roadway_texture_max_size
+        del bpy.types.Scene.roadway_texture_size
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
