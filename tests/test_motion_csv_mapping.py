@@ -72,6 +72,30 @@ def test_auto_map_motion_columns_yaw_not_claimed_by_y():
     assert mapping["yaw"] == 4
 
 
+def test_auto_map_motion_columns_single_letter_rpy():
+    # r/p map to roll/pitch even without a yaw column present.
+    headers = ["Time", "X", "Y", "Z", "R", "P"]
+    mapping = auto_map_motion_columns(headers)
+    assert mapping["roll"] == 4
+    assert mapping["pitch"] == 5
+    assert mapping["yaw"] == -1
+
+
+def test_auto_map_motion_columns_abbreviated_rotations_with_y():
+    # X,Y,Z,R,P,Y: positional Y is claimed first, the trailing Y is yaw.
+    headers = ["Time", "X", "Y", "Z", "R", "P", "Y"]
+    mapping = auto_map_motion_columns(headers)
+    assert mapping == {
+        "time": 0,
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "roll": 4,
+        "pitch": 5,
+        "yaw": 6,
+    }
+
+
 def test_auto_map_motion_columns_unmatched_returns_negative_one():
     headers = ["foo", "bar", "baz"]
     mapping = auto_map_motion_columns(headers)

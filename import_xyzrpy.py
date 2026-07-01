@@ -77,12 +77,12 @@ MOTION_COLUMN_FIELDS = ("time", "x", "y", "z", "roll", "pitch", "yaw")
 
 MOTION_COLUMN_KEYWORDS = {
     "time": ["time", "timestamp", "elapsed", "seconds", "second", "sec", "t"],
-    "roll": ["roll", "phi"],
-    "pitch": ["pitch", "theta"],
-    "yaw": ["yaw", "heading", "psi"],
     "x": ["x position", "position x", "pos x", "easting", "x"],
     "y": ["y position", "position y", "pos y", "northing", "y"],
     "z": ["z position", "position z", "pos z", "elevation", "height", "z"],
+    "roll": ["roll", "phi", "r"],
+    "pitch": ["pitch", "theta", "p"],
+    "yaw": ["yaw", "heading", "psi", "y"],
 }
 
 
@@ -90,9 +90,10 @@ def auto_map_motion_columns(headers):
     """Best-effort map of motion fields to column indices using header names.
 
     Returns a dict ``{field: index}`` where ``index`` is -1 when no column
-    matched. Rotation fields (roll/pitch/yaw) are resolved before the single
-    letter x/y/z fields so, e.g., a "Yaw" column is not claimed by a generic
-    "y" keyword.
+    matched. Positional x/y/z fields are resolved before the roll/pitch/yaw
+    fields so that, e.g., in an ``X, Y, Z, R, P, Y`` file the positional "Y"
+    claims its column first and only the leftover "Y" falls through to yaw
+    (roll/pitch/yaw also accept the short "r"/"p"/"y" abbreviations).
     """
     normalized = [normalize_header(h) for h in headers]
     mapping = {field: -1 for field in MOTION_COLUMN_FIELDS}
@@ -110,7 +111,7 @@ def auto_map_motion_columns(headers):
                     return i
         return -1
 
-    for field in ("time", "roll", "pitch", "yaw", "x", "y", "z"):
+    for field in ("time", "x", "y", "z", "roll", "pitch", "yaw"):
         idx = find(MOTION_COLUMN_KEYWORDS[field])
         mapping[field] = idx
         if idx >= 0:

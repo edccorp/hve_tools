@@ -181,7 +181,7 @@ To drive the object along a path you already have (an imported point polyline, a
 Time,X,Y,Z,Roll,Pitch,Yaw
 ```
 
-5. Review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (fields may be in any order or under different header names; generic `Column N` labels appear when the file has no header row), then click **Import and Animate**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
+5. Review the auto-detected **Time / X / Y / Z / Roll / Pitch / Yaw** column dropdowns (fields may be in any order or under different header names; short `R` / `P` / `Y` headers are recognized as Roll / Pitch / Yaw, and generic `Column N` labels appear when the file has no header row), then click **Import and Animate**. Time, X, Y and Z are required; Roll, Pitch and Yaw default to 0 when their column is set to **(None)**.
 
 ### 7. Import XYZ points
 
