@@ -227,6 +227,29 @@ class HVETOOLS_OT_copy_surface_to_selected(bpy.types.Operator):
         self.report({'INFO'}, f"Copied to {copied} object(s)")
         return {'FINISHED'}
 
+class HVE_OT_open_user_guide(bpy.types.Operator):
+    """Open the HVE Tools user guide in your web browser"""
+    bl_idname = "hve.open_user_guide"
+    bl_label = "Open User Guide"
+
+    _GITHUB_URL = "https://github.com/edccorp/hve_tools/blob/main/USER_GUIDE.md"
+
+    def execute(self, context):
+        import webbrowser
+        import pathlib
+
+        base = os.path.dirname(os.path.abspath(__file__))
+        html_path = os.path.join(base, "docs", "USER_GUIDE.html")
+
+        if os.path.exists(html_path):
+            webbrowser.open(pathlib.Path(html_path).as_uri())
+            self.report({'INFO'}, "Opened the HVE Tools user guide.")
+        else:
+            webbrowser.open(self._GITHUB_URL)
+            self.report({'INFO'}, "Bundled guide not found; opened the online guide.")
+        return {'FINISHED'}
+
+
 class HVE_PT_mechanist_base(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -289,6 +312,8 @@ class HVE_PT_pre(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
+        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
+        l.separator()
         col = l.column(align=True)
         col.label(text="Configure scene objects before export.", icon='INFO')
         col.label(text="Use H3D Setup, then run Export to HVE.")
@@ -530,6 +555,8 @@ class HVE_PT_post(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
+        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
+        l.separator()
         col = l.column(align=True)
         col.label(text="Import or export simulation results.", icon='INFO')
         col.label(text="Choose a tool below based on file type.")
@@ -590,6 +617,8 @@ class HVE_PT_other_tools(HVE_PT_mechanist_base):
 
     def draw(self, context):
         l = self.layout
+        l.operator("hve.open_user_guide", text="Open User Guide", icon='HELP')
+        l.separator()
         col = l.column(align=True)
         col.label(text="Utilities for data prep and analysis.", icon='TOOL_SETTINGS')
         col.label(text="Select a utility panel below.")
@@ -949,10 +978,11 @@ classes = (
     HVE_PT_point_importer,
     HVE_PT_race_render_exporter,
     HVE_OT_save_preset,
-    HVE_OT_load_preset, 
+    HVE_OT_load_preset,
     HVETOOLS_OT_set_selected_hve_type,
     HVETOOLS_OT_copy_surface_to_selected,
-    
+    HVE_OT_open_user_guide,
+
     )
 
 

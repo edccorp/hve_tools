@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HVE Tools — User Guide</title>
+<style>
+:root { color-scheme: light dark; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.6; max-width: 820px; margin: 0 auto; padding: 2rem 1.25rem 4rem;
+  color: #1b1b1b; background: #ffffff;
+}
+h1, h2, h3, h4 { line-height: 1.25; margin-top: 2rem; }
+h1 { font-size: 2rem; border-bottom: 2px solid #e2731b; padding-bottom: .3rem; }
+h2 { font-size: 1.5rem; border-bottom: 1px solid #ddd; padding-bottom: .25rem; }
+h3 { font-size: 1.2rem; }
+a { color: #b85c00; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { background: #f2f2f2; padding: .12em .35em; border-radius: 4px; font-size: .9em;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+blockquote { border-left: 4px solid #e2731b; margin: 1rem 0; padding: .4rem 1rem;
+  background: #fff7ef; color: #444; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border: 1px solid #ddd; padding: .5rem .6rem; text-align: left; vertical-align: top; }
+th { background: #f6f6f6; }
+hr { border: none; border-top: 1px solid #e5e5e5; margin: 2rem 0; }
+ul, ol { padding-left: 1.5rem; }
+li { margin: .2rem 0; }
+@media (prefers-color-scheme: dark) {
+  body { color: #ddd; background: #1e1e1e; }
+  th { background: #2a2a2a; } code { background: #2a2a2a; }
+  th, td { border-color: #3a3a3a; } h2 { border-color: #333; }
+  blockquote { background: #2a2117; color: #ccc; }
+}
+</style>
+</head>
+<body>
+<!-- Generated from USER_GUIDE.md by scripts/build_user_guide_html.py. Do not edit directly. -->
+<h1 id="hve-tools--user-guide">HVE Tools — User Guide</h1>
+<p>A hands-on guide to using the HVE Tools Blender add-on. It walks you through installing the add-on, finding its panels, and completing the most common tasks step by step. For a terse feature-by-feature reference, see <a href="README.md"><code>README.md</code></a>.</p>
+<hr>
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-what-this-add-on-does">What this add-on does</a></li>
+<li><a href="#2-install-and-find-the-panels">Install and find the panels</a></li>
+<li><a href="#3-how-the-sidebar-is-organized">How the sidebar is organized</a></li>
+<li><a href="#4-task-guides">Task guides</a><ul>
+<li><strong>Pre-Simulation Setup</strong><ul>
+<li><a href="#41-prepare-objects-for-hve-export">4.1 Prepare objects for HVE export</a></li>
+<li><a href="#42-export-h3d-files">4.2 Export H3D files</a></li>
+</ul></li>
+<li><strong>Post-Simulation Processing</strong><ul>
+<li><a href="#43-import-post-simulation-results">4.3 Import post-simulation results</a></li>
+</ul></li>
+<li><strong>Other Tools</strong><ul>
+<li><a href="#44-understanding-the-csv-column-mapping">4.4 Understanding the CSV column mapping</a></li>
+<li><a href="#45-animate-from-edr-data">4.5 Animate from EDR data</a></li>
+<li><a href="#46-animate-from-xyzrpy-motion-data">4.6 Animate from XYZ/RPY motion data</a></li>
+<li><a href="#47-import-survey--point-data">4.7 Import survey / point data</a></li>
+<li><a href="#48-motion-path-tools">4.8 Motion path tools</a></li>
+<li><a href="#49-create-timed-location-markers">4.9 Create timed location markers</a></li>
+<li><a href="#410-scale-an-object-to-a-known-distance">4.10 Scale an object to a known distance</a></li>
+<li><a href="#411-bake-speed-and-acceleration">4.11 Bake speed and acceleration</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#5-units-and-scale">Units and scale</a></li>
+<li><a href="#6-troubleshooting">Troubleshooting</a></li>
+<li><a href="#7-example-files">Example files</a></li>
+</ol>
+<hr>
+<h2 id="1-what-this-add-on-does">1. What this add-on does</h2>
+<p>HVE Tools bridges Blender and <strong>HVE (Human Vehicle Environment)</strong> simulation workflows. It lets you:</p>
+<ul>
+<li><strong>Set up and export</strong> scene objects (vehicles, environments, GATB surfaces) as HVE <code>.h3d</code> files.</li>
+<li><strong>Import simulation results</strong> back into Blender (variable-output CSV/HVO, HVE FBX, RaceRender conversion).</li>
+<li><strong>Recreate motion</strong> from crash-data sources such as EDR reports, XYZ/RPY motion tables, and survey points.</li>
+<li><strong>Analyze</strong> motion with motion-path tools, two-point scaling, and speed/acceleration baking.</li>
+</ul>
+<p>Everything lives in one sidebar tab in the 3D View.</p>
+<hr>
+<h2 id="2-install-and-find-the-panels">2. Install and find the panels</h2>
+<ol>
+<li>Install <strong>Blender 4.x or later</strong>.</li>
+<li>Download or clone this repository (or a <code>.zip</code> of it).</li>
+<li>In Blender: <strong>Edit → Preferences → Add-ons → Install…</strong>, then select the add-on package (the folder or its <code>.zip</code>).</li>
+<li>Tick <strong>HVE Menu</strong> in the add-ons list to enable it.</li>
+<li>In the 3D View, press <strong>N</strong> to open the sidebar, then click the <strong>HVE</strong> tab.</li>
+</ol>
+<blockquote>
+<p><strong>Tip — rename the tab.</strong> In <strong>Edit → Preferences → Add-ons → HVE Menu</strong>, expand the preferences to choose the <strong>HVE</strong> tab, the <strong>Human Vehicle Environment</strong> tab, or a <strong>Custom Tab Name</strong>. Useful if you want HVE Tools to share an existing sidebar tab.</p>
+</blockquote>
+<p>If you don't see the <strong>HVE</strong> tab, confirm the add-on is enabled and that you are in the 3D View (not, say, the Shader Editor).</p>
+<hr>
+<h2 id="3-how-the-sidebar-is-organized">3. How the sidebar is organized</h2>
+<p>The <strong>HVE</strong> tab groups everything into three top-level panels:</p>
+<table>
+<thead><tr>
+<th>Panel</th>
+<th>Use it for</th>
+<th>Sub-panels</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Pre-Simulation Setup</strong></td><td>Getting Blender objects ready for HVE and exporting them</td><td><strong>H3D Setup</strong>, <strong>Export to HVE</strong></td></tr>
+<tr><td><strong>Post-Simulation Processing</strong></td><td>Bringing HVE results back into Blender</td><td><strong>HVE FBX Importer</strong>, <strong>Variable Output Importer</strong>, <strong>RaceRender Converter</strong></td></tr>
+<tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong></td></tr>
+</tbody></table>
+<p>Most panels are collapsed by default — click a panel header to expand it. The task guides below follow this same order: Pre-Simulation Setup, then Post-Simulation Processing, then Other Tools.</p>
+<hr>
+<h2 id="4-task-guides">4. Task guides</h2>
+<p>Each subsection below is a self-contained task, ordered to match the panels in the sidebar. If you just want a fast first result, jump to the quick start at the top of <a href="#45-animate-from-edr-data">4.5 Animate from EDR data</a>; if you'll be loading CSVs, skim <a href="#44-understanding-the-csv-column-mapping">4.4 Understanding the CSV column mapping</a> first.</p>
+<h3 id="pre-simulation-setup">Pre-Simulation Setup</h3>
+<h3 id="41-prepare-objects-for-hve-export">4.1 Prepare objects for HVE export</h3>
+<p>Open <strong>Pre-Simulation Setup → H3D Setup</strong>, then:</p>
+<ol>
+<li><strong>Add Materials</strong> — expand and click <strong>Add Materials</strong> to create the generic, standard, and HVE light material sets.</li>
+<li><strong>Object Type</strong> — expand and classify the selected object as <strong>Environment</strong>, <strong>Vehicle</strong>, or <strong>GATB Surface</strong>. If you selected several objects of mixed types, use the one-click reclassify buttons shown in the warning.</li>
+<li><strong>Vehicle Lighting</strong> (vehicles only) — tag light objects (headlights, brake, turn, fog, reverse, tail, etc.) so HVE knows their function.</li>
+<li><strong>Terrain Properties</strong> (environments only) — set:<ul>
+<li><strong>Surface</strong>: type (Road / Friction Zone / Curb / Water / Other), overlay label, material name, friction multiplier. The <strong>Copy Type + Overlay to Selected</strong> button pushes surface type and overlay from the active object to the rest of the selection.</li>
+<li><strong>Water</strong>: depth and static-water flag.</li>
+<li><strong>Soil</strong>: Bekker exponent, frictional/cohesive modifiers, moisture, macrotexture.</li>
+<li><strong>Forces</strong>: constant, linear, quadratic, cubic, unloading, damping.</li>
+</ul></li>
+<li>Optionally <strong>Save Preset</strong> / <strong>Load Preset</strong>, or pick one from <strong>Apply Preset</strong>, to reuse terrain settings (presets live in <code>hve_presets/</code>).</li>
+</ol>
+<h3 id="42-export-h3d-files">4.2 Export H3D files</h3>
+<ol>
+<li>Select the object(s) to export and confirm their HVE type in <strong>H3D Setup</strong>.</li>
+<li>Open <strong>Pre-Simulation Setup → Export to HVE</strong>. The button adapts to the selected type:<ul>
+<li><strong>Export Vehicle</strong> → <code>.h3d</code></li>
+<li><strong>Export Environment</strong> → <code>.h3d</code></li>
+<li><strong>Export GATB Surfaces</strong> → <code>.csv</code></li>
+</ul></li>
+<li>If a mixed selection is detected, classify everything as one type first (the panel offers buttons to do this).</li>
+<li>In the file browser, set options (selection-only, hierarchy, normals, compression, axis conversion, global scale) and save.</li>
+</ol>
+<h3 id="post-simulation-processing">Post-Simulation Processing</h3>
+<h3 id="43-import-post-simulation-results">4.3 Import post-simulation results</h3>
+<p>Open <strong>Post-Simulation Processing</strong> and pick the matching importer:</p>
+<ul>
+<li><strong>HVE FBX Importer</strong> — click <strong>Import FBX</strong> and choose the <code>.fbx</code>. On import, the HVE hierarchy is renamed into cleaner labels, the scene timeline is extended to cover the animation, and objects are organized into HVE collections by event, vehicle, wheels, and body. Then set <strong>Max Shape Key Samples</strong> (the cap on shape keys kept per mesh; 0 = no cap) and click <strong>Process Imported FBX</strong> to run the <strong>Reduce Keys → Merge Meshes → Smooth</strong> cleanup pipeline.</li>
+<li><strong>Variable Output Importer</strong> — import an HVE <code>.hvo</code>/<code>.csv</code> of time plus variable-output columns. Choose <strong>feet or meters</strong>, optionally override the <strong>scale factor</strong>, and optionally <strong>save separate vehicle CSV files</strong>.</li>
+<li><strong>RaceRender Converter</strong> — convert HVE variable output into RaceRender-ready <code>.csv</code> files.</li>
+</ul>
+<h3 id="other-tools">Other Tools</h3>
+<h3 id="44-understanding-the-csv-column-mapping">4.4 Understanding the CSV column mapping</h3>
+<p>The <strong>EDR Data Importer</strong>, <strong>Motion Data Importer</strong>, and <strong>Point Importer</strong> all share the same "load a file, map its columns, import" pattern. Learn it once and it works everywhere:</p>
+<ol>
+<li>Click <strong>Load CSV File</strong> and choose your <code>.csv</code>.</li>
+<li>The add-on inspects the first row:<ul>
+<li><strong>Has a text header?</strong> Columns are auto-matched by name (case-, spacing-, and unit-insensitive — <code>Yaw Rate (deg/s)</code>, <code>yaw_rate</code>, and <code>YAW</code> all match). Common abbreviations are understood too (e.g. <code>t</code>, <code>x</code>/<code>y</code>/<code>z</code>, and <code>r</code>/<code>p</code>/<code>y</code> for roll/pitch/yaw).</li>
+<li><strong>No header (all numbers)?</strong> Columns are labelled <code>Column 1</code>, <code>Column 2</code>, … and mapped by position. You assign them with the dropdowns.</li>
+</ul></li>
+<li>Review each dropdown and fix any that guessed wrong. Set a column to <strong>(None)</strong> when your file doesn't contain that field.</li>
+<li>Click the import button.</li>
+</ol>
+<p>Notes:</p>
+<ul>
+<li><strong>Required vs optional</strong> varies per importer (called out in each task below). Optional fields fall back to sensible defaults when set to <strong>(None)</strong>.</li>
+<li>The mapping is remembered, so you can re-import or switch modes without reloading the file.</li>
+<li>Reordered columns and extra unrelated columns are fine — only the mapped columns are read.</li>
+</ul>
+<h3 id="45-animate-from-edr-data">4.5 Animate from EDR data</h3>
+<p>Open <strong>Other Tools → EDR Data Importer / Entry</strong> to turn speed with yaw-rate, steering-angle, or path data into motion.</p>
+<p><strong>First run (quick start).</strong> For a fast result using the bundled <code>EDR_YawRate_Example.csv</code>:</p>
+<ol>
+<li>Add or select an object to drive (e.g. <strong>Add → Mesh → Cube</strong>).</li>
+<li>Set <strong>Select EDR Object</strong> to that object and leave <strong>EDR Input Mode</strong> on <strong>Yaw Rate</strong>.</li>
+<li>Set <strong>Frame Rate</strong> (the example is 0.1 s samples, so 10 fps reproduces it exactly; any frame rate is resampled).</li>
+<li>Under <strong>Import CSV (map columns)</strong>, click <strong>Load CSV File</strong>, pick the example, then click <strong>Import Mapped Data</strong>.</li>
+<li>Click <strong>Animate Object</strong> and scrub the timeline.</li>
+</ol>
+<p><strong>Input modes.</strong> The panel shows only the inputs relevant to the selected mode:</p>
+<ul>
+<li><strong>Yaw Rate</strong> — data is <code>Time, Speed, Yaw Rate</code> (deg/s). Optionally enable <strong>Use Slip Estimate</strong> and tune <strong>Slip Gain</strong> / <strong>Slip Max</strong> to add an apparent body-slip angle to the motion.</li>
+<li><strong>Steering Wheel Angle</strong> — data is <code>Time, Speed, Steering Wheel Angle</code> (deg). Set <strong>Wheelbase</strong> and <strong>Steering Gear Ratio</strong>; yaw rate is derived with a bicycle model: <code>yaw_rate = speed / wheelbase * tan(swa / gear_ratio)</code>. Slip estimate is available here too.</li>
+<li><strong>Path Follow</strong> — data is just <code>Time, Speed</code>; an existing curve/mesh supplies the heading. Pick a <strong>Path Object</strong> (curve or polyline mesh, different from the animated object), and optionally <strong>Align to Path</strong> with a <strong>Path Yaw Offset</strong> so the object faces its direction of travel.</li>
+</ul>
+<p><strong>Common steps for every mode:</strong></p>
+<ol>
+<li>Set <strong>Select EDR Object</strong> and <strong>Frame Rate</strong>.</li>
+<li><strong>Import CSV (map columns)</strong>: click <strong>Load CSV File</strong>, then <strong>Import Mapped Data</strong> (see <a href="#44-understanding-the-csv-column-mapping">4.4</a>). All four column dropdowns (Time / Speed / Yaw Rate / Steering Wheel Angle) stay available regardless of mode, so both yaw-rate and steering values are stored — you can switch modes and re-animate without reloading. You can also add/edit/remove rows by hand in the table.</li>
+<li>Click <strong>Animate Object</strong> (or <strong>Animate Along Path</strong> in Path Follow mode).</li>
+</ol>
+<blockquote>
+<p>Speeds are read as <strong>mph</strong> in Imperial scenes and <strong>m/s</strong> in Metric scenes. A negative first timestamp is shifted so motion starts at frame 0.</p>
+</blockquote>
+<p>Try the examples: <code>EDR_YawRate_Example.csv</code>, <code>EDR_SteeringAngle_Example.csv</code>, or <code>EDR_Combined_Example.csv</code> (which carries all four columns at once).</p>
+<h3 id="46-animate-from-xyzrpy-motion-data">4.6 Animate from XYZ/RPY motion data</h3>
+<p>Open <strong>Other Tools → Motion Data Importer</strong> for data that already contains full pose per timestamp.</p>
+<ol>
+<li>Set the <strong>Motion Object</strong> and <strong>Frame Rate</strong>.</li>
+<li>Choose <strong>Extrapolation Mode</strong> (Linear or Constant) for frames beyond the data.</li>
+<li>Under <strong>Import CSV (map columns)</strong>, <strong>Load CSV File</strong> and review the <strong>Time / X / Y / Z / Roll / Pitch / Yaw</strong> dropdowns (see <a href="#44-understanding-the-csv-column-mapping">4.4</a>). Headers may be in any order or abbreviated (<code>t</code>, <code>x</code>, <code>y</code>, <code>z</code>, <code>r</code>, <code>p</code>, <code>y</code>).</li>
+<li>Click <strong>Import and Animate</strong>.</li>
+</ol>
+<p><strong>Only Time is required.</strong> X, Y, Z, Roll, Pitch, and Yaw each default to 0 when their column is set to <strong>(None)</strong> or absent. Position values are converted from feet to meters in Imperial scenes. Sample file: <code>XYZRPY_Example.csv</code>.</p>
+<h3 id="47-import-survey--point-data">4.7 Import survey / point data</h3>
+<p>Open <strong>Other Tools → Point Importer</strong> to place markers from a coordinate list.</p>
+<ol>
+<li>Under <strong>Import CSV (map columns)</strong>, <strong>Load CSV File</strong> and review the <strong>Point Number / X / Y / Z / Description</strong> dropdowns (see <a href="#44-understanding-the-csv-column-mapping">4.4</a>).</li>
+<li>Set the <strong>Scale Factor</strong> (default <code>0.3048</code> converts feet to meters).</li>
+<li>Click <strong>Import Points</strong>.</li>
+</ol>
+<p><strong>Every field is optional.</strong> X, Y, and Z each default to 0 when their column is <strong>(None)</strong>; Point Number falls back to a running counter and Description to "No Description". The importer creates a circle, a number label, and a description label at each point in an <strong>Imported Points</strong> collection, and connects points that share a description into a polyline. Sample file: <code>XYZ_Points_Example.csv</code>.</p>
+<h3 id="48-motion-path-tools">4.8 Motion path tools</h3>
+<p>Open <strong>Other Tools → Motion Path Tools</strong> with animated object(s) selected:</p>
+<ul>
+<li><strong>Generate Motion Paths</strong> / <strong>Remove Motion Paths</strong> — add or clear Blender motion paths.</li>
+<li><strong>Convert Motion Paths To Curve</strong> — bake the path into an editable 3D curve in a <strong>Motion Paths</strong> collection (handy as a Path Follow target back in the EDR tool).</li>
+<li><strong>Show/Hide Motion Paths</strong> — toggle the viewport overlay.</li>
+</ul>
+<h3 id="49-create-timed-location-markers">4.9 Create timed location markers</h3>
+<p>Open <strong>Other Tools → Timed Location Markers</strong> with an animated object selected to drop triangle markers at a fixed time interval along the motion, with optional time-value text labels:</p>
+<ol>
+<li>Set the <strong>Marker Interval (sec)</strong> and <strong>Zero Frame</strong> (the frame treated as time zero; markers are placed forward and backward from it).</li>
+<li>Set the <strong>Marker Size</strong>, <strong>Marker Forward Direction</strong> axis, and <strong>Marker Yaw Offset</strong> so each triangle tip points along travel.</li>
+<li>Optionally enable <strong>Create Time Labels</strong> and set the <strong>Time Label Size</strong>.</li>
+<li>Optionally enable <strong>Replace Existing Markers</strong> to rebuild rather than add.</li>
+<li>Click <strong>Create Location Markers</strong>.</li>
+</ol>
+<h3 id="410-scale-an-object-to-a-known-distance">4.10 Scale an object to a known distance</h3>
+<p>Open <strong>Other Tools → Scale Objects</strong>:</p>
+<ol>
+<li>Select a mesh object and enter <strong>Edit Mode</strong>.</li>
+<li>Select <strong>exactly two vertices</strong> spanning a known real-world distance.</li>
+<li>Enter the <strong>Target Distance</strong> (in scene units).</li>
+<li>Click <strong>Scale Object</strong>. The object is uniformly scaled so the two vertices match the target distance.</li>
+</ol>
+<h3 id="411-bake-speed-and-acceleration">4.11 Bake speed and acceleration</h3>
+<p>Open <strong>Other Tools → Speed + Acceleration</strong> with an animated object selected (or assign a <strong>Source Object</strong>):</p>
+<ol>
+<li>Set the <strong>Forward Direction</strong> axis and optional <strong>Forward Yaw Offset</strong>.</li>
+<li>Set the <strong>Average Window (Frames)</strong> — the centered sample count used to compute velocity (e.g. 3 compares the previous and next frames).</li>
+<li>Choose <strong>Distance Units</strong> (Auto / Meters / Feet) and toggles: <strong>Use XY Only</strong>, <strong>Include Acceleration</strong> (off by default — enable it to also bake the acceleration properties), <strong>Replace Existing Curves</strong>, <strong>Parent Helper to Source</strong>.</li>
+<li>Click <strong>Calculate Speed + Acceleration</strong>.</li>
+</ol>
+<p>Results are baked as animated custom properties (average speed, forward speed, forward/lateral/vertical acceleration) on a helper empty named <code>SpeedData_&lt;object name&gt;</code>.</p>
+<hr>
+<h2 id="5-units-and-scale">5. Units and scale</h2>
+<ul>
+<li>The panels display the current <strong>Unit System</strong> (Metric / Imperial) so you know how values are interpreted.</li>
+<li><strong>EDR speeds</strong>: mph in Imperial scenes, m/s in Metric scenes.</li>
+<li><strong>Motion / point positions</strong>: treated as feet and converted to meters in Imperial scenes; used as-is in Metric scenes. The Point Importer exposes an explicit <strong>Scale Factor</strong> for finer control.</li>
+<li>Set the scene unit system in Blender's <strong>Scene Properties → Units</strong> before importing so conversions match your data.</li>
+</ul>
+<hr>
+<h2 id="6-troubleshooting">6. Troubleshooting</h2>
+<p><strong>The HVE tab is missing.</strong> Make sure <strong>HVE Menu</strong> is enabled in Preferences, you're in the 3D View, and the sidebar is open (<strong>N</strong>). Check the tab name in the add-on preferences.</p>
+<p><strong>"No target object selected."</strong> EDR/motion tools animate the object chosen in that panel's object field — set it before importing or animating.</p>
+<p><strong>Import found no rows.</strong> The required columns weren't mapped or the data didn't parse. Re-open <strong>Load CSV File</strong>, verify the dropdowns point at the right columns (Time/Speed for EDR; Time/X/Y/Z for motion; X/Y/Z for points), and make sure numeric columns actually contain numbers.</p>
+<p><strong>Auto-mapping guessed wrong.</strong> Just override the dropdown. For header-less files, columns are positional (<code>Column 1</code>, <code>Column 2</code>, …) and you map them by hand.</p>
+<p><strong>The vehicle faces or turns the wrong way.</strong> For Path Follow and speed/accel baking, set the correct <strong>forward axis</strong> / <strong>yaw offset</strong>. For yaw-rate data, confirm the sign convention and scene unit system.</p>
+<p><strong>Motion stops partway along a path.</strong> In Path Follow mode, the speed profile travelled farther than the path is long, so the object stops at the path end (a warning is shown). Use a longer path or lower speeds.</p>
+<p><strong>Nothing animates after import.</strong> Confirm the frame range covers the data (timeline start is set to 0 on import; the end is extended to the last frame) and that you clicked the animate/import-and-animate button, not just load.</p>
+<hr>
+<h2 id="7-example-files">7. Example files</h2>
+<p>Bundled at the repository root for trying each importer:</p>
+<table>
+<thead><tr>
+<th>File</th>
+<th>Use with</th>
+</tr></thead>
+<tbody>
+<tr><td><code>EDR_YawRate_Example.csv</code></td><td>EDR importer, Yaw Rate mode</td></tr>
+<tr><td><code>EDR_SteeringAngle_Example.csv</code></td><td>EDR importer, Steering Wheel Angle mode</td></tr>
+<tr><td><code>EDR_Combined_Example.csv</code></td><td>EDR importer, column mapping (all four columns)</td></tr>
+<tr><td><code>XYZRPY_Example.csv</code></td><td>Motion Data Importer</td></tr>
+<tr><td><code>XYZ_Points_Example.csv</code></td><td>Point Importer</td></tr>
+<tr><td><code>hve_presets/*.json</code></td><td>Environment terrain presets</td></tr>
+</tbody></table>
+<p>For a compact feature list and developer notes, see <a href="README.md"><code>README.md</code></a>.</p>
+</body>
+</html>
