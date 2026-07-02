@@ -354,6 +354,12 @@ appears under the import button as a fallback, or you can install them yourself
 with `pip install pye57 laspy[lazrs]`, or convert to PLY/PTX. Both the button and
 its note disappear once the packages are present.
 
+> If a package reports as *installed but still can't import*, it went into your
+> per-user Python folder (because Blender's own `site-packages` wasn't writable)
+> and Blender didn't have that folder on its path. HVE Tools now adds it at
+> startup, so it works even if another add-on that used to add it is disabled —
+> just restart Blender once after installing.
+
 **Surface it:**
 
 1. Select the point cloud, or set it explicitly in **Point Cloud** (leave empty
@@ -580,6 +586,16 @@ cursor and print stage-by-stage progress to the system console — the terminal 
 launched Blender from, or **Window → Toggle System Console** on Windows. Look for
 `[HVE Tools]` lines (points read, filtering, sampling grid, baking, done) so you
 can tell a long run apart from a hang.
+
+**3D reconstruction is slow and barely uses the CPU.** Open3D multithreads normal
+*estimation* and the *Poisson* solve (those spike all cores), but the
+**consistent normal orientation** step is single-threaded — it walks a spanning
+tree over every point — so on big clouds it pins one core while the rest idle.
+The console timing lines show which stage is slow. To speed it up: switch
+**Normal Orientation** to **Up (fast)** (great for terrain / mostly-upward
+surfaces; it can misorient steep walls or overhangs), and/or enable **Subsample
+(Voxel)** in the Filter section — fewer points shortens every stage, especially
+orientation. Lowering **Normal Neighbors (k)** also speeds orientation.
 
 ---
 

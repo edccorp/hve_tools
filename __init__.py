@@ -391,6 +391,17 @@ try:
             min=4,
             soft_max=100,
         )
+        bpy.types.Scene.roadway_recon_orient = EnumProperty(
+            name="Normal Orientation",
+            description="How point normals are oriented before Poisson. The consistent method is single-threaded and slow on big clouds; the fast method is the usual bottleneck to avoid",
+            items=[
+                ('CONSISTENT', "Consistent (accurate, slow)",
+                 "Orient normals with a minimum-spanning-tree walk. Most accurate for arbitrary shapes but SINGLE-THREADED, so it's slow and low-CPU on large clouds"),
+                ('UP', "Up (fast)",
+                 "Point all normals roughly +Z. Near-instant and fully parallel; great for terrain / mostly-upward surfaces, but can misorient steep walls or overhangs"),
+            ],
+            default='CONSISTENT',
+        )
 
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
@@ -458,6 +469,7 @@ try:
         del bpy.types.Scene.roadway_recon_alpha
         del bpy.types.Scene.roadway_recon_bpa_radius_mult
         del bpy.types.Scene.roadway_recon_normals_k
+        del bpy.types.Scene.roadway_recon_orient
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

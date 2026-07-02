@@ -1168,8 +1168,11 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         elif scene.roadway_recon_method == 'ALPHA':
             c.prop(scene, "roadway_recon_alpha")
         c.prop(scene, "roadway_recon_normals_k")
+        c.prop(scene, "roadway_recon_orient")
+        if scene.roadway_recon_orient == 'CONSISTENT':
+            c.label(text="Consistent orient is single-threaded (slow on big clouds)", icon='INFO')
         c.prop(scene, "roadway_texture_size")
-        c.label(text="Subsample / SOR from Filter also run here", icon='INFO')
+        c.label(text="Subsample (Filter) to speed up big clouds", icon='INFO')
         c.label(text="Colour texture is baked automatically on create", icon='TEXTURE')
 
         if pc_obj is None:

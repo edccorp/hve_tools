@@ -1,5 +1,7 @@
 import bpy
 import logging
+import os
+import site
 import subprocess
 import sys
 from bpy.types import Operator
@@ -19,16 +21,41 @@ __all__ = [
     "IMPORT_OT_ply_pointcloud_geonodes",
     "IMPORT_OT_install_pointcloud_deps",
     "install_optional_packages",
+    "ensure_user_site_on_path",
     "register",
     "unregister",
 ]
 
 
+def ensure_user_site_on_path():
+    """Make the per-user site-packages importable this Blender session.
+
+    When Blender's own ``site-packages`` isn't writable (the usual case on
+    Windows without admin rights), pip installs into the per-user directory,
+    which Blender does NOT add to ``sys.path`` by default — so freshly installed
+    packages can't be imported. Add it (and process its .pth files) so E57/LAZ
+    support works without a restart. Called after installing and at register.
+    """
+    try:
+        user_site = site.getusersitepackages()
+    except Exception:  # noqa: BLE001 - getusersitepackages can fail in odd setups
+        return
+    if not user_site or not os.path.isdir(user_site):
+        return
+    if user_site not in sys.path:
+        sys.path.append(user_site)
+    try:
+        site.addsitedir(user_site)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+
+
 def install_optional_packages(specs):
     """pip-install the given package specs into Blender's Python.
 
-    Raises on failure. Invalidates import caches so freshly installed packages
-    can be imported without restarting Blender when possible.
+    Raises on failure. Invalidates import caches and adds the per-user
+    site-packages to the path so freshly installed packages can be imported
+    without restarting Blender.
     """
     import importlib
 
@@ -38,6 +65,7 @@ def install_optional_packages(specs):
     except Exception as exc:  # noqa: BLE001 - ensurepip is best-effort
         logger.warning("ensurepip failed (continuing): %s", exc)
     subprocess.check_call([py, "-m", "pip", "install", "--upgrade"] + list(specs))
+    ensure_user_site_on_path()
     importlib.invalidate_caches()
 
 class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
@@ -172,6 +200,9 @@ classes = (IMPORT_OT_ply_pointcloud_geonodes, IMPORT_OT_install_pointcloud_deps)
 
 
 def register():
+    # Make previously user-installed optional packages (pye57/laspy/open3d)
+    # importable, since Blender doesn't add the per-user site to sys.path.
+    ensure_user_site_on_path()
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)

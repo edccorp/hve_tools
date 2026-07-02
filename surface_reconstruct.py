@@ -271,17 +271,30 @@ def _reconstruct_mesh(o3d, points, colors, scene):
             np.ascontiguousarray(colors[:, :3], dtype=np.float64)
         )
 
+    import time
+
     k = max(int(getattr(scene, "roadway_recon_normals_k", 30)), 4)
-    _log("  estimating and orienting point normals...")
+    t0 = time.perf_counter()
+    _log(f"  estimating normals (k={k}, multithreaded)...")
     pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=k))
-    # Consistently orient normals so Poisson gets a coherent inside/outside.
-    try:
-        pcd.orient_normals_consistent_tangent_plane(k)
-    except Exception:  # noqa: BLE001 - fall back to a simple up-ish orientation
+    _log(f"  normals estimated in {time.perf_counter() - t0:.1f}s")
+
+    orient = getattr(scene, "roadway_recon_orient", 'CONSISTENT')
+    t0 = time.perf_counter()
+    if orient == 'UP':
+        _log("  orienting normals up (fast)...")
         pcd.orient_normals_to_align_with_direction(np.array([0.0, 0.0, 1.0]))
+    else:
+        _log("  orienting normals consistently (single-threaded; the slow step)...")
+        try:
+            pcd.orient_normals_consistent_tangent_plane(k)
+        except Exception:  # noqa: BLE001 - fall back to a simple up-ish orientation
+            pcd.orient_normals_to_align_with_direction(np.array([0.0, 0.0, 1.0]))
+    _log(f"  normals oriented in {time.perf_counter() - t0:.1f}s")
 
     method = getattr(scene, "roadway_recon_method", 'POISSON')
-    _log(f"  reconstructing ({method})... this can take a while")
+    t0 = time.perf_counter()
+    _log(f"  reconstructing ({method}, multithreaded)... this can take a while")
     if method == 'POISSON':
         depth = int(getattr(scene, "roadway_recon_depth", 9))
         mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
