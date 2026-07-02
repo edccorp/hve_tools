@@ -1017,7 +1017,7 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             if pc_obj is not None:
                 c.label(text=f"Source: {pc_obj.name} (active)", icon="OBJECT_DATA")
             else:
-                c.label(text="Select a mesh point cloud, or set one below", icon='INFO')
+                c.label(text="Select a point cloud to begin", icon='ERROR')
         c.prop(scene, "roadway_source_object")
 
         # Expose the point cloud's GeoNodes display subsample, if it has one.
@@ -1065,7 +1065,11 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         if not bpy.data.filepath:
             c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
 
-        c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
+        if pc_obj is None:
+            c.label(text="Select a point cloud above (or in the viewport) first", icon='ERROR')
+        build = c.column()
+        build.enabled = pc_obj is not None
+        build.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
         c.label(text="Result is classified as Environment", icon='WORLD')
 
         # Rebake the texture of an existing surface at a new Texture Resolution
@@ -1094,6 +1098,10 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         l = self.layout
         c = l.column()
 
+        pc_obj = scene.roadway_source_object or (
+            context.object if context.object and context.object.type == 'MESH' else None
+        )
+
         c.label(text="Full 3D mesh (Open3D) — for vertical / overhanging geometry", icon='MESH_ICOSPHERE')
         c.label(text="Uses the Point Cloud + pre-filters/clip above", icon='INFO')
         c.prop(scene, "roadway_recon_method")
@@ -1103,7 +1111,11 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         elif scene.roadway_recon_method == 'ALPHA':
             c.prop(scene, "roadway_recon_alpha")
         c.prop(scene, "roadway_recon_normals_k")
-        c.operator("object.reconstruct_surface_3d", text="Reconstruct 3D Surface", icon='MOD_REMESH')
+        if pc_obj is None:
+            c.label(text="Select a point cloud above (or in the viewport) first", icon='ERROR')
+        recon = c.column()
+        recon.enabled = pc_obj is not None
+        recon.operator("object.reconstruct_surface_3d", text="Reconstruct 3D Surface", icon='MOD_REMESH')
         c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
         c.label(text="For drivable ground, use Create Roadway Surface instead", icon='INFO')
 
