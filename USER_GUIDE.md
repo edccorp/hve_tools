@@ -489,7 +489,9 @@ pre-filters/clip above. Pick a **Method**:
 - **Poisson** *(default)* — smooth, watertight surface; the best all-round choice
   for scanned surfaces. Set **Poisson Depth** (higher = finer, slower, noisier)
   and **Density Trim** (fraction of the lowest-density, invented-past-the-data
-  vertices to cut away).
+  vertices to cut away). Poisson always closes over gaps, so it grows **bulges**
+  in empty areas — raise Density Trim to cut them at build time, or trim them
+  afterwards with **Trim Bulges** (below).
 - **Ball Pivoting** — rolls a ball over the points and connects the ones it
   touches into triangles; keeps the original points, good for evenly dense
   clouds. Where the points are too far apart for the ball, it leaves **holes** —
@@ -505,6 +507,15 @@ material driven by that attribute is assigned so the surface shows coloured in
 **Material Preview / Rendered** view. For the drivable road itself, keep using
 **Create Ground Surface** — a 3D reconstruction of the road is noisier and
 harder for HVE to use.
+
+**Trim Bulges (remove Poisson balloons after the fact).** If a finished surface
+still has bulges or a webbed skirt extending past your scan, select it and click
+**Trim Bulges (To Cloud)**: it deletes every part of the mesh that sits farther
+than **Trim Distance** from the source point cloud — which is exactly where
+Poisson invented surface. Set **Trim Distance** in scene units (0 auto-picks
+about ten times the average point spacing); lower it to cut more aggressively,
+raise it if it starts eating real geometry. The source cloud must still be in the
+scene. Rebake the texture afterwards if you want it to match the trimmed mesh.
 
 **Texture (baked automatically).** So the colour exports to HVE, the reconstruct
 step **bakes a colour texture automatically** right after building the mesh

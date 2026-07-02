@@ -1190,9 +1190,13 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
             c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
         c.label(text="For drivable ground, use Create Ground Surface instead", icon='INFO')
 
-        # Rebake the texture at a new Texture Resolution without re-reconstructing.
+        # Post-build tools, shown when a reconstructed surface is active.
         active = context.active_object
         if active is not None and active.get("surface_3d"):
+            c.separator()
+            c.prop(scene, "roadway_trim_distance")
+            c.operator("object.trim_surface_to_cloud", text="Trim Bulges (To Cloud)", icon='MOD_MASK')
+            c.label(text="Deletes surface far from the cloud (Poisson bulges)", icon='INFO')
             c.separator()
             c.operator("object.bake_surface_texture", text="Rebake Texture (Selected 3D Surface)", icon='TEXTURE')
             c.label(text="Rebake to change resolution (samples the cloud)", icon='INFO')

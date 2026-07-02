@@ -671,4 +671,105 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
         return {'FINISHED'}
 
 
-classes = [HVE_OT_ReconstructSurface3D, HVE_OT_BakeSurfaceTexture]
+class HVE_OT_TrimSurfaceToCloud(bpy.types.Operator):
+    """Delete parts of the selected 3D surface that lie farther than the Trim Distance from the source point cloud — removes Poisson bulges and invented geometry after the surface is built"""
+    bl_idname = "object.trim_surface_to_cloud"
+    bl_label = "Trim Bulges (To Cloud)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH' and obj.get("surface_3d_source")
+
+    def execute(self, context):
+        import bmesh
+
+        scene = context.scene
+        obj = context.active_object
+        src_name = str(obj.get("surface_3d_source", ""))
+        src = bpy.data.objects.get(src_name)
+        if src is None or src.type != 'MESH':
+            self.report(
+                {'ERROR'},
+                f"Source cloud '{src_name}' not found; keep it in the scene to trim.",
+            )
+            return {'CANCELLED'}
+
+        window = context.window
+        wm = context.window_manager
+        wm.progress_begin(0, 100)
+        if window is not None:
+            window.cursor_set('WAIT')
+        try:
+            _show_system_console()
+            try:
+                o3d = _ensure_open3d()
+            except RuntimeError as exc:
+                self.report({'ERROR'}, str(exc))
+                return {'CANCELLED'}
+
+            # Source cloud in world space.
+            s_local, _c, _a = _read_point_cloud(src, False)
+            s_mw = np.array(src.matrix_world, dtype=np.float64)
+            cloud = s_local @ s_mw[:3, :3].T + s_mw[:3, 3]
+
+            # Surface vertices in world space.
+            mesh = obj.data
+            nv = len(mesh.vertices)
+            vco = np.empty(nv * 3, dtype=np.float64)
+            mesh.vertices.foreach_get("co", vco)
+            vco = vco.reshape(nv, 3)
+            o_mw = np.array(obj.matrix_world, dtype=np.float64)
+            vworld = vco @ o_mw[:3, :3].T + o_mw[:3, 3]
+
+            wm.progress_update(30)
+            cloud_pcd = o3d.geometry.PointCloud()
+            cloud_pcd.points = o3d.utility.Vector3dVector(np.ascontiguousarray(cloud))
+            vpcd = o3d.geometry.PointCloud()
+            vpcd.points = o3d.utility.Vector3dVector(np.ascontiguousarray(vworld))
+
+            # Distance from each surface vertex to the nearest cloud point.
+            _log(f"  measuring {nv} vertices against {len(cloud)} cloud points...")
+            dist = np.asarray(vpcd.compute_point_cloud_distance(cloud_pcd))
+
+            thresh = float(scene.roadway_trim_distance)
+            if thresh <= 0:
+                nn = np.asarray(cloud_pcd.compute_nearest_neighbor_distance())
+                avg = float(np.mean(nn)) if nn.size else 0.0
+                thresh = avg * 10.0
+            far = dist > thresh
+            if not far.any():
+                self.report({'INFO'}, f"No surface lies beyond {thresh:.3g}; nothing trimmed.")
+                return {'CANCELLED'}
+            if far.all():
+                self.report(
+                    {'WARNING'},
+                    f"Every vertex is beyond {thresh:.3g}; raise Trim Distance (0 = auto).",
+                )
+                return {'CANCELLED'}
+
+            wm.progress_update(70)
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            bm.verts.ensure_lookup_table()
+            del_verts = [bm.verts[int(i)] for i in np.nonzero(far)[0]]
+            bmesh.ops.delete(bm, geom=del_verts, context='VERTS')
+            bm.to_mesh(mesh)
+            bm.free()
+            mesh.update()
+
+            wm.progress_update(100)
+            self.report(
+                {'INFO'},
+                f"Trimmed {int(far.sum())} vertices beyond {thresh:.3g} from the cloud. "
+                "Rebake the texture if needed.",
+            )
+            return {'FINISHED'}
+        finally:
+            wm.progress_end()
+            if window is not None:
+                window.cursor_set('DEFAULT')
+
+
+classes = [HVE_OT_ReconstructSurface3D, HVE_OT_BakeSurfaceTexture, HVE_OT_TrimSurfaceToCloud]

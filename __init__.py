@@ -391,6 +391,14 @@ try:
             min=4,
             soft_max=100,
         )
+        bpy.types.Scene.roadway_trim_distance = FloatProperty(
+            name="Trim Distance",
+            description="Trim Bulges deletes surface farther than this from the source cloud (Poisson invents geometry in empty areas); 0 auto-picks from the average point spacing",
+            default=0.0,
+            min=0.0,
+            soft_max=10.0,
+            unit='LENGTH',
+        )
         bpy.types.Scene.roadway_recon_orient = EnumProperty(
             name="Normal Orientation",
             description="How point normals are oriented before Poisson. The consistent method is single-threaded and slow on big clouds; the fast method is the usual bottleneck to avoid",
@@ -470,6 +478,7 @@ try:
         del bpy.types.Scene.roadway_recon_bpa_radius_mult
         del bpy.types.Scene.roadway_recon_normals_k
         del bpy.types.Scene.roadway_recon_orient
+        del bpy.types.Scene.roadway_trim_distance
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries
