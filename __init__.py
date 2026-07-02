@@ -235,7 +235,7 @@ try:
         )
         bpy.types.Scene.roadway_clip_object = PointerProperty(
             name="Clip To Object",
-            description="Optional: only surface points inside this object's XY footprint (its convex outline). Draw or scale a plane/box over the area of interest to trim away far-off scan points",
+            description="Optional: only surface points inside this object's box. A box/cube clips a true 3D volume (trimming points above and below too); a flat plane clips just its XY footprint. Scale it over the area of interest to trim away far-off scan points",
             type=bpy.types.Object,
             poll=_roadway_source_poll,
         )

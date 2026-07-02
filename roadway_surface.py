@@ -181,61 +181,47 @@ def grid_uvs(nx, ny):
 # Optional point-cloud pre-filters
 # ---------------------------------------------------------------------------
 
-def convex_hull_2d(points_xy):
-    """Return the convex hull of 2D points as a CCW ``(M, 2)`` array.
+def _clip_box_epsilon(extents):
+    """Relative tolerance below which a box axis counts as degenerate (flat)."""
+    mx = float(np.max(extents)) if len(extents) else 0.0
+    return mx * 1e-6
 
-    Andrew's monotone chain — O(n log n). Fewer than three unique points (a
-    degenerate hull) returns an empty ``(0, 2)`` array so callers can skip
-    clipping. Used to clip a cloud to a boundary object's XY footprint.
+
+def clip_box_axis_count(bbox_min, bbox_max):
+    """Number of box axes with a real (non-degenerate) extent.
+
+    A flat plane has 2, a box/cube has 3, a line 1. Used to decide whether a
+    boundary object defines a usable clip region.
     """
-    pts = np.asarray(points_xy, dtype=np.float64)
-    if pts.shape[0] < 3:
-        return np.empty((0, 2), dtype=np.float64)
-    pts = np.unique(pts, axis=0)  # also sorts lexicographically by (x, y)
-    if pts.shape[0] < 3:
-        return np.empty((0, 2), dtype=np.float64)
-
-    def _cross(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    lower = []
-    for p in pts:
-        while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-    upper = []
-    for p in pts[::-1]:
-        while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-    hull = np.array(lower[:-1] + upper[:-1], dtype=np.float64)
-    if hull.shape[0] < 3:
-        return np.empty((0, 2), dtype=np.float64)
-    return hull
+    extents = np.asarray(bbox_max, dtype=np.float64) - np.asarray(bbox_min, dtype=np.float64)
+    return int(np.count_nonzero(extents > _clip_box_epsilon(extents)))
 
 
-def points_in_convex_polygon(points_xy, hull_ccw):
-    """Boolean keep-mask for points inside (or on) a CCW convex polygon.
+def points_in_local_box(points, inv_matrix, bbox_min, bbox_max, tol=0.0):
+    """Keep-mask for points inside a boundary object's oriented box.
 
-    Vectorized half-plane test: a point is inside a counter-clockwise convex
-    polygon when it lies to the left of, or on, every edge. An empty hull keeps
-    all points (no clipping).
+    Points are transformed into the object's local frame with ``inv_matrix``
+    (the inverse of its world matrix), then tested against the object's local
+    axis-aligned bounds. This clips a true 3D volume, so a cube/box trims points
+    above and below it, not just its footprint. An axis whose local extent is
+    ~0 (e.g. a flat plane's thickness) is treated as unbounded, so a plane still
+    clips just its XY footprint. Fully vectorized.
     """
-    pts = np.asarray(points_xy, dtype=np.float64)
-    hull = np.asarray(hull_ccw, dtype=np.float64)
-    if hull.shape[0] < 3 or pts.shape[0] == 0:
-        return np.ones(pts.shape[0], dtype=bool)
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.shape[0] == 0:
+        return np.ones(0, dtype=bool)
+    inv = np.asarray(inv_matrix, dtype=np.float64)
+    local = pts @ inv[:3, :3].T + inv[:3, 3]
+    bmin = np.asarray(bbox_min, dtype=np.float64)
+    bmax = np.asarray(bbox_max, dtype=np.float64)
+    eps = _clip_box_epsilon(bmax - bmin)
 
-    inside = np.ones(pts.shape[0], dtype=bool)
-    px, py = pts[:, 0], pts[:, 1]
-    n = hull.shape[0]
-    for i in range(n):
-        ax, ay = hull[i]
-        bx, by = hull[(i + 1) % n]
-        # Cross product of edge (A->B) with (A->P); >= 0 means left/on the edge.
-        cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
-        inside &= cross >= -1e-9
-    return inside
+    mask = np.ones(pts.shape[0], dtype=bool)
+    for ax in range(3):
+        if (bmax[ax] - bmin[ax]) <= eps:
+            continue  # degenerate axis (plane thickness) -> unbounded
+        mask &= (local[:, ax] >= bmin[ax] - tol) & (local[:, ax] <= bmax[ax] + tol)
+    return mask
 
 
 def voxel_downsample(points, colors, voxel_size):
@@ -550,24 +536,27 @@ def _read_point_cloud(source, want_colors):
     return local, colors, attr_name
 
 
-def _boundary_hull_xy(clip_obj):
-    """CCW XY convex hull of a boundary object's world-space vertices.
+def _clip_object_box(clip_obj):
+    """Return ``(inv_matrix, bbox_min, bbox_max)`` for a boundary object's box.
 
-    Returns an ``(M, 2)`` array, or an empty ``(0, 2)`` array when ``clip_obj``
-    is unusable (not a mesh, too few vertices) so callers skip clipping.
+    The bounds are the object's local-space axis-aligned bounding box (its 8
+    ``bound_box`` corners); ``inv_matrix`` maps world points into that local
+    frame. Returns ``None`` when ``clip_obj`` is unusable (not a mesh, no
+    geometry).
     """
     if clip_obj is None or getattr(clip_obj, "type", None) != 'MESH':
-        return np.empty((0, 2), dtype=np.float64)
-    verts = clip_obj.data.vertices
-    n = len(verts)
-    if n < 3:
-        return np.empty((0, 2), dtype=np.float64)
-    local = np.empty(n * 3, dtype=np.float64)
-    verts.foreach_get("co", local)
-    local = local.reshape(n, 3)
+        return None
+    corners = np.array([c[:] for c in clip_obj.bound_box], dtype=np.float64)
+    if corners.shape[0] < 8:
+        return None
+    bbox_min = corners.min(axis=0)
+    bbox_max = corners.max(axis=0)
     matrix = np.array(clip_obj.matrix_world, dtype=np.float64)
-    world = local @ matrix[:3, :3].T + matrix[:3, 3]
-    return convex_hull_2d(world[:, :2])
+    try:
+        inv = np.linalg.inv(matrix)
+    except np.linalg.LinAlgError:
+        return None
+    return inv, bbox_min, bbox_max
 
 
 def _run_prefilters(scene, points, colors):
@@ -638,20 +627,22 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                     points_full = t_local @ t_matrix[:3, :3].T + t_matrix[:3, 3]
                     colors_full = t_colors
 
-            # Optional clip: keep only points inside a boundary object's XY
-            # footprint, so far-away scan points don't get draped or textured.
+            # Optional clip: keep only points inside a boundary object's box, so
+            # far-away scan points don't get draped or textured. A box/cube
+            # clips in 3D (above and below too); a flat plane clips its footprint.
             clip_note = ""
             clip_obj = getattr(scene, "roadway_clip_object", None)
             if clip_obj is not None and clip_obj is not source:
-                hull = _boundary_hull_xy(clip_obj)
-                if hull.shape[0] >= 3:
-                    keep = points_in_convex_polygon(points[:, :2], hull)
+                clip = _clip_object_box(clip_obj)
+                if clip is not None and clip_box_axis_count(clip[1], clip[2]) >= 2:
+                    inv, bmin, bmax = clip
+                    keep = points_in_local_box(points, inv, bmin, bmax)
                     n_clip = len(points)
                     points = points[keep]
                     if colors is not None:
                         colors = colors[keep]
-                    # Clip the texture cloud to the same footprint too.
-                    keep_full = points_in_convex_polygon(points_full[:, :2], hull)
+                    # Clip the texture cloud to the same box too.
+                    keep_full = points_in_local_box(points_full, inv, bmin, bmax)
                     points_full = points_full[keep_full]
                     if colors_full is not None:
                         colors_full = colors_full[keep_full]
@@ -667,7 +658,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 else:
                     self.report(
                         {'WARNING'},
-                        f"Clip boundary '{clip_obj.name}' has no usable footprint; ignoring it.",
+                        f"Clip boundary '{clip_obj.name}' has no usable volume; ignoring it.",
                     )
 
             # Optional pre-filters: voxel subsample, then statistical outlier

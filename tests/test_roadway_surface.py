@@ -27,8 +27,9 @@ WANTED = {
     "voxel_downsample",
     "statistical_outlier_mask",
     "mask_points_near_ground",
-    "convex_hull_2d",
-    "points_in_convex_polygon",
+    "clip_box_axis_count",
+    "points_in_local_box",
+    "_clip_box_epsilon",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -48,8 +49,8 @@ grid_uvs = ns["grid_uvs"]
 voxel_downsample = ns["voxel_downsample"]
 statistical_outlier_mask = ns["statistical_outlier_mask"]
 mask_points_near_ground = ns["mask_points_near_ground"]
-convex_hull_2d = ns["convex_hull_2d"]
-points_in_convex_polygon = ns["points_in_convex_polygon"]
+clip_box_axis_count = ns["clip_box_axis_count"]
+points_in_local_box = ns["points_in_local_box"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -222,48 +223,56 @@ def test_grid_uvs_corners():
     assert tuple(uv[5]) == (1.0, 1.0)
 
 
-# --- Convex-hull clip (surface only points inside a boundary object) ---------
+# --- Oriented-box clip (surface only points inside a boundary object) --------
 
-def test_convex_hull_of_square():
-    # Interior point should be dropped from the hull; corners kept.
-    pts = [(0, 0), (2, 0), (2, 2), (0, 2), (1, 1)]
-    hull = convex_hull_2d(pts)
-    assert hull.shape == (4, 2)
-    corners = {tuple(p) for p in hull.tolist()}
-    assert corners == {(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)}
+IDENTITY4 = np.eye(4)
 
 
-def test_convex_hull_degenerate_is_empty():
-    assert convex_hull_2d([(0, 0), (1, 1)]).shape == (0, 2)
-    assert convex_hull_2d([(0, 0), (1, 1), (2, 2)]).shape == (0, 2)  # collinear
+def test_clip_box_axis_count():
+    # A box/cube has 3 real axes; a flat plane (z extent 0) has 2; a line 1.
+    assert clip_box_axis_count([-1, -1, -1], [1, 1, 1]) == 3
+    assert clip_box_axis_count([-1, -1, 0], [1, 1, 0]) == 2   # plane
+    assert clip_box_axis_count([-1, 0, 0], [1, 0, 0]) == 1    # line
 
 
-def test_points_in_convex_polygon_square():
-    hull = convex_hull_2d([(0, 0), (4, 0), (4, 4), (0, 4)])
+def test_box_clips_in_3d():
+    # A unit cube centred at origin must reject points above/below it, not just
+    # outside its footprint -- this is the "a cube behaves like a plane" fix.
+    bmin, bmax = [-1, -1, -1], [1, 1, 1]
     pts = np.array([
-        [2.0, 2.0],   # inside
-        [0.0, 0.0],   # on a corner -> inside
-        [4.0, 2.0],   # on an edge -> inside
-        [5.0, 2.0],   # outside
-        [-1.0, -1.0],  # outside
+        [0.0, 0.0, 0.0],    # inside
+        [0.9, -0.9, 0.5],   # inside
+        [0.0, 0.0, 5.0],    # above the cube -> rejected
+        [0.0, 0.0, -5.0],   # below the cube -> rejected
+        [3.0, 0.0, 0.0],    # outside in X -> rejected
     ])
-    mask = points_in_convex_polygon(pts, hull)
-    assert mask.tolist() == [True, True, True, False, False]
+    mask = points_in_local_box(pts, IDENTITY4, bmin, bmax)
+    assert mask.tolist() == [True, True, False, False, False]
 
 
-def test_points_in_empty_hull_keeps_all():
-    pts = np.array([[0.0, 0.0], [9.0, 9.0]])
-    mask = points_in_convex_polygon(pts, np.empty((0, 2)))
-    assert mask.all()
+def test_flat_plane_clips_footprint_only():
+    # A plane has zero Z extent, so Z is unbounded: points at any height inside
+    # the XY footprint are kept, matching the "scale a plane over the area" flow.
+    bmin, bmax = [-2, -2, 0], [2, 2, 0]
+    pts = np.array([
+        [0.0, 0.0, 100.0],   # inside footprint, high up -> kept
+        [0.0, 0.0, -50.0],   # inside footprint, far below -> kept
+        [5.0, 0.0, 0.0],     # outside footprint -> rejected
+    ])
+    mask = points_in_local_box(pts, IDENTITY4, bmin, bmax)
+    assert mask.tolist() == [True, True, False]
 
 
-def test_clip_filters_a_cloud_to_boundary():
-    # A 5x5 grid of points, clipped to the lower-left 2x2 region.
-    xs = np.arange(5.0)
-    pts = np.array([[x, y] for x in xs for y in xs])
-    hull = convex_hull_2d([(0, 0), (2, 0), (2, 2), (0, 2)])
-    keep = points_in_convex_polygon(pts, hull)
-    kept = pts[keep]
-    assert kept.min() >= 0.0 and kept[:, 0].max() <= 2.0 and kept[:, 1].max() <= 2.0
-    # 3x3 lattice of integer points lies within [0,2]x[0,2].
-    assert keep.sum() == 9
+def test_box_clip_respects_object_transform():
+    # Boundary translated to (10, 10, 0): the inverse matrix maps world points
+    # back into the box's local frame before testing.
+    matrix = np.eye(4)
+    matrix[:3, 3] = [10.0, 10.0, 0.0]
+    inv = np.linalg.inv(matrix)
+    bmin, bmax = [-1, -1, -1], [1, 1, 1]
+    pts = np.array([
+        [10.0, 10.0, 0.0],   # at the box centre -> kept
+        [0.0, 0.0, 0.0],     # at world origin, far from the box -> rejected
+    ])
+    mask = points_in_local_box(pts, inv, bmin, bmax)
+    assert mask.tolist() == [True, False]

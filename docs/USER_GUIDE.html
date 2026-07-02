@@ -247,7 +247,13 @@ li { margin: .2rem 0; }
 <p><strong>Surface it:</strong></p>
 <ol>
 <li>Select the point cloud, or set it explicitly in <strong>Point Cloud</strong> (leave empty to use the active object). The surface tool reads the raw imported points, so the display modifier doesn't interfere. If the selected cloud has the importer's GeoNodes display, a <strong>Points Visible %</strong> slider appears here so you can adjust how many points the viewport shows (display only — it never changes the data, surfacing, or texture).</li>
-<li>*(Optional)* Set <strong>Clip To Object</strong> to surface only the points inside a boundary object's footprint. Add a plane (or any mesh) and scale/rotate it to cover just the area of interest, then pick it here — only points inside its convex XY outline are draped and textured, so far-off scan points, adjacent buildings, or the rest of a large site are trimmed away. The clip uses the object's convex outline (a box or plane gives exactly that rectangle), and it applies to the texture colour cloud too.</li>
+<li>*(Optional)* Set <strong>Clip To Object</strong> to surface only the points inside a boundary object's box. Add a mesh and scale/rotate it to cover just the area of interest, then pick it here — only points inside it are draped and textured, so far-off scan points, adjacent buildings, or the rest of a large site are trimmed away. The clip uses the object's oriented bounding box:<ul>
+<li>A <strong>box or cube</strong> clips a true <strong>3D volume</strong> — points above and below it are trimmed too, so you can isolate a road deck under an overpass or ignore everything beyond a certain height.</li>
+<li>A <strong>flat plane</strong> has no thickness, so it clips just its <strong>XY footprint</strong> (points at any height inside the outline are kept) — handy when you only want to trim the extent and keep the full height range.</li>
+</ul></li>
+</ol>
+<p>The clip applies to the texture colour cloud as well.</p>
+<ol>
 <li>*(Optional)* Under <strong>Pre-filter</strong>, clean the cloud before surfacing:<ul>
 <li><strong>Subsample (Voxel)</strong> thins the cloud to one averaged point per <strong>Voxel Size</strong> cube — faster and more uniform; run this first on huge clouds.</li>
 <li><strong>Remove Outliers (SOR)</strong> drops points whose neighbours are unusually far away (floating noise, stray returns). <strong>SOR Neighbors (k)</strong> is how many neighbours are averaged; <strong>SOR Std Ratio</strong> sets how aggressive it is (lower removes more). SOR does a neighbour search per point, so subsample first on large clouds.</li>

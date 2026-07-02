@@ -1014,6 +1014,8 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
                 pass
 
         c.prop(scene, "roadway_clip_object")
+        if getattr(scene, "roadway_clip_object", None) is not None:
+            c.label(text="Box/cube clips in 3D; a plane clips its footprint", icon='INFO')
 
         # --- Optional pre-filters (applied before surfacing) ---
         filt = c.box()
