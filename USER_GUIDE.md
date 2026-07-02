@@ -363,8 +363,11 @@ PLY Point Cloud**.)
    gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
    reaches; 0 = unlimited.
 6. Leave **Transfer Point Color** on to carry the cloud's per-point colour onto
-   the surface (averaged per cell). It's ignored if the cloud has no colour. With
-   it on:
+   the surface (averaged per cell). It's ignored if the cloud has no colour.
+   **Color Height Tolerance** (default 0.25) keeps the colour honest: only
+   points within that distance of the sampled ground height contribute colour,
+   so vehicles, foliage, and wires *above* the road cannot tint the surface or
+   texture (set 0 to use every point). With colour transfer on:
    - **Bake Color to Texture** (default) bakes the colours to a JPG saved next to
      your `.blend`, adds UVs, and builds an image-texture material. This is the
      path that carries colour into HVE — it exports as a normal texture. Set

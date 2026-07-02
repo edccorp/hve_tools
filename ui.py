@@ -997,6 +997,7 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             c.prop(scene, "roadway_fill_distance")
         c.prop(scene, "roadway_transfer_color")
         if scene.roadway_transfer_color:
+            c.prop(scene, "roadway_color_height_tol")
             c.prop(scene, "roadway_bake_texture")
             if scene.roadway_bake_texture:
                 c.prop(scene, "roadway_texture_size")

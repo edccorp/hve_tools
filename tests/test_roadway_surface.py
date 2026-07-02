@@ -26,6 +26,7 @@ WANTED = {
     "grid_uvs",
     "voxel_downsample",
     "statistical_outlier_mask",
+    "mask_points_near_ground",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -44,6 +45,7 @@ bake_point_color_texture = ns["bake_point_color_texture"]
 grid_uvs = ns["grid_uvs"]
 voxel_downsample = ns["voxel_downsample"]
 statistical_outlier_mask = ns["statistical_outlier_mask"]
+mask_points_near_ground = ns["mask_points_near_ground"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -139,6 +141,35 @@ def test_statistical_outlier_mask_drops_far_point():
     keep = statistical_outlier_mask(dists, ratio=1.0)
     assert keep[:4].all()
     assert not keep[4]
+
+
+def test_mask_points_near_ground():
+    z_grid = np.zeros((2, 2))  # flat ground at z=0 over a 2x2 grid
+    pts = np.array([
+        (0.1, 0.1, 0.05),   # on the road
+        (0.1, 0.1, 3.0),    # overhead (e.g. a vehicle)
+        (1.0, 1.0, -0.1),   # slightly below ground (noise, within band)
+    ])
+    keep = mask_points_near_ground(pts, z_grid, 0.0, 0.0, 1.0, 0.25)
+    assert keep.tolist() == [True, False, True]
+
+
+def test_color_height_tolerance_excludes_overhead_color():
+    # Dense white ground plus a red point 5m above the middle.
+    pts = _flat_ground()
+    colors = [(1.0, 1.0, 1.0, 1.0)] * len(pts)
+    pts.append((1.0, 1.0, 5.0))
+    colors.append((1.0, 0.0, 0.0, 1.0))
+    pts = np.array(pts)
+    colors = np.array(colors)
+
+    tainted = generate_surface(pts, 1.0, 2.0, 5.0, colors=colors, color_height_tol=0.0)
+    clean = generate_surface(pts, 1.0, 2.0, 5.0, colors=colors, color_height_tol=0.5)
+
+    # Without the tolerance the red overhead point tints its cell; with it,
+    # every surface colour stays white.
+    assert tainted["colors"][:, 1].min() < 0.999
+    assert np.allclose(clean["colors"], 1.0)
 
 
 def test_generate_surface_rejects_tiny_input():

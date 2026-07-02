@@ -222,12 +222,32 @@ def statistical_outlier_mask(mean_distances, ratio):
     return d <= threshold
 
 
-def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None):
+def mask_points_near_ground(points, z_grid, min_x, min_y, cell_size, tol):
+    """Keep-mask for points within ``tol`` of the sampled ground height.
+
+    Each point looks up the ground height of its XY cell in ``z_grid`` (the
+    filled ``(ny, nx)`` height grid); points more than ``tol`` above or below it
+    are masked out. This stops colours from objects above the road (vehicles,
+    foliage) bleeding into the surface colour and texture. Points over cells
+    with no ground height are masked out too.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    ny, nx = z_grid.shape
+    ix = np.clip(np.floor((pts[:, 0] - min_x) / cell_size).astype(np.int64), 0, nx - 1)
+    iy = np.clip(np.floor((pts[:, 1] - min_y) / cell_size).astype(np.int64), 0, ny - 1)
+    ground = np.asarray(z_grid, dtype=np.float64)[iy, ix]
+    return ~np.isnan(ground) & (np.abs(pts[:, 2] - ground) <= tol)
+
+
+def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None,
+                     color_height_tol=0.0):
     """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
 
     When ``colors`` (an (N, C) array of per-point colour) is given, the result
-    also includes a per-vertex ``colors`` array aligned with ``verts``. Returns
-    None when fewer than three points are supplied.
+    also includes a per-vertex ``colors`` array aligned with ``verts``. When
+    ``color_height_tol`` > 0, only points within that height of the sampled
+    ground contribute colour (overhead objects are excluded). Returns None when
+    fewer than three points are supplied.
     """
     pts = np.asarray(points, dtype=np.float64)
     if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 3:
@@ -257,11 +277,19 @@ def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_h
         "min_x": min_x,
         "min_y": min_y,
         "cell_size": cell_size,
+        "z_grid": grid,
         "sampled": sampled,
         "total": nx * ny,
     }
     if colors is not None:
-        result["colors"] = _color_grid(pts, colors, min_x, min_y, nx, ny, cell_size, max_passes)
+        pts_c = pts
+        cols_c = np.asarray(colors, dtype=np.float64)
+        if color_height_tol and color_height_tol > 0:
+            near = mask_points_near_ground(pts, grid, min_x, min_y, cell_size, color_height_tol)
+            if near.any():
+                pts_c = pts[near]
+                cols_c = cols_c[near]
+        result["colors"] = _color_grid(pts_c, cols_c, min_x, min_y, nx, ny, cell_size, max_passes)
     return result
 
 
@@ -571,7 +599,8 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
             wm.progress_update(45)
             result = generate_surface(
-                points, cell_size, fill_distance, ground_percentile, fill_holes, colors=colors
+                points, cell_size, fill_distance, ground_percentile, fill_holes, colors=colors,
+                color_height_tol=float(scene.roadway_color_height_tol),
             )
             if result is None or len(result["faces"]) == 0:
                 self.report(
@@ -606,6 +635,16 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                         )
                         if inside.any():
                             tex_points, tex_colors = points_full[inside], colors_full[inside]
+                    # Only points near the sampled ground colour the texture, so
+                    # vehicles/foliage above the road cannot tint it.
+                    tol = float(scene.roadway_color_height_tol)
+                    if tol > 0:
+                        near = mask_points_near_ground(
+                            tex_points, result["z_grid"], result["min_x"], result["min_y"],
+                            result["cell_size"], tol,
+                        )
+                        if near.any():
+                            tex_points, tex_colors = tex_points[near], tex_colors[near]
                     baked_texture_path = _apply_baked_texture(
                         source.name, new_mesh, tex_points, tex_colors, result,
                         int(scene.roadway_texture_size),
