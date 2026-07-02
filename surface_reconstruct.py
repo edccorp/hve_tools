@@ -464,7 +464,7 @@ def _cloud_texel_uvs(o3d, vert_world, tri_verts, tri_uv, cloud_points, dist_mult
 
 
 class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
-    """Unwrap the selected 3D surface and bake its vertex colours to a JPG texture (like the roadway surface texture) so the colour exports to HVE"""
+    """Unwrap the selected 3D surface and bake a colour texture to a JPG (sampled from the original point cloud, so detail isn't limited by the mesh) so the colour exports to HVE"""
     bl_idname = "object.bake_surface_texture"
     bl_label = "Bake Texture (Selected 3D Surface)"
     bl_options = {'REGISTER', 'UNDO'}
