@@ -942,6 +942,28 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
             map_box.operator("import_xyz.import_mapped_points", text="Import Points")
 
 
+def _geonodes_subsample_input(obj):
+    """Return ``(modifier, socket_identifier)`` for a point cloud's GeoNodes
+    "Subsample Percent" display input, or None if the object doesn't have one."""
+    if obj is None:
+        return None
+    for mod in obj.modifiers:
+        if mod.type != 'NODES' or not mod.node_group:
+            continue
+        ng = mod.node_group
+        iface = getattr(ng, "interface", None)
+        if iface is not None and hasattr(iface, "items_tree"):
+            for item in iface.items_tree:
+                if (getattr(item, "in_out", "") == 'INPUT'
+                        and getattr(item, "name", "") == "Subsample Percent"):
+                    return mod, item.identifier
+        else:  # Blender 3.x
+            for inp in getattr(ng, "inputs", []):
+                if inp.name == "Subsample Percent":
+                    return mod, inp.identifier
+    return None
+
+
 class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -967,13 +989,24 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         c.label(text="Build a ground surface from a point cloud", icon="MESH_GRID")
         c.label(text="Drapes a grid onto a PLY-style point cloud", icon='INFO')
 
+        pc_obj = scene.roadway_source_object or (
+            context.object if context.object and context.object.type == 'MESH' else None
+        )
         if not scene.roadway_source_object:
-            active = context.object
-            if active and active.type == 'MESH':
-                c.label(text=f"Source: {active.name} (active)", icon="OBJECT_DATA")
+            if pc_obj is not None:
+                c.label(text=f"Source: {pc_obj.name} (active)", icon="OBJECT_DATA")
             else:
                 c.label(text="Select a mesh point cloud, or set one below", icon='INFO')
         c.prop(scene, "roadway_source_object")
+
+        # Expose the point cloud's GeoNodes display subsample, if it has one.
+        sub = _geonodes_subsample_input(pc_obj)
+        if sub is not None:
+            mod, ident = sub
+            try:
+                c.prop(mod, '["%s"]' % ident, text="Display Subsample %")
+            except Exception:
+                pass
 
         # --- Optional pre-filters (applied before surfacing) ---
         filt = c.box()

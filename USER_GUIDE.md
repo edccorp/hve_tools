@@ -340,7 +340,10 @@ PLY Point Cloud**.)
 
 1. Select the point cloud, or set it explicitly in **Point Cloud** (leave empty
    to use the active object). The surface tool reads the raw imported points, so
-   the display modifier doesn't interfere.
+   the display modifier doesn't interfere. If the selected cloud has the
+   importer's GeoNodes display, a **Display Subsample %** slider appears here so
+   you can adjust how many points the viewport shows (display only — it never
+   changes the data, surfacing, or texture).
 2. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:
    - **Subsample (Voxel)** thins the cloud to one averaged point per **Voxel
      Size** cube — faster and more uniform; run this first on huge clouds.
