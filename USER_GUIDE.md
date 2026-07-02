@@ -370,10 +370,9 @@ reports exactly what to install; convert to PLY/PTX as a fallback.
 
    The filters are **not persistent**: they run on an in-memory copy each time
    you click **Create Roadway Surface**, and the source cloud is never modified.
-   To keep a filtered cloud without surfacing, click **Apply Filters Only** —
-   by default it creates a new, filtered point-cloud object (with colours and
-   the point display) and leaves the original untouched; tick **Filter In
-   Place** to instead replace the selected cloud's points. The texture always
+   To keep a filtered cloud without surfacing, click **Filter To New Point
+   Cloud** — it always creates a new, filtered point-cloud object (with colours
+   and the point display) and leaves the original untouched. The texture always
    bakes from the full, unfiltered cloud, so filtering the geometry never costs
    you colour detail.
 4. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
@@ -487,8 +486,8 @@ Save the `.blend` first, then re-create the surface so the JPG is written next
 to it; the H3D export references that file.
 
 **Filtering / surfacing a huge cloud is slow.** Statistical Outlier Removal does
-a neighbour search per point. Enable **Subsample (Voxel)** first (or use **Apply
-Filters Only** to bake a thinned copy once), then surface from the result.
+a neighbour search per point. Enable **Subsample (Voxel)** first (or use **Filter
+To New Point Cloud** to bake a thinned copy once), then surface from the result.
 
 ---
 

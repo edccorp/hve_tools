@@ -784,9 +784,9 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
 
 class HVE_OT_FilterPointCloud(bpy.types.Operator):
-    """Apply the Subsample / SOR pre-filters to the point cloud without building a surface"""
+    """Apply the Subsample / SOR pre-filters to a new point-cloud copy, leaving the original unchanged"""
     bl_idname = "object.filter_point_cloud"
-    bl_label = "Filter Point Cloud"
+    bl_label = "Filter To New Point Cloud"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -824,60 +824,44 @@ class HVE_OT_FilterPointCloud(bpy.types.Operator):
             wm.progress_update(70)
             verts32 = np.ascontiguousarray
 
-            if bool(scene.roadway_filter_in_place):
-                # Write the filtered points back into the same object, converting
-                # from world space through the object's inverse transform so the
-                # cloud stays visually in place.
-                inv = np.linalg.inv(matrix)
-                local_new = points @ inv[:3, :3].T + inv[:3, 3]
-                mesh = source.data
-                mesh.clear_geometry()
-                mesh.vertices.add(len(local_new))
-                mesh.vertices.foreach_set("co", verts32(local_new, dtype=np.float32).ravel())
-                mesh.update()
+            # Always build a new point-cloud object from the filtered result;
+            # the original cloud is never modified.
+            mesh = bpy.data.meshes.new(f"{source.name} Filtered")
+            mesh.vertices.add(len(points))
+            mesh.vertices.foreach_set("co", verts32(points, dtype=np.float32).ravel())
+            mesh.update()
+            if colors is not None:
+                layer = mesh.color_attributes.new(name=attr_name, type='FLOAT_COLOR', domain='POINT')
+                layer.data.foreach_set("color", colors.astype(np.float32).ravel())
+
+            target = bpy.data.objects.new(mesh.name, mesh)
+            context.collection.objects.link(target)
+
+            # Give the copy the same GeoNodes point display as the importer.
+            try:
+                from .ply_pointcloud.materials import make_point_material
+                from .ply_pointcloud.geonodes import make_geonodes_group, assign_geonodes_modifier
+
+                mat = None
                 if colors is not None:
-                    layer = mesh.color_attributes.new(name=attr_name, type='FLOAT_COLOR', domain='POINT')
-                    layer.data.foreach_set("color", colors.astype(np.float32).ravel())
-                target = source
-            else:
-                # Build a new point-cloud object from the filtered result,
-                # leaving the original untouched.
-                mesh = bpy.data.meshes.new(f"{source.name} Filtered")
-                mesh.vertices.add(len(points))
-                mesh.vertices.foreach_set("co", verts32(points, dtype=np.float32).ravel())
-                mesh.update()
-                if colors is not None:
-                    layer = mesh.color_attributes.new(name=attr_name, type='FLOAT_COLOR', domain='POINT')
-                    layer.data.foreach_set("color", colors.astype(np.float32).ravel())
+                    mat_name = f"PointCloud_Color_{attr_name}"
+                    mat = bpy.data.materials.get(mat_name) or make_point_material(mat_name, attr_name)
+                ng = make_geonodes_group("PCD_View_Geo", 0.01, mat)
+                assign_geonodes_modifier(target, ng, 0.01)
+                if mat is not None and mat.name not in [m.name for m in mesh.materials]:
+                    mesh.materials.append(mat)
+            except Exception as exc:  # noqa: BLE001 - display setup is best-effort
+                print(f"Point display setup skipped: {exc}")
 
-                target = bpy.data.objects.new(mesh.name, mesh)
-                context.collection.objects.link(target)
+            for obj in list(context.selected_objects):
+                obj.select_set(False)
+            target.select_set(True)
+            context.view_layer.objects.active = target
 
-                # Give the copy the same GeoNodes point display as the importer.
-                try:
-                    from .ply_pointcloud.materials import make_point_material
-                    from .ply_pointcloud.geonodes import make_geonodes_group, assign_geonodes_modifier
-
-                    mat = None
-                    if colors is not None:
-                        mat_name = f"PointCloud_Color_{attr_name}"
-                        mat = bpy.data.materials.get(mat_name) or make_point_material(mat_name, attr_name)
-                    ng = make_geonodes_group("PCD_View_Geo", 0.01, mat)
-                    assign_geonodes_modifier(target, ng, 0.01)
-                    if mat is not None and mat.name not in [m.name for m in mesh.materials]:
-                        mesh.materials.append(mat)
-                except Exception as exc:  # noqa: BLE001 - display setup is best-effort
-                    print(f"Point display setup skipped: {exc}")
-
-                for obj in list(context.selected_objects):
-                    obj.select_set(False)
-                target.select_set(True)
-                context.view_layer.objects.active = target
-
-                # If the panel pointed at the original explicitly, follow the copy
-                # so Create Roadway Surface uses the filtered cloud.
-                if getattr(scene, "roadway_source_object", None) == source:
-                    scene.roadway_source_object = target
+            # If the panel pointed at the original explicitly, follow the copy
+            # so Create Roadway Surface uses the filtered cloud.
+            if getattr(scene, "roadway_source_object", None) == source:
+                scene.roadway_source_object = target
 
             wm.progress_update(100)
             self.report(

@@ -271,11 +271,6 @@ try:
             min=0.0,
             soft_max=10.0,
         )
-        bpy.types.Scene.roadway_filter_in_place = bpy.props.BoolProperty(
-            name="Filter In Place",
-            description="Apply Filters Only replaces the selected cloud's points instead of creating a new filtered copy",
-            default=False,
-        )
         bpy.types.Scene.roadway_texture_source_object = PointerProperty(
             name="Texture Color Source",
             description="Optional: sample the baked texture's colour from this object (e.g. the original full-resolution cloud) instead of the surface's point cloud. Use it when the geometry cloud is a filtered copy",
@@ -377,7 +372,6 @@ try:
         del bpy.types.Scene.roadway_sor
         del bpy.types.Scene.roadway_sor_neighbors
         del bpy.types.Scene.roadway_sor_ratio
-        del bpy.types.Scene.roadway_filter_in_place
         del bpy.types.Scene.roadway_texture_source_object
         del bpy.types.Scene.roadway_color_height_tol
         del bpy.types.Scene.roadway_cell_size
