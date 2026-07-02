@@ -986,8 +986,8 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         c = l.column()
 
         # --- Import a point cloud ---
-        c.label(text="Import a PLY point cloud", icon='IMPORT')
-        c.operator("import_scene.ply_pointcloud_geonodes", text="Import PLY Point Cloud", icon='IMPORT')
+        c.label(text="Import a point cloud (PLY / PTX / E57 / LAS)", icon='IMPORT')
+        c.operator("import_scene.ply_pointcloud_geonodes", text="Import Point Cloud", icon='IMPORT')
         c.separator()
 
         # --- Build a ground surface ---

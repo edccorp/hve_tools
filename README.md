@@ -82,7 +82,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Toggle the motion-path overlay in the active 3D View.
 - **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
 - **Point Cloud Tools**: import, filter, and surface point clouds for vehicle simulations. Numpy-vectorized, so it stays fast on million-point clouds.
-  - **Import PLY point clouds** (ASCII or binary) as a coloured, GeoNodes-displayed mesh (also on **File → Import**).
+  - **Import point clouds** — PLY (ASCII or binary), PTX, E57, and LAS/LAZ — as a coloured, GeoNodes-displayed mesh (also on **File → Import**). E57 needs the `pye57` package and LAZ needs `laspy[lazrs]`; PLY/PTX and uncompressed LAS are read natively.
   - Optional **pre-filters** before surfacing: **voxel subsample** (thin to one averaged point per voxel) and **Statistical Outlier Removal** (drop points with unusually distant neighbours).
   - Build a draped ground surface: set the grid **resolution** (cell size, in scene units), and sample ground height per cell with a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
   - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
