@@ -492,10 +492,19 @@ pre-filters/clip above. Pick a **Method**:
 methods rely on. The result is classified as **Environment**. When the cloud has
 colour it is carried onto the mesh as a `Col` vertex-colour attribute, and a
 material driven by that attribute is assigned so the surface shows coloured in
-**Material Preview / Rendered** view. (Vertex colour is for display in Blender; it
-does not export to HVE — that would need a baked texture on an unwrapped mesh.)
-For the drivable road itself, keep using **Create Roadway Surface** — a 3D
-reconstruction of the road is noisier and harder for HVE to use.
+**Material Preview / Rendered** view. For the drivable road itself, keep using
+**Create Roadway Surface** — a 3D reconstruction of the road is noisier and
+harder for HVE to use.
+
+**Bake Texture (Selected 3D Surface).** Vertex colour shows in Blender but does
+not export to HVE. To get an exportable texture, select the reconstructed surface
+and click **Bake Texture (Selected 3D Surface)**: it auto-unwraps the mesh (Smart
+UV Project), rasterizes the colours into a JPG at **Texture Resolution**, saves it
+next to the `.blend`, and assigns an image-texture material. **Note:** this bakes
+the mesh's *vertex* colours, so the colour detail is limited by the mesh
+resolution, not the point cloud — raise **Poisson Depth** (or use a denser cloud)
+for finer colour. (Sampling the texture directly from the cloud, like the roadway
+tool does, is a possible future upgrade.)
 
 ---
 

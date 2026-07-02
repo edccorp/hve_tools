@@ -1129,6 +1129,14 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
             c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
         c.label(text="For drivable ground, use Create Roadway Surface instead", icon='INFO')
 
+        # Bake the reconstructed surface's colour to a texture (unwraps + bakes),
+        # so the colour exports to HVE. Shown when a coloured 3D surface is active.
+        active = context.active_object
+        if active is not None and active.get("surface_3d"):
+            c.separator()
+            c.operator("object.bake_surface_texture", text="Bake Texture (Selected 3D Surface)", icon='TEXTURE')
+            c.label(text="Unwraps + bakes vertex colour to a JPG (Texture Resolution above)", icon='INFO')
+
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'

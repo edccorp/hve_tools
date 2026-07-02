@@ -11,6 +11,7 @@ E57/LAZ importer packages) and the operator fails gracefully with instructions
 if the install can't complete.
 """
 
+import math
 import os
 
 import bpy
@@ -22,12 +23,99 @@ from .roadway_surface import (
     _run_prefilters,
     _clip_object_box,
     _clip_object_triangles,
+    _safe_filename,
+    _build_image_texture_material,
     points_in_local_box,
     clip_box_axis_count,
     points_in_mesh_volume,
 )
 
-__all__ = ["HVE_OT_ReconstructSurface3D", "ball_pivoting_radii", "classes"]
+__all__ = [
+    "HVE_OT_ReconstructSurface3D",
+    "HVE_OT_BakeSurfaceTexture",
+    "ball_pivoting_radii",
+    "rasterize_uv_triangles",
+    "classes",
+]
+
+
+def _dilate_texture(img, written, passes):
+    """Grow written texels outward to hide UV-island seams under filtering."""
+    out = img.copy()
+    wr = written.copy()
+    for _ in range(max(int(passes), 0)):
+        if wr.all():
+            break
+        acc = np.zeros_like(out)
+        cnt = np.zeros(wr.shape, dtype=np.float64)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            rolled = np.roll(out, (dy, dx), axis=(0, 1))
+            rolled_w = np.roll(wr, (dy, dx), axis=(0, 1))
+            acc += np.where(rolled_w[..., None], rolled, 0.0)
+            cnt += rolled_w
+        grow = (~wr) & (cnt > 0)
+        if not grow.any():
+            break
+        out[grow] = acc[grow] / cnt[grow][..., None]
+        wr = wr | grow
+    return out, wr
+
+
+def rasterize_uv_triangles(loop_uvs, loop_tris, loop_colors, width, height,
+                           dilate=4, fill=0.5):
+    """Rasterize per-corner colours into a texture through UV coordinates.
+
+    ``loop_uvs`` is an (L, 2) array of UVs (0-1) per mesh loop, ``loop_tris`` an
+    (T, 3) array of loop indices per triangle, and ``loop_colors`` an (L, 4)
+    RGBA array. Each triangle is filled with barycentric-interpolated colour.
+    Returns ``(image, written)`` where ``image`` is (height, width, 4) laid out
+    bottom-row-first (Blender image order) and ``written`` marks covered texels.
+    bpy-free, so it can be unit-tested without Blender.
+    """
+    img = np.full((height, width, 4), float(fill), dtype=np.float64)
+    img[..., 3] = 1.0
+    written = np.zeros((height, width), dtype=bool)
+
+    uv = np.asarray(loop_uvs, dtype=np.float64)
+    cols = np.asarray(loop_colors, dtype=np.float64)
+    if uv.shape[0] == 0 or np.asarray(loop_tris).shape[0] == 0:
+        return img, written
+    px = uv[:, 0] * width
+    py = uv[:, 1] * height
+
+    for tri in np.asarray(loop_tris, dtype=np.int64):
+        a, b, c = int(tri[0]), int(tri[1]), int(tri[2])
+        xs = (px[a], px[b], px[c])
+        ys = (py[a], py[b], py[c])
+        x0 = max(int(np.floor(min(xs))), 0)
+        x1 = min(int(np.ceil(max(xs))), width - 1)
+        y0 = max(int(np.floor(min(ys))), 0)
+        y1 = min(int(np.ceil(max(ys))), height - 1)
+        if x1 < x0 or y1 < y0:
+            continue
+        denom = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
+        if abs(denom) < 1e-12:
+            continue
+        gx, gy = np.meshgrid(
+            np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5
+        )
+        wa = ((ys[1] - ys[2]) * (gx - xs[2]) + (xs[2] - xs[1]) * (gy - ys[2])) / denom
+        wb = ((ys[2] - ys[0]) * (gx - xs[2]) + (xs[0] - xs[2]) * (gy - ys[2])) / denom
+        wc = 1.0 - wa - wb
+        inside = (wa >= 0) & (wb >= 0) & (wc >= 0)
+        if not inside.any():
+            continue
+        color = (
+            wa[..., None] * cols[a] + wb[..., None] * cols[b] + wc[..., None] * cols[c]
+        )
+        sub = img[y0:y1 + 1, x0:x1 + 1]
+        sub_w = written[y0:y1 + 1, x0:x1 + 1]
+        sub[inside] = color[inside]
+        sub_w[inside] = True
+
+    if dilate > 0:
+        img, written = _dilate_texture(img, written, dilate)
+    return img, written
 
 
 def ball_pivoting_radii(avg_spacing, multipliers=(0.75, 1.5, 3.0), scale=1.0):
@@ -267,6 +355,11 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
 
             new_obj = bpy.data.objects.new(mesh_name, new_mesh)
             context.collection.objects.link(new_obj)
+            # Tag it so the panel offers to bake a texture from its colours, and
+            # remember the source cloud for a future cloud-sampled bake.
+            if vcols is not None and len(vcols) == len(verts):
+                new_obj["surface_3d"] = 1
+                new_obj["surface_3d_source"] = source.name
             try:
                 new_obj.hve_type.set_type.type = 'ENVIRONMENT'
             except (AttributeError, TypeError):
@@ -291,4 +384,133 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
                 window.cursor_set('DEFAULT')
 
 
-classes = [HVE_OT_ReconstructSurface3D]
+class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
+    """Unwrap the selected 3D surface and bake its vertex colours to a JPG texture (like the roadway surface texture) so the colour exports to HVE"""
+    bl_idname = "object.bake_surface_texture"
+    bl_label = "Bake Texture (Selected 3D Surface)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (
+            obj is not None and obj.type == 'MESH'
+            and len(obj.data.color_attributes) > 0
+        )
+
+    def _color_attr(self, mesh):
+        return (
+            mesh.color_attributes.get("Col")
+            or getattr(mesh.color_attributes, "active_color", None)
+            or (mesh.color_attributes[0] if len(mesh.color_attributes) else None)
+        )
+
+    def execute(self, context):
+        scene = context.scene
+        obj = context.active_object
+        if obj is None or obj.type != 'MESH':
+            self.report({'ERROR'}, "Select a 3D surface mesh with colour to bake.")
+            return {'CANCELLED'}
+        mesh = obj.data
+        ca = self._color_attr(mesh)
+        if ca is None:
+            self.report({'ERROR'}, "This mesh has no colour attribute to bake.")
+            return {'CANCELLED'}
+
+        window = context.window
+        wm = context.window_manager
+        wm.progress_begin(0, 100)
+        if window is not None:
+            window.cursor_set('WAIT')
+        try:
+            # Make sure the mesh has UVs (auto-unwrap if not).
+            if not mesh.uv_layers:
+                _log(f"Unwrapping '{obj.name}' (Smart UV Project)...")
+                prev_active = context.view_layer.objects.active
+                prev_selected = list(context.selected_objects)
+                try:
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                except RuntimeError:
+                    pass
+                for o in prev_selected:
+                    o.select_set(False)
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02)
+                bpy.ops.object.mode_set(mode='OBJECT')
+                context.view_layer.objects.active = prev_active or obj
+            if not mesh.uv_layers:
+                self.report({'ERROR'}, "Couldn't create UVs for the mesh.")
+                return {'CANCELLED'}
+
+            wm.progress_update(40)
+            mesh.calc_loop_triangles()
+            n_loops = len(mesh.loops)
+            loop_uv = np.empty(n_loops * 2, dtype=np.float64)
+            mesh.uv_layers.active.data.foreach_get("uv", loop_uv)
+            loop_uv = loop_uv.reshape(n_loops, 2)
+
+            if ca.domain == 'CORNER':
+                cc = np.empty(n_loops * 4, dtype=np.float64)
+                ca.data.foreach_get("color", cc)
+                loop_colors = cc.reshape(n_loops, 4)
+            else:  # POINT domain: gather each loop's vertex colour
+                n_v = len(mesh.vertices)
+                vc = np.empty(n_v * 4, dtype=np.float64)
+                ca.data.foreach_get("color", vc)
+                vc = vc.reshape(n_v, 4)
+                lv = np.empty(n_loops, dtype=np.int64)
+                mesh.loops.foreach_get("vertex_index", lv)
+                loop_colors = vc[lv]
+
+            n_tris = len(mesh.loop_triangles)
+            tri_loops = np.empty(n_tris * 3, dtype=np.int64)
+            mesh.loop_triangles.foreach_get("loops", tri_loops)
+            tri_loops = tri_loops.reshape(n_tris, 3)
+
+            size = int(scene.roadway_texture_size)
+            if size <= 0:
+                size = 2048
+
+            wm.progress_update(55)
+            _log(f"  baking {size}x{size} texture from {n_tris} triangles...")
+            img_arr, _written = rasterize_uv_triangles(loop_uv, tri_loops, loop_colors, size, size)
+
+            wm.progress_update(85)
+            image = bpy.data.images.new(
+                f"3D Surface Color: {obj.name}", width=size, height=size, alpha=True
+            )
+            image.pixels.foreach_set(np.ascontiguousarray(img_arr.reshape(-1), dtype=np.float32))
+
+            blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+            saved = None
+            if blend_dir:
+                saved = os.path.join(blend_dir, _safe_filename(f"3D_Surface_Color_{obj.name}") + ".jpg")
+                image.filepath_raw = saved
+                image.file_format = 'JPEG'
+                image.save()
+            else:
+                image.pack()
+
+            mesh.materials.clear()
+            mesh.materials.append(_build_image_texture_material(f"3D Surface: {obj.name}", image))
+
+            wm.progress_update(100)
+            if saved is None:
+                self.report(
+                    {'WARNING'},
+                    f"Baked {size}x{size} texture (packed into the .blend; save the "
+                    ".blend and rebake to write the JPG for H3D export).",
+                )
+            else:
+                self.report({'INFO'}, f"Baked texture: {os.path.basename(saved)} ({size}x{size}).")
+            return {'FINISHED'}
+        finally:
+            wm.progress_end()
+            if window is not None:
+                window.cursor_set('DEFAULT')
+
+
+classes = [HVE_OT_ReconstructSurface3D, HVE_OT_BakeSurfaceTexture]
