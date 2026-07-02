@@ -292,7 +292,7 @@ try:
         bpy.types.Scene.roadway_cell_size = FloatProperty(
             name="Resolution (Cell Size)",
             description="Spacing of the generated surface grid, in the scene's units; smaller is finer and slower",
-            default=0.5,
+            default=0.3048,  # 1 foot (LENGTH props store metres; shows as 1 ft in Imperial scenes)
             min=0.001,
             soft_max=10.0,
             unit='LENGTH',
@@ -308,7 +308,7 @@ try:
         bpy.types.Scene.roadway_ground_percentile = FloatProperty(
             name="Ground Percentile",
             description="Percentile of each cell's point heights taken as ground (low = from below); rejects overhead noise and stray low outliers",
-            default=5.0,
+            default=10.0,
             min=0.0,
             max=100.0,
         )

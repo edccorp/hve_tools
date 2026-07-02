@@ -362,7 +362,7 @@ PLY Point Cloud**.)
 3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
 4. Set **Ground Percentile** — how the height of each grid cell is chosen from
-   the point heights that land in it (see below). Default 5.
+   the point heights that land in it (see below). Default 10.
 5. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
    gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
    reaches; 0 = unlimited.
@@ -406,11 +406,11 @@ cell size.
 
 **How Ground Percentile works.** For every grid cell, the tool looks at the Z of
 all points that fall in that cell and takes the value at the chosen percentile.
-A low value (5) picks near the bottom of that stack — the road surface — so it
-naturally ignores anything *above* the road (vehicles, foliage, wires). `0` is
-the strict minimum (most aggressive "from below", but sensitive to a single
-spurious low point); raising it a little (5–15) rejects stray below-ground
-returns as long as the cell has enough points. Denser clouds reject outliers
+A low value (the default is 10) picks near the bottom of that stack — the road
+surface — so it naturally ignores anything *above* the road (vehicles, foliage,
+wires). `0` is the strict minimum (most aggressive "from below", but sensitive to
+a single spurious low point); 5–15 rejects stray below-ground returns as long as
+the cell has enough points. Denser clouds reject outliers
 better, since a percentile only skips outliers when there are several points per
 cell.
 
