@@ -18,6 +18,7 @@ __all__ = [
 ]
 
 class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
+    """Import a point cloud (PLY, PTX, E57, or LAS/LAZ) as a coloured mesh with a Geometry Nodes point display"""
     bl_idname = "import_scene.ply_pointcloud_geonodes"
     bl_label = "Point Cloud (PLY / PTX / E57 / LAS)"
     bl_options = {'UNDO'}
