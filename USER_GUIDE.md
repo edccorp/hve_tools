@@ -327,9 +327,13 @@ forward/lateral/vertical acceleration) on a helper empty named
 
 Open **Other Tools → Point Cloud Tools** to import a point cloud, optionally
 clean it up, and drape a clean ground surface over it for use as environment
-geometry in vehicle simulations.
+geometry in vehicle simulations. The panel is organized into four collapsible
+sections — **Import Point Cloud**, **Filter Point Cloud**, **Create Ground
+Surface**, and **Create 3D Surface** — that share one **Point Cloud** selection.
 
-**Import.** Click **Import Point Cloud** to load a scan. Supported formats are
+**Import.** In **Import Point Cloud**, click **Import Point Cloud** to load a scan.
+The imported cloud is **selected automatically** as the source for the other
+sections. Supported formats are
 **PLY** (ASCII or binary), **PTX** (Leica ASCII grid scans), **E57**, and
 **LAS/LAZ** (LiDAR). It comes in as a mesh of vertices with a `Col` colour
 attribute and a Geometry Nodes display so you can see the points. The import
@@ -388,7 +392,7 @@ its note disappear once the packages are present.
      large clouds.
 
    The filters are **not persistent**: they run on an in-memory copy each time
-   you click **Create Roadway Surface**, and the source cloud is never modified.
+   you click **Create Ground Surface**, and the source cloud is never modified.
    To keep a filtered cloud without surfacing, click **Filter → Create New
    Point Cloud** — it always adds a new, filtered point-cloud object (with
    colours and the point display) and leaves the original untouched. The texture always
@@ -423,7 +427,7 @@ its note disappear once the packages are present.
      the other). If the `.blend` isn't saved yet, the image is packed into the
      file — save the `.blend` and re-create the surface to write the JPG needed
      for H3D export.
-8. Click **Create Roadway Surface**.
+8. Click **Create Ground Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
@@ -468,7 +472,7 @@ raise it if a deliberately deep feature is being flattened.
 
 **3D Surface Reconstruction (Open3D).** Nested under Point Cloud Tools is a
 **3D Surface Reconstruction** panel — a *complement* to the heightfield tool, not
-a replacement. Where Create Roadway Surface makes a clean 2.5D drivable ground
+a replacement. Where Create Ground Surface makes a clean 2.5D drivable ground
 (one height per XY spot), this reconstructs a true 3D mesh that can follow
 vertical and overhanging geometry: barriers, walls, embankments, buildings,
 overpass structures. It uses **Open3D** (installed automatically on first use — a
@@ -493,7 +497,7 @@ methods rely on. The result is classified as **Environment**. When the cloud has
 colour it is carried onto the mesh as a `Col` vertex-colour attribute, and a
 material driven by that attribute is assigned so the surface shows coloured in
 **Material Preview / Rendered** view. For the drivable road itself, keep using
-**Create Roadway Surface** — a 3D reconstruction of the road is noisier and
+**Create Ground Surface** — a 3D reconstruction of the road is noisier and
 harder for HVE to use.
 
 **Bake Texture (Selected 3D Surface).** Vertex colour shows in Blender but does

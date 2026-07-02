@@ -105,6 +105,14 @@ class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
         except (AttributeError, RuntimeError) as exc:
             logger.warning("Unable to focus view on imported point cloud: %s", exc)
 
+        # Auto-select the imported cloud as the Point Cloud Tools source so the
+        # ground / 3D surface tools are ready to use it immediately.
+        try:
+            if hasattr(context.scene, "roadway_source_object"):
+                context.scene.roadway_source_object = obj
+        except (AttributeError, TypeError) as exc:
+            logger.warning("Unable to set imported cloud as the surface source: %s", exc)
+
         self.report({'INFO'}, f"Imported point cloud and set up GeoNodes + material (attr='{self.color_attribute}').")
         return {'FINISHED'}
 

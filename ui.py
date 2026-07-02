@@ -104,6 +104,9 @@ def update_panel_bl_category(self, context):
         HVE_PT_scale_objects,
         HVE_PT_speed_acceleration,
         HVE_PT_point_cloud_tools,
+        HVE_PT_pc_import,
+        HVE_PT_pc_filter,
+        HVE_PT_pc_ground,
         HVE_PT_surface_reconstruct,
         HVE_PT_race_render_exporter,
     )
@@ -974,6 +977,41 @@ def _geonodes_subsample_input(obj):
     return None
 
 
+def _draw_cloud_source(layout, scene, context):
+    """Draw the shared Point Cloud source selector (used by Filter / Ground / 3D).
+
+    Returns the resolved source object (the pointer, or the active mesh) or None.
+    """
+    pc_obj = scene.roadway_source_object or (
+        context.object if context.object and context.object.type == 'MESH' else None
+    )
+    if not scene.roadway_source_object:
+        if pc_obj is not None:
+            layout.label(text=f"Source: {pc_obj.name} (active)", icon="OBJECT_DATA")
+        else:
+            layout.label(text="Select a point cloud to begin", icon='ERROR')
+    layout.prop(scene, "roadway_source_object")
+    sub = _geonodes_subsample_input(pc_obj)
+    if sub is not None:
+        mod, ident = sub
+        try:
+            layout.prop(mod, '["%s"]' % ident, text="Points Visible %")
+        except Exception:
+            pass
+    return pc_obj
+
+
+def _draw_clip_options(layout, scene):
+    """Draw the shared Clip To Object controls (used by Ground / 3D)."""
+    layout.prop(scene, "roadway_clip_object")
+    if getattr(scene, "roadway_clip_object", None) is not None:
+        layout.prop(scene, "roadway_clip_mode")
+        if scene.roadway_clip_mode == 'MESH':
+            layout.label(text="Clips to the exact (closed) mesh volume", icon='INFO')
+        else:
+            layout.label(text="Box/cube clips in 3D; a plane clips its footprint", icon='INFO')
+
+
 class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -981,17 +1019,30 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
     bl_label = "Point Cloud Tools"
     bl_parent_id = "HVE_PT_other_tools"
     bl_options = {'DEFAULT_CLOSED'}
+
     @classmethod
     def poll(cls, context):
         return True
 
     def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
+        self.layout.label(text="Import, filter, then create a ground or 3D surface", icon='INFO')
 
-        # --- Import a point cloud ---
-        c.label(text="Import a point cloud (PLY / PTX / E57 / LAS)", icon='IMPORT')
+
+class HVE_PT_pc_import(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Import Point Cloud"
+    bl_parent_id = "HVE_PT_point_cloud_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        c = self.layout.column()
+        c.label(text="PLY / PTX / E57 / LAS", icon='IMPORT')
         c.operator("import_scene.ply_pointcloud_geonodes", text="Import Point Cloud", icon='IMPORT')
         # Offer a one-click install for the optional E57 / LAZ packages, but only
         # when they're actually missing (keeps the panel clean once installed).
@@ -1004,54 +1055,60 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             fmts = ", ".join(fmt for _n, _s, fmt in missing)
             c.label(text=f"{fmts} auto-install on first open", icon='INFO')
             c.operator("import_scene.install_pointcloud_deps", text="Install E57 / LAZ Support Now", icon='PACKAGE')
-        c.separator()
+        c.label(text="Imported cloud is selected automatically", icon='INFO')
 
-        # --- Build a ground surface ---
-        c.label(text="Build a ground surface from a point cloud", icon="MESH_GRID")
-        c.label(text="Drapes a grid onto a PLY-style point cloud", icon='INFO')
 
-        pc_obj = scene.roadway_source_object or (
-            context.object if context.object and context.object.type == 'MESH' else None
-        )
-        if not scene.roadway_source_object:
-            if pc_obj is not None:
-                c.label(text=f"Source: {pc_obj.name} (active)", icon="OBJECT_DATA")
-            else:
-                c.label(text="Select a point cloud to begin", icon='ERROR')
-        c.prop(scene, "roadway_source_object")
+class HVE_PT_pc_filter(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Filter Point Cloud"
+    bl_parent_id = "HVE_PT_point_cloud_tools"
+    bl_options = {'DEFAULT_CLOSED'}
 
-        # Expose the point cloud's GeoNodes display subsample, if it has one.
-        sub = _geonodes_subsample_input(pc_obj)
-        if sub is not None:
-            mod, ident = sub
-            try:
-                c.prop(mod, '["%s"]' % ident, text="Points Visible %")
-            except Exception:
-                pass
+    @classmethod
+    def poll(cls, context):
+        return True
 
-        c.prop(scene, "roadway_clip_object")
-        if getattr(scene, "roadway_clip_object", None) is not None:
-            c.prop(scene, "roadway_clip_mode")
-            if scene.roadway_clip_mode == 'MESH':
-                c.label(text="Clips to the exact (closed) mesh volume", icon='INFO')
-            else:
-                c.label(text="Box/cube clips in 3D; a plane clips its footprint", icon='INFO')
+    def draw(self, context):
+        scene = context.scene
+        c = self.layout.column()
+        c.label(text="Clean a cloud (also runs before surfacing)", icon='FILTER')
+        pc_obj = _draw_cloud_source(c, scene, context)
 
-        # --- Optional pre-filters (applied before surfacing) ---
-        filt = c.box()
-        filt.label(text="Pre-filter (optional)", icon='FILTER')
-        filt.prop(scene, "roadway_subsample")
+        c.prop(scene, "roadway_subsample")
         if scene.roadway_subsample:
-            filt.prop(scene, "roadway_voxel_size")
-        filt.prop(scene, "roadway_sor")
+            c.prop(scene, "roadway_voxel_size")
+        c.prop(scene, "roadway_sor")
         if scene.roadway_sor:
-            filt.prop(scene, "roadway_sor_neighbors")
-            filt.prop(scene, "roadway_sor_ratio")
-        if scene.roadway_subsample or scene.roadway_sor:
-            filt.operator("object.filter_point_cloud", text="Filter → Create New Point Cloud", icon='DUPLICATE')
-            filt.label(text="Adds a new, filtered point cloud", icon='ADD')
-            filt.label(text="The original cloud is never modified", icon='INFO')
-            filt.label(text="Filters also run when creating the surface", icon='INFO')
+            c.prop(scene, "roadway_sor_neighbors")
+            c.prop(scene, "roadway_sor_ratio")
+
+        run = c.column()
+        run.enabled = pc_obj is not None and (scene.roadway_subsample or scene.roadway_sor)
+        run.operator("object.filter_point_cloud", text="Filter → Create New Point Cloud", icon='DUPLICATE')
+        c.label(text="Adds a new cloud; the original is never modified", icon='INFO')
+        c.label(text="These filters also run when creating a surface", icon='INFO')
+
+
+class HVE_PT_pc_ground(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "Create Ground Surface"
+    bl_parent_id = "HVE_PT_point_cloud_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        scene = context.scene
+        c = self.layout.column()
+        c.label(text="Drapes a ground grid onto the point cloud", icon='MESH_GRID')
+        pc_obj = _draw_cloud_source(c, scene, context)
+        _draw_clip_options(c, scene)
 
         c.prop(scene, "roadway_cell_size")
         c.prop(scene, "roadway_ground_percentile")
@@ -1066,11 +1123,10 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
 
         if pc_obj is None:
-            c.label(text="Select a point cloud above (or in the viewport) first", icon='ERROR')
+            c.label(text="Select a point cloud first", icon='ERROR')
         build = c.column()
         build.enabled = pc_obj is not None
-        build.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
-        c.label(text="Result is classified as Environment", icon='WORLD')
+        build.operator("object.create_roadway_surface", text="Create Ground Surface", icon='SURFACE_NSURFACE')
 
         # Rebake the texture of an existing surface at a new Texture Resolution
         # without regenerating the mesh. Enabled when a surface is selected.
@@ -1085,7 +1141,7 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "3D Surface Reconstruction"
+    bl_label = "Create 3D Surface"
     bl_parent_id = "HVE_PT_point_cloud_tools"
     bl_options = {'DEFAULT_CLOSED'}
 
@@ -1095,15 +1151,12 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
 
     def draw(self, context):
         scene = context.scene
-        l = self.layout
-        c = l.column()
+        c = self.layout.column()
 
-        pc_obj = scene.roadway_source_object or (
-            context.object if context.object and context.object.type == 'MESH' else None
-        )
+        c.label(text="Full 3D mesh (Open3D) for vertical / overhanging geometry", icon='MESH_ICOSPHERE')
+        pc_obj = _draw_cloud_source(c, scene, context)
+        _draw_clip_options(c, scene)
 
-        c.label(text="Full 3D mesh (Open3D) — for vertical / overhanging geometry", icon='MESH_ICOSPHERE')
-        c.label(text="Uses the Point Cloud + pre-filters/clip above", icon='INFO')
         c.prop(scene, "roadway_recon_method")
         if scene.roadway_recon_method == 'POISSON':
             c.prop(scene, "roadway_recon_depth")
@@ -1114,8 +1167,10 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         elif scene.roadway_recon_method == 'ALPHA':
             c.prop(scene, "roadway_recon_alpha")
         c.prop(scene, "roadway_recon_normals_k")
+        c.label(text="Subsample / SOR from Filter also run here", icon='INFO')
+
         if pc_obj is None:
-            c.label(text="Select a point cloud above (or in the viewport) first", icon='ERROR')
+            c.label(text="Select a point cloud first", icon='ERROR')
         recon = c.column()
         recon.enabled = pc_obj is not None
         recon.operator("object.reconstruct_surface_3d", text="Reconstruct 3D Surface", icon='MOD_REMESH')
@@ -1127,15 +1182,17 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
             open3d_missing = False
         if open3d_missing:
             c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
-        c.label(text="For drivable ground, use Create Roadway Surface instead", icon='INFO')
+        c.label(text="For drivable ground, use Create Ground Surface instead", icon='INFO')
 
         # Bake the reconstructed surface's colour to a texture (unwraps + bakes),
         # so the colour exports to HVE. Shown when a coloured 3D surface is active.
         active = context.active_object
         if active is not None and active.get("surface_3d"):
             c.separator()
+            c.label(text="Texture bake", icon='TEXTURE')
+            c.prop(scene, "roadway_texture_size")
             c.operator("object.bake_surface_texture", text="Bake Texture (Selected 3D Surface)", icon='TEXTURE')
-            c.label(text="Unwraps + bakes vertex colour to a JPG (Texture Resolution above)", icon='INFO')
+            c.label(text="Unwraps + bakes cloud colour to a JPG", icon='INFO')
 
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
@@ -1191,6 +1248,9 @@ classes = (
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
     HVE_PT_point_cloud_tools,
+    HVE_PT_pc_import,
+    HVE_PT_pc_filter,
+    HVE_PT_pc_ground,
     HVE_PT_surface_reconstruct,
     HVE_PT_race_render_exporter,
     HVE_PT_documentation,

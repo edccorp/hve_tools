@@ -19,6 +19,7 @@ import numpy as np
 
 from .roadway_surface import (
     _log,
+    _show_system_console,
     _read_point_cloud,
     _run_prefilters,
     _clip_object_box,
@@ -338,6 +339,7 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
             window.cursor_set('WAIT')
         try:
             wm.progress_update(5)
+            _show_system_console()
             _log(f"Reconstructing 3D surface from '{source.name}'...")
             local, colors, _attr = _read_point_cloud(source, True)
             if len(local) < 4:
@@ -498,6 +500,7 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
         if window is not None:
             window.cursor_set('WAIT')
         try:
+            _show_system_console()
             # Make sure the mesh has UVs (auto-unwrap if not). Do this BEFORE
             # grabbing any mesh-data references: the Edit-mode round trip in
             # Smart UV Project reallocates attribute storage, so a colour

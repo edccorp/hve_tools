@@ -10,6 +10,7 @@ bl_info = {
 
 import os
 import re
+import sys
 import warnings
 
 import bpy
@@ -23,6 +24,30 @@ def _log(msg):
     System Console on Windows. Flushed so it appears immediately.
     """
     print(f"[HVE Tools] {msg}", flush=True)
+
+
+def _show_system_console():
+    """On Windows, make the system console window visible so progress prints
+    can be seen. Idempotent (showing an already-visible window is harmless) and
+    a no-op on macOS/Linux, where stdout already goes to the launching terminal.
+    """
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            return
+    except Exception:
+        pass
+    # Fall back to Blender's toggle if the Win32 call isn't available.
+    try:
+        if not bpy.app.background:
+            bpy.ops.wm.console_toggle()
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # Heightfield core (numpy-vectorized)
@@ -742,6 +767,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
         try:
             wm.progress_update(5)
+            _show_system_console()
             _log(f"Creating roadway surface from '{source.name}'...")
             # Read the raw base-mesh vertices, not the evaluated mesh: a point
             # cloud imported with a GeoNodes display modifier would otherwise
