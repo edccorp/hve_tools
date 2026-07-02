@@ -355,10 +355,9 @@ PLY Point Cloud**.)
    To keep a filtered cloud without surfacing, click **Apply Filters Only** —
    by default it creates a new, filtered point-cloud object (with colours and
    the point display) and leaves the original untouched; tick **Filter In
-   Place** to instead replace the selected cloud's points. By default the
-   texture keeps its full colour detail regardless of filtering (**Texture From
-   Full Cloud**, below); turn that off if you want the filters to affect the
-   texture too.
+   Place** to instead replace the selected cloud's points. The texture always
+   bakes from the full, unfiltered cloud, so filtering the geometry never costs
+   you colour detail.
 3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
 4. Set **Ground Percentile** — how the height of each grid cell is chosen from
@@ -378,10 +377,9 @@ PLY Point Cloud**.)
      **Texture Resolution** (longest side, in pixels): the texture is sampled
      **directly from the point cloud**, so it can be far sharper than the surface
      grid — a dense cloud keeps its colour detail even on a coarse mesh. 0
-     matches the grid resolution. When pre-filters are enabled, **Texture From
-     Full Cloud** (default) bakes the texture from the original unfiltered cloud
-     for full colour detail while the geometry uses the filtered points; turn it
-     off to bake from the filtered points instead.
+     matches the grid resolution. The texture always samples the full,
+     unfiltered cloud, so any Subsample/SOR filtering thins only the geometry,
+     never the texture.
    - **Texture Color Source** *(optional)* samples the texture's colour from a
      different object than the geometry. This is the fix for "I pre-filtered the
      cloud into a new object and now the texture lost detail": set **Point Cloud**

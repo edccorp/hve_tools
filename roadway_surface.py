@@ -632,12 +632,11 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
                 if bool(scene.roadway_bake_texture):
                     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+                    # Always bake the texture from the full (unfiltered / dedicated)
+                    # colour cloud, restricted to the surface's XY extent so
+                    # far-away points cannot smear into the border texels.
                     tex_points, tex_colors = points, colors
-                    has_tex_src = tex_src is not None and tex_src.type == 'MESH' and tex_src is not source
-                    if (bool(scene.roadway_texture_full_cloud) or has_tex_src) and colors_full is not None:
-                        # Bake from the unfiltered / dedicated colour cloud,
-                        # restricted to the surface's XY extent so far-away points
-                        # cannot smear into the border texels.
+                    if colors_full is not None:
                         max_x = result["min_x"] + (result["nx"] - 1) * result["cell_size"]
                         max_y = result["min_y"] + (result["ny"] - 1) * result["cell_size"]
                         inside = (
