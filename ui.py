@@ -1122,6 +1122,7 @@ class HVE_PT_pc_ground(HVE_PT_mechanist_base):
         if not bpy.data.filepath:
             c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
 
+        c.label(text="Subsample / SOR from Filter also run here", icon='INFO')
         if pc_obj is None:
             c.label(text="Select a point cloud first", icon='ERROR')
         build = c.column()
