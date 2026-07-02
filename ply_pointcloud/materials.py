@@ -65,18 +65,11 @@ def make_point_material(name, attr_name):
     color_out = attr.outputs.get('Color') or attr.outputs[0]
     nt.links.new(color_out, bsdf.inputs['Base Color'])
 
-    # Link emission using the first available socket name
-    emission_input = next(
-        (bsdf.inputs.get(name) for name in ("Emission", "Emission Color") if bsdf.inputs.get(name)),
-        None,
-    )
-    if emission_input:
-        nt.links.new(color_out, emission_input)
-
-    # Set emission strength if the socket exists
+    # Leave emission unconnected and at zero strength so points show their base
+    # colour under normal lighting rather than glowing.
     strength_input = bsdf.inputs.get("Emission Strength")
     if strength_input:
-        strength_input.default_value = 0.5
+        strength_input.default_value = 0.0
 
     nt.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
     return mat

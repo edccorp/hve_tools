@@ -379,7 +379,9 @@ def _apply_baked_texture(source_name, new_mesh, points, colors, result,
 
     The texture is sampled directly from the point cloud at ``target_size``
     resolution (independent of the mesh grid), then mapped onto the surface via
-    its grid UVs. Returns the saved image file path.
+    its grid UVs. The image-texture material is always built and assigned.
+    Returns the saved JPG path, or None when the image was only packed into the
+    .blend (because it has not been saved to disk yet).
     """
     nx, ny = result["nx"], result["ny"]
     cell_size = result["cell_size"]
@@ -401,10 +403,17 @@ def _apply_baked_texture(source_name, new_mesh, points, colors, result,
     image = bpy.data.images.new(f"Roadway Color: {source_name}", width=tw, height=th, alpha=True)
     image.pixels.foreach_set(np.asarray(pixels, dtype=np.float32))
 
-    jpg_path = os.path.join(blend_dir, _safe_filename(f"Roadway_Color_{source_name}") + ".jpg")
-    image.filepath_raw = jpg_path
-    image.file_format = 'JPEG'
-    image.save()
+    saved_path = None
+    if blend_dir:
+        saved_path = os.path.join(blend_dir, _safe_filename(f"Roadway_Color_{source_name}") + ".jpg")
+        image.filepath_raw = saved_path
+        image.file_format = 'JPEG'
+        image.save()
+    else:
+        # No .blend on disk yet: keep the image inside the .blend so the material
+        # still shows the texture. It must be saved before the H3D export can
+        # reference it on disk.
+        image.pack()
 
     # UVs: a per-vertex grid UV assigned to each loop by its vertex index.
     vert_uv = grid_uvs(nx, ny)
@@ -415,7 +424,7 @@ def _apply_baked_texture(source_name, new_mesh, points, colors, result,
 
     material = _build_image_texture_material(f"Roadway Surface: {source_name}", image)
     new_mesh.materials.append(material)
-    return jpg_path
+    return saved_path
 
 
 def _sor_neighbor_mean_distances(points, k):
@@ -557,23 +566,21 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
 
-                made_material = False
                 if bool(scene.roadway_bake_texture):
-                    if bpy.data.filepath:
-                        baked_texture_path = _apply_baked_texture(
-                            source.name, new_mesh, points, colors, result,
-                            int(scene.roadway_texture_size),
-                            float(scene.roadway_fill_distance),
-                            os.path.dirname(bpy.data.filepath),
-                        )
-                        made_material = True
-                    else:
+                    blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+                    baked_texture_path = _apply_baked_texture(
+                        source.name, new_mesh, points, colors, result,
+                        int(scene.roadway_texture_size),
+                        float(scene.roadway_fill_distance),
+                        blend_dir,
+                    )
+                    if baked_texture_path is None:
                         self.report(
                             {'WARNING'},
-                            "Save the .blend first to bake the roadway texture; "
-                            "used a vertex-colour material instead.",
+                            "Texture baked into the .blend; save the .blend and re-create "
+                            "the surface to write the JPG for H3D export.",
                         )
-                if not made_material and (bool(scene.roadway_create_material) or bool(scene.roadway_bake_texture)):
+                elif bool(scene.roadway_create_material):
                     material = _build_color_attribute_material(f"Roadway Surface: {source.name}", "Col")
                     new_mesh.materials.append(material)
 
