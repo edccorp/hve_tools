@@ -323,6 +323,7 @@ class HVE_PT_mechanist_export(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "Export to HVE"
     bl_parent_id = "HVE_PT_pre"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -377,7 +378,8 @@ class HVE_PT_mechanist_setup(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "H3D Setup"
     bl_parent_id = "HVE_PT_pre"
-    
+    bl_options = {'DEFAULT_CLOSED'}
+
     bpy.types.Scene.hve_preset = bpy.props.EnumProperty(
         name="Presets",
         description="Select a saved preset",
@@ -565,11 +567,12 @@ class HVE_PT_variableoutput_importer(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "Variable Output Importer"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_post"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
-       
+
     def draw(self, context):
         scene = context.scene
         target_obj = scene.anim_settings.anim_object
@@ -587,6 +590,7 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
     bl_category = "HVE"
     bl_label = "HVE FBX Importer"
     bl_parent_id = "HVE_PT_post"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
@@ -1068,7 +1072,8 @@ class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_region_type = 'UI'
     bl_category = "HVE"
     bl_label = "RaceRender Converter"
-    bl_parent_id = "HVE_PT_post"    
+    bl_parent_id = "HVE_PT_post"
+    bl_options = {'DEFAULT_CLOSED'}
     @classmethod
     def poll(cls, context):
         return True
