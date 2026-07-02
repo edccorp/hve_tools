@@ -3,8 +3,7 @@
 
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
-#  Authors:             Thomas Larsson
-#  Script copyright (C) Thomas Larsson 2014-2018
+#  Copyright (C) Engineering Dynamics Company (EDC)
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
@@ -22,11 +21,10 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-# Portions of this file (the NodeTree helper and the MakeHuman-style material
-# builder) originate from Thomas Larsson's GPL-licensed work. The HVE material
-# builders and operators are copyright (C) Engineering Dynamics Company (EDC)
-# and are likewise licensed under the GNU General Public License, version 2 or
-# later.
+# HVE material builders and operators, copyright (C) Engineering Dynamics
+# Company (EDC), licensed GPL-2.0-or-later. This file was originally derived
+# from Thomas Larsson's GPL material code; those portions (a MakeHuman material
+# stub and the node-layout helper) have since been removed or rewritten.
 
 import bpy
 import os
@@ -34,31 +32,25 @@ import math
 D = math.pi/180
 
 # ---------------------------------------------------------------------
-#
-# ---------------------------------------------------------------------
-
-def buildMaterial(mhMaterial, scn, cfg):
-    mname = mhMaterial["name"]
-    mat = bpy.data.materials.new(mname)
-    buildMaterialCycles(mat, mhMaterial, scn, cfg)
-    return mname, mat
-
-
-
-# ---------------------------------------------------------------------
-#   Cycles
+#   Node-layout helper
 # ---------------------------------------------------------------------
 
 class NodeTree:
+    """Place shader nodes in tidy columns while a material tree is built."""
+
+    COLUMN_WIDTH = 250
+    ROW_HEIGHT = 250
+
     def __init__(self, tree):
         self.nodes = tree.nodes
         self.links = tree.links
-        self.ycoords = 10*[500]
+        # Next free Y position per column (indexed by column number).
+        self._column_y = [500] * 10
 
-    def addNode(self, n, stype):
-        node = self.nodes.new(type = stype)
-        node.location = (n*250-500, self.ycoords[n])
-        self.ycoords[n] -= 250
+    def addNode(self, column, node_type):
+        node = self.nodes.new(type=node_type)
+        node.location = (column * self.COLUMN_WIDTH - 500, self._column_y[column])
+        self._column_y[column] -= self.ROW_HEIGHT
         return node
 
 

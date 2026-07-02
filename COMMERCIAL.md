@@ -10,9 +10,8 @@
 HVE Tools is **free software** licensed under the **GNU General Public License,
 version 2 or later** (see [`LICENSE`](LICENSE)). Parts of it are derived from
 other GPL-licensed software — notably Blender's X3D/VRML exporter (the H3D
-exporters) and Thomas Larsson's material code — so the combined work is, and
-must remain, GPL. It is also a Blender add-on, and Blender add-ons are
-distributed under the GPL.
+exporters) — so the combined work is, and must remain, GPL. It is also a Blender
+add-on, and Blender add-ons are distributed under the GPL.
 
 Under the GPL you always have the freedom to run, study, modify, and
 redistribute the software (including redistributing your modifications), as long

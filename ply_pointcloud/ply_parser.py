@@ -1,6 +1,8 @@
 import bpy
 import struct
 
+import numpy as np
+
 __all__ = ["load_ply_vertices", "import_ply"]
 
 
@@ -51,29 +53,51 @@ def _struct_fmt(ply_type):
     }[ply_type]
 
 
+def _numpy_fmt(ply_type):
+    return {
+        'char': 'i1', 'int8': 'i1', 'uchar': 'u1', 'uint8': 'u1',
+        'short': 'i2', 'int16': 'i2', 'ushort': 'u2', 'uint16': 'u2',
+        'int': 'i4', 'int32': 'i4', 'uint': 'u4', 'uint32': 'u4',
+        'float': 'f4', 'float32': 'f4', 'double': 'f8', 'float64': 'f8',
+    }[ply_type]
+
+
+def _color_indices(prop_names):
+    """Return ``(rgb_indices_or_None, alpha_index_or_None)`` from property names."""
+    cidx = None
+    for r, g, b in [('red', 'green', 'blue'), ('r', 'g', 'b')]:
+        if r in prop_names and g in prop_names and b in prop_names:
+            cidx = (prop_names.index(r), prop_names.index(g), prop_names.index(b))
+            break
+    aidx = None
+    for aname in ('alpha', 'a'):
+        if aname in prop_names:
+            aidx = prop_names.index(aname)
+            break
+    return cidx, aidx
+
+
 def load_ply_vertices(filepath):
+    """Load a PLY point cloud's vertices and colours.
+
+    Returns ``(verts, cols)`` where ``verts`` is an (N, 3) float64 numpy array
+    and ``cols`` is an (N, 4) float64 RGBA array (0-1) or None when the file has
+    no colour. Binary bodies are parsed in one vectorized numpy read.
+    """
     with open(filepath, 'rb') as f:
         if f.readline().decode('ascii', errors='ignore').strip() != 'ply':
             raise RuntimeError('Not a PLY file')
         fmt, vcount, vprops = _ply_parse_header(f)
         prop_names = [p[1] for p in vprops]
         ix, iy, iz = prop_names.index('x'), prop_names.index('y'), prop_names.index('z')
-        cidx = None
-        for r, g, b in [('red', 'green', 'blue'), ('r', 'g', 'b')]:
-            if r in prop_names and g in prop_names and b in prop_names:
-                cidx = (prop_names.index(r), prop_names.index(g), prop_names.index(b))
-                break
-        aidx = None
-        for aname in ('alpha', 'a'):
-            if aname in prop_names:
-                aidx = prop_names.index(aname)
-                break
-        verts = []
-        cols = [] if cidx else None
+        cidx, aidx = _color_indices(prop_names)
+
         if fmt == 'ascii':
-            for _ in range(vcount):
+            verts = np.empty((vcount, 3), dtype=np.float64)
+            cols = np.empty((vcount, 4), dtype=np.float64) if cidx else None
+            for row_i in range(vcount):
                 parts = f.readline().decode('ascii', errors='ignore').split()
-                verts.append((float(parts[ix]), float(parts[iy]), float(parts[iz])))
+                verts[row_i] = (float(parts[ix]), float(parts[iy]), float(parts[iz]))
                 if cidx:
                     r, g, b = float(parts[cidx[0]]), float(parts[cidx[1]]), float(parts[cidx[2]])
                     if r > 1 or g > 1 or b > 1:
@@ -84,30 +108,41 @@ def load_ply_vertices(filepath):
                             a = a / 255
                     else:
                         a = 1.0
-                    cols.append((r, g, b, a))
-        elif fmt in ('binary_little_endian', 'binary_big_endian'):
+                    cols[row_i] = (r, g, b, a)
+            return verts, cols
+
+        if fmt in ('binary_little_endian', 'binary_big_endian'):
             endian = '<' if fmt == 'binary_little_endian' else '>'
-            row_struct = struct.Struct(endian + ''.join([_struct_fmt(t) for t, _ in vprops]))
-            for _ in range(vcount):
-                vals = row_struct.unpack(f.read(row_struct.size))
-                verts.append((float(vals[ix]), float(vals[iy]), float(vals[iz])))
-                if cidx:
-                    r, g, b = float(vals[cidx[0]]), float(vals[cidx[1]]), float(vals[cidx[2]])
-                    if r > 1 or g > 1 or b > 1:
-                        r, g, b = r / 255, g / 255, b / 255
-                    if aidx is not None:
-                        a = float(vals[aidx])
-                        if a > 1:
-                            a = a / 255
-                    else:
-                        a = 1.0
-                    cols.append((r, g, b, a))
-        else:
-            raise RuntimeError(
-                f"Unsupported PLY format: {fmt}. "
-                "Only ascii, binary_little_endian, binary_big_endian are supported"
-            )
-        return verts, cols
+            dt = np.dtype([(f"f{i}", endian + _numpy_fmt(t)) for i, (t, _n) in enumerate(vprops)])
+            buf = f.read(dt.itemsize * vcount)
+            arr = np.frombuffer(buf, dtype=dt, count=vcount)
+
+            verts = np.column_stack([
+                arr[f"f{ix}"].astype(np.float64),
+                arr[f"f{iy}"].astype(np.float64),
+                arr[f"f{iz}"].astype(np.float64),
+            ])
+
+            cols = None
+            if cidx:
+                def channel(idx):
+                    vals = arr[f"f{idx}"].astype(np.float64)
+                    # Integer colour channels (e.g. uchar 0-255) are normalized.
+                    if np.issubdtype(dt[idx], np.integer):
+                        vals = vals / 255.0
+                    return vals
+
+                r = channel(cidx[0])
+                g = channel(cidx[1])
+                b = channel(cidx[2])
+                a = channel(aidx) if aidx is not None else np.ones(vcount, dtype=np.float64)
+                cols = np.column_stack([r, g, b, a])
+            return verts, cols
+
+        raise RuntimeError(
+            f"Unsupported PLY format: {fmt}. "
+            "Only ascii, binary_little_endian, binary_big_endian are supported"
+        )
 
 
 def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribute="Col"):
@@ -128,15 +163,21 @@ def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribut
     """
     verts, cols = load_ply_vertices(filepath)
     mesh = bpy.data.meshes.new(name=f"PLY_{bpy.path.display_name_from_filepath(filepath)}")
-    mesh.from_pydata(verts, [], [])
+
+    # Bulk-create the vertices (fast even for millions of points).
+    n = len(verts)
+    mesh.vertices.add(n)
+    mesh.vertices.foreach_set("co", np.ascontiguousarray(verts, dtype=np.float32).ravel())
+    mesh.update()
     mesh.validate(clean_customdata=False)
-    if cols:
+
+    if cols is not None and len(cols):
         try:
             ca = mesh.color_attributes.new(name=color_attribute, type='BYTE_COLOR', domain='POINT')
         except Exception:
             ca = mesh.color_attributes.new(name=color_attribute, type='FLOAT_COLOR', domain='POINT')
-        for i, c in enumerate(cols):
-            ca.data[i].color = c
+        ca.data.foreach_set("color", np.ascontiguousarray(cols, dtype=np.float32).ravel())
+
     obj = bpy.data.objects.new(mesh.name, mesh)
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
