@@ -17,8 +17,9 @@ module_ast = ast.parse(module_path.read_text())
 WANTED_FUNCS = {
     "_read_floats", "_parse_ptx_block", "load_ptx_vertices",
     "_normalize_rgb", "load_las_vertices", "missing_optional_deps",
+    "deps_for_extension",
 }
-WANTED_ASSIGN = {"_LAS_COLOR_OFFSET", "OPTIONAL_DEPS"}
+WANTED_ASSIGN = {"_LAS_COLOR_OFFSET", "OPTIONAL_DEPS", "_EXTENSION_DEP"}
 
 ns = {"os": os, "struct": struct, "np": np}
 for node in module_ast.body:
@@ -32,6 +33,7 @@ for node in module_ast.body:
 load_ptx_vertices = ns["load_ptx_vertices"]
 load_las_vertices = ns["load_las_vertices"]
 missing_optional_deps = ns["missing_optional_deps"]
+deps_for_extension = ns["deps_for_extension"]
 OPTIONAL_DEPS = ns["OPTIONAL_DEPS"]
 
 
@@ -184,3 +186,16 @@ def test_missing_optional_deps_reports_absent_package():
     reported = {dep[0] for dep in missing}
     assert "definitely_not_a_real_pkg_xyz" in reported
     assert "os" not in reported
+
+
+def test_deps_for_extension_native_formats_need_nothing():
+    for ext in (".ply", ".ptx", ".las", ".PLY", ".LAS"):
+        assert deps_for_extension(ext) == []
+
+
+def test_deps_for_extension_maps_e57_and_laz():
+    # pye57/laspy aren't installed in the test env, so these report the need.
+    e57 = deps_for_extension(".e57")
+    laz = deps_for_extension(".LAZ")  # case-insensitive
+    assert [d[0] for d in e57] == ["pye57"]
+    assert [d[0] for d in laz] == ["laspy"]

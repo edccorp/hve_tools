@@ -46,6 +46,27 @@ def missing_optional_deps():
     return [dep for dep in OPTIONAL_DEPS if importlib.util.find_spec(dep[0]) is None]
 
 
+# Which optional package each extension needs. PLY, PTX and uncompressed LAS
+# are read natively and need nothing.
+_EXTENSION_DEP = {".e57": "pye57", ".laz": "laspy"}
+
+
+def deps_for_extension(ext):
+    """OPTIONAL_DEPS entries a given extension needs but that aren't installed.
+
+    Used to auto-install the right package the first time such a file is opened.
+    """
+    import importlib.util
+
+    need = _EXTENSION_DEP.get(ext.lower())
+    if need is None:
+        return []
+    return [
+        dep for dep in OPTIONAL_DEPS
+        if dep[0] == need and importlib.util.find_spec(dep[0]) is None
+    ]
+
+
 def _read_floats(line):
     return [float(v) for v in line.split()]
 

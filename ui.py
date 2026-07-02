@@ -997,8 +997,8 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             missing = []
         if missing:
             fmts = ", ".join(fmt for _n, _s, fmt in missing)
-            c.label(text=f"{fmts} need an extra package", icon='INFO')
-            c.operator("import_scene.install_pointcloud_deps", text="Install E57 / LAZ Support", icon='PACKAGE')
+            c.label(text=f"{fmts} auto-install on first open", icon='INFO')
+            c.operator("import_scene.install_pointcloud_deps", text="Install E57 / LAZ Support Now", icon='PACKAGE')
         c.separator()
 
         # --- Build a ground surface ---

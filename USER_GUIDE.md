@@ -338,15 +338,16 @@ data, so it has no effect on surfacing or textures; lower it for very dense
 clouds to keep the viewport responsive. (The importer is also available from
 **File → Import → Point Cloud (PLY / PTX / E57 / LAS)**.)
 
-A few formats need an extra Python package installed in Blender's Python:
-**E57** requires `pye57`, and compressed **LAZ** requires `laspy` with LAZ
-support. Uncompressed `.las`, `.ply` and `.ptx` are read natively with no extra
-packages. When either package is missing, an **Install E57 / LAZ Support**
-button appears under the import button — click it to install both into Blender's
-Python (needs an internet connection; on Windows you may need to run Blender as
-administrator), then restart Blender if prompted. The button disappears once the
-packages are present. You can also install them yourself with `pip install
-pye57 laspy[lazrs]`, or convert to PLY/PTX as a fallback.
+A few formats need an extra Python package in Blender's Python: **E57** requires
+`pye57`, and compressed **LAZ** requires `laspy` with LAZ support. Uncompressed
+`.las`, `.ply` and `.ptx` are read natively with no extra packages. **The first
+time you open an E57 or LAZ file, the add-on installs the needed package
+automatically** (a wait cursor shows while it downloads; needs an internet
+connection, and on Windows you may need to have started Blender as
+administrator). If that ever fails, an **Install E57 / LAZ Support Now** button
+appears under the import button as a fallback, or you can install them yourself
+with `pip install pye57 laspy[lazrs]`, or convert to PLY/PTX. Both the button and
+its note disappear once the packages are present.
 
 **Surface it:**
 
