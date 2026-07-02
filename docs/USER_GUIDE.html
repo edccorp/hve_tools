@@ -304,6 +304,7 @@ li { margin: .2rem 0; }
 <p><strong>Roadway texture picks up colour from cars/foliage above the road.</strong> Lower the <strong>Color Height Tolerance</strong> (it defaults to 0.25 and already excludes most overhead points); <code>0</code> disables the check and uses every point.</p>
 <p><strong>Roadway colour doesn't appear in HVE.</strong> The texture must be a file on disk. Save the <code>.blend</code> first, then re-create the surface so the JPG is written next to it; the H3D export references that file.</p>
 <p><strong>Filtering / surfacing a huge cloud is slow.</strong> Statistical Outlier Removal does a neighbour search per point. Enable <strong>Subsample (Voxel)</strong> first (or use <strong>Filter → Create New Point Cloud</strong> to bake a thinned copy once), then surface from the result.</p>
+<p><strong>How do I know it's still running?</strong> Surfacing and 3D reconstruction show a wait cursor and print stage-by-stage progress to the system console — the terminal you launched Blender from, or <strong>Window → Toggle System Console</strong> on Windows. Look for <code>[HVE Tools]</code> lines (points read, filtering, sampling grid, baking, done) so you can tell a long run apart from a hang.</p>
 <hr>
 <h2 id="7-example-files">7. Example files</h2>
 <p>Bundled at the repository root for trying each importer:</p>

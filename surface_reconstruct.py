@@ -17,6 +17,7 @@ import bpy
 import numpy as np
 
 from .roadway_surface import (
+    _log,
     _read_point_cloud,
     _run_prefilters,
     _clip_object_box,
@@ -143,6 +144,7 @@ def _reconstruct_mesh(o3d, points, colors, scene):
         )
 
     k = max(int(getattr(scene, "roadway_recon_normals_k", 30)), 4)
+    _log("  estimating and orienting point normals...")
     pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=k))
     # Consistently orient normals so Poisson gets a coherent inside/outside.
     try:
@@ -151,6 +153,7 @@ def _reconstruct_mesh(o3d, points, colors, scene):
         pcd.orient_normals_to_align_with_direction(np.array([0.0, 0.0, 1.0]))
 
     method = getattr(scene, "roadway_recon_method", 'POISSON')
+    _log(f"  reconstructing ({method})... this can take a while")
     if method == 'POISSON':
         depth = int(getattr(scene, "roadway_recon_depth", 9))
         mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
@@ -207,6 +210,7 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
             window.cursor_set('WAIT')
         try:
             wm.progress_update(5)
+            _log(f"Reconstructing 3D surface from '{source.name}'...")
             local, colors, _attr = _read_point_cloud(source, True)
             if len(local) < 4:
                 self.report({'ERROR'}, "Source object has too few vertices to reconstruct.")
@@ -221,6 +225,7 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
             if len(points) < 4:
                 self.report({'WARNING'}, "Too few points after clip/filter; relax them.")
                 return {'CANCELLED'}
+            _log(f"  {len(points)} points after clip/filter")
 
             wm.progress_update(20)
             try:
@@ -231,6 +236,7 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
 
             wm.progress_update(35)
             verts, tris, vcols = _reconstruct_mesh(o3d, points, colors, scene)
+            _log(f"  built mesh: {len(verts)} verts, {len(tris)} tris")
             wm.progress_update(80)
             if len(verts) == 0 or len(tris) == 0:
                 self.report(

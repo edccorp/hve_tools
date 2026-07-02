@@ -1116,7 +1116,14 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         recon = c.column()
         recon.enabled = pc_obj is not None
         recon.operator("object.reconstruct_surface_3d", text="Reconstruct 3D Surface", icon='MOD_REMESH')
-        c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
+        # Only mention the Open3D install while it's actually missing.
+        try:
+            import importlib.util
+            open3d_missing = importlib.util.find_spec("open3d") is None
+        except Exception:
+            open3d_missing = False
+        if open3d_missing:
+            c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
         c.label(text="For drivable ground, use Create Roadway Surface instead", icon='INFO')
 
 

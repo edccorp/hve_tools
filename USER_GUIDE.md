@@ -555,6 +555,12 @@ to it; the H3D export references that file.
 a neighbour search per point. Enable **Subsample (Voxel)** first (or use **Filter
 → Create New Point Cloud** to bake a thinned copy once), then surface from the result.
 
+**How do I know it's still running?** Surfacing and 3D reconstruction show a wait
+cursor and print stage-by-stage progress to the system console — the terminal you
+launched Blender from, or **Window → Toggle System Console** on Windows. Look for
+`[HVE Tools]` lines (points read, filtering, sampling grid, baking, done) so you
+can tell a long run apart from a hang.
+
 ---
 
 ## 7. Example files

@@ -15,6 +15,15 @@ import warnings
 import bpy
 import numpy as np
 
+
+def _log(msg):
+    """Print a progress line to the system console (terminal) during long ops.
+
+    Shows in the terminal Blender was launched from, or via Window > Toggle
+    System Console on Windows. Flushed so it appears immediately.
+    """
+    print(f"[HVE Tools] {msg}", flush=True)
+
 # ---------------------------------------------------------------------------
 # Heightfield core (numpy-vectorized)
 #
@@ -733,6 +742,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
         try:
             wm.progress_update(5)
+            _log(f"Creating roadway surface from '{source.name}'...")
             # Read the raw base-mesh vertices, not the evaluated mesh: a point
             # cloud imported with a GeoNodes display modifier would otherwise
             # yield the display geometry instead of the original points.
@@ -740,6 +750,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             if len(local) < 3:
                 self.report({'ERROR'}, "Source object has too few vertices for a surface.")
                 return {'CANCELLED'}
+            _log(f"  read {len(local)} points")
 
             wm.progress_update(20)
 
@@ -829,9 +840,12 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             # Optional pre-filters: voxel subsample, then statistical outlier
             # removal, before any surfacing.
             filtered_note = ""
+            if bool(scene.roadway_subsample) or bool(scene.roadway_sor):
+                _log("  pre-filtering (subsample / outlier removal)...")
             points, colors, n_before = _run_prefilters(scene, points, colors)
             if len(points) != n_before:
                 filtered_note = f" Filtered {n_before}->{len(points)} points."
+                _log(f"  filtered {n_before} -> {len(points)} points")
             if len(points) < 3:
                 self.report({'WARNING'}, "Pre-filter left too few points; relax the filters.")
                 return {'CANCELLED'}
@@ -849,6 +863,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 return {'CANCELLED'}
 
             wm.progress_update(45)
+            _log(f"  sampling {nx}x{ny} grid from {len(points)} points...")
             result = generate_surface(
                 points, cell_size, fill_distance, ground_percentile, fill_holes, colors=colors,
                 color_height_tol=float(scene.roadway_color_height_tol),
@@ -862,6 +877,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 return {'CANCELLED'}
 
             wm.progress_update(75)
+            _log(f"  building mesh ({result['sampled']} cells, {len(result['faces'])} faces)...")
             mesh_name = f"Roadway Surface: {source.name}"
             new_mesh = bpy.data.meshes.new(mesh_name)
             new_mesh.from_pydata(result["verts"].tolist(), [], result["faces"].tolist())
@@ -869,6 +885,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
             baked_texture_path = None
             if "colors" in result:
+                _log("  baking colour texture...")
                 color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
 
@@ -945,6 +962,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             wm.progress_update(100)
             colored = " (coloured)" if "colors" in result else ""
             texture_note = f" Texture saved to {os.path.basename(baked_texture_path)}." if baked_texture_path else ""
+            _log(f"Done: {len(result['faces'])} faces, {result['sampled']}/{result['total']} cells sampled.")
             self.report(
                 {'INFO'},
                 f"Roadway surface{colored}: {result['nx']}x{result['ny']} grid, "
