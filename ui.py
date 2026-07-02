@@ -1026,8 +1026,9 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             filt.prop(scene, "roadway_sor_neighbors")
             filt.prop(scene, "roadway_sor_ratio")
         if scene.roadway_subsample or scene.roadway_sor:
-            filt.operator("object.filter_point_cloud", text="Filter To New Point Cloud", icon='CHECKMARK')
-            filt.label(text="Creates a filtered copy; the original is never changed", icon='INFO')
+            filt.operator("object.filter_point_cloud", text="Filter → Create New Point Cloud", icon='DUPLICATE')
+            filt.label(text="Adds a new, filtered point cloud", icon='ADD')
+            filt.label(text="The original cloud is never modified", icon='INFO')
             filt.label(text="Filters also run when creating the surface", icon='INFO')
 
         c.prop(scene, "roadway_cell_size")

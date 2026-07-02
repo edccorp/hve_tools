@@ -784,9 +784,9 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
 
 class HVE_OT_FilterPointCloud(bpy.types.Operator):
-    """Apply the Subsample / SOR pre-filters to a new point-cloud copy, leaving the original unchanged"""
+    """Apply the Subsample / SOR pre-filters into a brand-new point-cloud object, leaving the original unchanged"""
     bl_idname = "object.filter_point_cloud"
-    bl_label = "Filter To New Point Cloud"
+    bl_label = "Filter → Create New Point Cloud"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -866,7 +866,8 @@ class HVE_OT_FilterPointCloud(bpy.types.Operator):
             wm.progress_update(100)
             self.report(
                 {'INFO'},
-                f"Filtered point cloud: {n_before} -> {len(points)} points ('{target.name}').",
+                f"Created new point cloud '{target.name}': {n_before} -> {len(points)} "
+                f"points. Original '{source.name}' left unchanged.",
             )
             return {'FINISHED'}
         finally:

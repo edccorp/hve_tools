@@ -253,7 +253,7 @@ li { margin: .2rem 0; }
 <li><strong>Remove Outliers (SOR)</strong> drops points whose neighbours are unusually far away (floating noise, stray returns). <strong>SOR Neighbors (k)</strong> is how many neighbours are averaged; <strong>SOR Std Ratio</strong> sets how aggressive it is (lower removes more). SOR does a neighbour search per point, so subsample first on large clouds.</li>
 </ul></li>
 </ol>
-<p>The filters are <strong>not persistent</strong>: they run on an in-memory copy each time you click <strong>Create Roadway Surface</strong>, and the source cloud is never modified. To keep a filtered cloud without surfacing, click <strong>Filter To New Point Cloud</strong> — it always creates a new, filtered point-cloud object (with colours and the point display) and leaves the original untouched. The texture always bakes from the full, unfiltered cloud, so filtering the geometry never costs you colour detail.</p>
+<p>The filters are <strong>not persistent</strong>: they run on an in-memory copy each time you click <strong>Create Roadway Surface</strong>, and the source cloud is never modified. To keep a filtered cloud without surfacing, click <strong>Filter → Create New Point Cloud</strong> — it always adds a new, filtered point-cloud object (with colours and the point display) and leaves the original untouched. The texture always bakes from the full, unfiltered cloud, so filtering the geometry never costs you colour detail.</p>
 <ol>
 <li>Set <strong>Resolution (Cell Size)</strong> — the grid spacing, in the scene's units (metres or feet, matching your unit setup). Smaller is finer and slower.</li>
 <li>Set <strong>Ground Percentile</strong> — how the height of each grid cell is chosen from the point heights that land in it (see below). Default 10.</li>
@@ -288,7 +288,7 @@ li { margin: .2rem 0; }
 <p><strong>Roadway texture is grey or full of holes.</strong> The <strong>Color Height Tolerance</strong> may be too tight for a sloped road (points fall outside the band), or cells are too sparse. Raise the tolerance, increase the cell size, or turn on <strong>Fill Holes</strong>.</p>
 <p><strong>Roadway texture picks up colour from cars/foliage above the road.</strong> Lower the <strong>Color Height Tolerance</strong> (it defaults to 0.25 and already excludes most overhead points); <code>0</code> disables the check and uses every point.</p>
 <p><strong>Roadway colour doesn't appear in HVE.</strong> The texture must be a file on disk. Save the <code>.blend</code> first, then re-create the surface so the JPG is written next to it; the H3D export references that file.</p>
-<p><strong>Filtering / surfacing a huge cloud is slow.</strong> Statistical Outlier Removal does a neighbour search per point. Enable <strong>Subsample (Voxel)</strong> first (or use <strong>Filter To New Point Cloud</strong> to bake a thinned copy once), then surface from the result.</p>
+<p><strong>Filtering / surfacing a huge cloud is slow.</strong> Statistical Outlier Removal does a neighbour search per point. Enable <strong>Subsample (Voxel)</strong> first (or use <strong>Filter → Create New Point Cloud</strong> to bake a thinned copy once), then surface from the result.</p>
 <hr>
 <h2 id="7-example-files">7. Example files</h2>
 <p>Bundled at the repository root for trying each importer:</p>
