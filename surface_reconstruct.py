@@ -35,6 +35,7 @@ __all__ = [
     "HVE_OT_BakeSurfaceTexture",
     "ball_pivoting_radii",
     "rasterize_uv_triangles",
+    "scatter_uv_colors",
     "classes",
 ]
 
@@ -59,6 +60,42 @@ def _dilate_texture(img, written, passes):
         out[grow] = acc[grow] / cnt[grow][..., None]
         wr = wr | grow
     return out, wr
+
+
+def scatter_uv_colors(uvs, colors, width, height, dilate=4, fill=0.5):
+    """Average per-point colours into a texture by their UV coordinates.
+
+    Used for the cloud-sampled bake: each cloud point is placed at its UV on the
+    surface and its colour accumulated into that texel (multiple points per texel
+    are averaged), so the texture's detail comes from the point cloud, not the
+    mesh resolution. ``uvs`` is (N, 2) in 0-1, ``colors`` is (N, 4). Returns
+    ``(image, written)`` laid out bottom-row-first (Blender order). bpy-free.
+    """
+    img = np.full((height, width, 4), float(fill), dtype=np.float64)
+    img[..., 3] = 1.0
+    written = np.zeros((height, width), dtype=bool)
+    uv = np.asarray(uvs, dtype=np.float64)
+    col = np.asarray(colors, dtype=np.float64)
+    if uv.shape[0] == 0:
+        return img, written
+
+    tx = np.clip(np.floor(uv[:, 0] * width).astype(np.int64), 0, width - 1)
+    ty = np.clip(np.floor(uv[:, 1] * height).astype(np.int64), 0, height - 1)
+    flat = ty * width + tx
+    n = width * height
+    csum = np.zeros((n, 4), dtype=np.float64)
+    cnt = np.zeros(n, dtype=np.float64)
+    np.add.at(csum, flat, col[:, :4])
+    np.add.at(cnt, flat, 1.0)
+    mask = cnt > 0
+
+    out = img.reshape(n, 4)
+    out[mask] = csum[mask] / cnt[mask][:, None]
+    img = out.reshape(height, width, 4)
+    written = mask.reshape(height, width)
+    if dilate > 0:
+        img, written = _dilate_texture(img, written, dilate)
+    return img, written
 
 
 def rasterize_uv_triangles(loop_uvs, loop_tris, loop_colors, width, height,
@@ -384,6 +421,46 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
                 window.cursor_set('DEFAULT')
 
 
+def _cloud_texel_uvs(o3d, vert_world, tri_verts, tri_uv, cloud_points, dist_mult=3.0):
+    """Map each cloud point to a UV on the surface via closest-point-on-mesh.
+
+    Uses Open3D's raycasting scene to find, for every cloud point, the closest
+    triangle and its barycentric coordinates, then interpolates that triangle's
+    corner UVs. Returns ``(texel_uv, keep)`` where ``keep`` drops points that lie
+    too far from the surface (> ``dist_mult`` x the median distance), so stray
+    off-surface returns don't smear the texture.
+    """
+    scene = o3d.t.geometry.RaycastingScene()
+    tmesh = o3d.t.geometry.TriangleMesh()
+    tmesh.vertex.positions = o3d.core.Tensor(
+        np.ascontiguousarray(vert_world, dtype=np.float32)
+    )
+    tmesh.triangle.indices = o3d.core.Tensor(
+        np.ascontiguousarray(tri_verts, dtype=np.uint32)
+    )
+    scene.add_triangles(tmesh)
+
+    query = o3d.core.Tensor(np.ascontiguousarray(cloud_points, dtype=np.float32))
+    res = scene.compute_closest_points(query)
+    prim = res['primitive_ids'].numpy().astype(np.int64)
+    bary = res['primitive_uvs'].numpy().astype(np.float64)  # (N, 2)
+    closest = res['points'].numpy().astype(np.float64)
+
+    dist = np.linalg.norm(cloud_points - closest, axis=1)
+    med = float(np.median(dist)) if dist.size else 0.0
+    keep = dist <= (med * dist_mult) if med > 0 else np.ones(dist.shape[0], dtype=bool)
+
+    # Barycentric weights: Open3D gives (u, v) for corners 1 and 2; corner 0 is
+    # the remainder. Interpolate the triangle's corner UVs.
+    w = np.empty((prim.shape[0], 3), dtype=np.float64)
+    w[:, 1] = bary[:, 0]
+    w[:, 2] = bary[:, 1]
+    w[:, 0] = 1.0 - bary[:, 0] - bary[:, 1]
+    sel = tri_uv[prim]  # (N, 3, 2)
+    texel_uv = (w[:, :, None] * sel).sum(axis=1)
+    return texel_uv, keep
+
+
 class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
     """Unwrap the selected 3D surface and bake its vertex colours to a JPG texture (like the roadway surface texture) so the colour exports to HVE"""
     bl_idname = "object.bake_surface_texture"
@@ -475,8 +552,46 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
                 size = 2048
 
             wm.progress_update(55)
-            _log(f"  baking {size}x{size} texture from {n_tris} triangles...")
-            img_arr, _written = rasterize_uv_triangles(loop_uv, tri_loops, loop_colors, size, size)
+            # Prefer sampling the texture directly from the original point cloud
+            # (detail independent of mesh resolution). Fall back to the mesh's
+            # vertex colours if the cloud isn't available.
+            img_arr = None
+            source_name = str(obj.get("surface_3d_source", ""))
+            src = bpy.data.objects.get(source_name) if source_name else None
+            if src is not None and src.type == 'MESH':
+                s_local, s_colors, _sa = _read_point_cloud(src, True)
+                if s_colors is not None and len(s_local):
+                    try:
+                        o3d = _ensure_open3d()
+                        s_mw = np.array(src.matrix_world, dtype=np.float64)
+                        cloud_pts = s_local @ s_mw[:3, :3].T + s_mw[:3, 3]
+
+                        n_v = len(mesh.vertices)
+                        vco = np.empty(n_v * 3, dtype=np.float64)
+                        mesh.vertices.foreach_get("co", vco)
+                        vco = vco.reshape(n_v, 3)
+                        o_mw = np.array(obj.matrix_world, dtype=np.float64)
+                        vert_world = vco @ o_mw[:3, :3].T + o_mw[:3, 3]
+
+                        tri_verts = np.empty(n_tris * 3, dtype=np.int64)
+                        mesh.loop_triangles.foreach_get("vertices", tri_verts)
+                        tri_verts = tri_verts.reshape(n_tris, 3)
+                        tri_uv = loop_uv[tri_loops]  # (T, 3, 2)
+
+                        _log(f"  cloud-sampling {size}x{size} texture from {len(cloud_pts)} points...")
+                        texel_uv, keep = _cloud_texel_uvs(
+                            o3d, vert_world, tri_verts, tri_uv, cloud_pts
+                        )
+                        img_arr, _w = scatter_uv_colors(
+                            texel_uv[keep], s_colors[keep], size, size
+                        )
+                    except Exception as exc:  # noqa: BLE001 - fall back to vertex bake
+                        _log(f"  cloud sampling failed ({exc}); using vertex colours")
+                        img_arr = None
+
+            if img_arr is None:
+                _log(f"  baking {size}x{size} texture from {n_tris} mesh triangles...")
+                img_arr, _written = rasterize_uv_triangles(loop_uv, tri_loops, loop_colors, size, size)
 
             wm.progress_update(85)
             image = bpy.data.images.new(
