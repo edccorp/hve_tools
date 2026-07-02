@@ -282,7 +282,7 @@ li { margin: .2rem 0; }
 <li><strong>Ball Pivoting</strong> — connects the original points into triangles; good for evenly dense clouds.</li>
 <li><strong>Alpha Shape</strong> — wraps the points at an <strong>Alpha</strong> radius (0 auto-picks from the average spacing).</li>
 </ul>
-<p><strong>Normal Neighbors (k)</strong> controls the normal estimation/orientation that all methods rely on. The result is classified as <strong>Environment</strong>, with vertex colours carried through when the cloud has colour. For the drivable road itself, keep using <strong>Create Roadway Surface</strong> — a 3D reconstruction of the road is noisier and harder for HVE to use.</p>
+<p><strong>Normal Neighbors (k)</strong> controls the normal estimation/orientation that all methods rely on. The result is classified as <strong>Environment</strong>. When the cloud has colour it is carried onto the mesh as a <code>Col</code> vertex-colour attribute, and a material driven by that attribute is assigned so the surface shows coloured in <strong>Material Preview / Rendered</strong> view. (Vertex colour is for display in Blender; it does not export to HVE — that would need a baked texture on an unwrapped mesh.) For the drivable road itself, keep using <strong>Create Roadway Surface</strong> — a 3D reconstruction of the road is noisier and harder for HVE to use.</p>
 <hr>
 <h2 id="5-units-and-scale">5. Units and scale</h2>
 <ul>

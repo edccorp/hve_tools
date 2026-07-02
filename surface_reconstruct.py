@@ -40,6 +40,35 @@ def ball_pivoting_radii(avg_spacing, multipliers=(0.75, 1.5, 3.0)):
     return [s * m for m in multipliers]
 
 
+def _build_color_attribute_material(name, attribute_name):
+    """Material whose Base Color is driven by a mesh colour attribute.
+
+    Lets the reconstructed 3D surface display its per-vertex colour in Blender's
+    Material Preview / Rendered view. (Vertex colour does not export to HVE; a
+    baked texture would be needed for that.)
+    """
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    tree = material.node_tree
+    tree.nodes.clear()
+
+    output = tree.nodes.new('ShaderNodeOutputMaterial')
+    output.location = (300, 0)
+    principled = tree.nodes.new('ShaderNodeBsdfPrincipled')
+    principled.location = (0, 0)
+    attribute = tree.nodes.new('ShaderNodeAttribute')
+    attribute.location = (-300, 0)
+    attribute.attribute_name = attribute_name
+    try:
+        attribute.attribute_type = 'GEOMETRY'
+    except (AttributeError, TypeError):
+        pass
+
+    tree.links.new(attribute.outputs['Color'], principled.inputs['Base Color'])
+    tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
+    return material
+
+
 def _clip_points_to_object(scene, source, points, colors):
     """Apply the panel's Clip To Object to a single cloud (for reconstruction).
 
@@ -221,6 +250,11 @@ class HVE_OT_ReconstructSurface3D(bpy.types.Operator):
                 layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 rgba = np.hstack([vcols, np.ones((len(vcols), 1))])
                 layer.data.foreach_set("color", np.ascontiguousarray(rgba, dtype=np.float32).ravel())
+                # Assign a material that shows the colour attribute, so the mesh
+                # renders coloured in Material Preview / Rendered view.
+                new_mesh.materials.append(
+                    _build_color_attribute_material(f"3D Surface: {source.name}", "Col")
+                )
 
             new_obj = bpy.data.objects.new(mesh_name, new_mesh)
             context.collection.objects.link(new_obj)
