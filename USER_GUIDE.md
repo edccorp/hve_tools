@@ -45,8 +45,8 @@ workflows. It lets you:
   HVE FBX, RaceRender conversion).
 - **Recreate motion** from crash-data sources such as EDR reports, XYZ/RPY
   motion tables, and survey points.
-- **Build environment geometry from point clouds** — import PLY, PTX, E57 or
-  LAS/LAZ scans, clip and filter them, drape a textured roadway surface for
+- **Build environment geometry from point clouds** — import PLY, PTX, E57,
+  LAS/LAZ or PCD scans, clip and filter them, drape a textured roadway surface for
   vehicle simulations, or reconstruct a full 3D mesh (Open3D) for vertical
   geometry.
 - **Analyze** motion with motion-path tools, two-point scaling, and
@@ -334,14 +334,14 @@ Surface**, and **Create 3D Surface** — that share one **Point Cloud** selectio
 **Import.** In **Import Point Cloud**, click **Import Point Cloud** to load a scan.
 The imported cloud is **selected automatically** as the source for the other
 sections. Supported formats are
-**PLY** (ASCII or binary), **PTX** (Leica ASCII grid scans), **E57**, and
-**LAS/LAZ** (LiDAR). It comes in as a mesh of vertices with a `Col` colour
+**PLY** (ASCII or binary), **PTX** (Leica ASCII grid scans), **E57**,
+**LAS/LAZ** (LiDAR), and **PCD** (ascii/binary). It comes in as a mesh of vertices with a `Col` colour
 attribute and a Geometry Nodes display so you can see the points. The import
 dialog's **Points Visible %** (default 100) sets what fraction of points the
 *viewport display* shows — it is display-only and never removes points from the
 data, so it has no effect on surfacing or textures; lower it for very dense
 clouds to keep the viewport responsive. (The importer is also available from
-**File → Import → Point Cloud (PLY / PTX / E57 / LAS)**.)
+**File → Import → Point Cloud (PLY / PTX / E57 / LAS / PCD)**.)
 
 A few formats need an extra Python package in Blender's Python: **E57** requires
 `pye57`, and compressed **LAZ** requires `laspy` with LAZ support. Uncompressed

@@ -71,11 +71,11 @@ def install_optional_packages(specs):
 class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
     """Import a point cloud (PLY, PTX, E57, or LAS/LAZ) as a coloured mesh with a Geometry Nodes point display"""
     bl_idname = "import_scene.ply_pointcloud_geonodes"
-    bl_label = "Point Cloud (PLY / PTX / E57 / LAS)"
+    bl_label = "Point Cloud (PLY / PTX / E57 / LAS / PCD)"
     bl_options = {'UNDO'}
 
     filename_ext = ".ply"
-    filter_glob: StringProperty(default="*.ply;*.ptx;*.e57;*.las;*.laz", options={'HIDDEN'})
+    filter_glob: StringProperty(default="*.ply;*.ptx;*.e57;*.las;*.laz;*.pcd", options={'HIDDEN'})
     point_radius: FloatProperty(name="Point Radius", default=0.1, min=0.000001, soft_max=0.1)
     color_attribute: StringProperty(name="Color Attribute", default="Col")
     display_subsample: FloatProperty(
@@ -193,7 +193,7 @@ class IMPORT_OT_install_pointcloud_deps(Operator):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(IMPORT_OT_ply_pointcloud_geonodes.bl_idname, text="Point Cloud (PLY / PTX / E57 / LAS)")
+    self.layout.operator(IMPORT_OT_ply_pointcloud_geonodes.bl_idname, text="Point Cloud (PLY / PTX / E57 / LAS / PCD)")
 
 
 classes = (IMPORT_OT_ply_pointcloud_geonodes, IMPORT_OT_install_pointcloud_deps)

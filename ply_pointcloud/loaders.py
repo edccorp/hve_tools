@@ -22,6 +22,7 @@ __all__ = [
     "load_ptx_vertices",
     "load_e57_vertices",
     "load_las_vertices",
+    "load_pcd_vertices",
     "load_point_cloud_vertices",
     "import_point_cloud",
     "missing_optional_deps",
@@ -29,7 +30,7 @@ __all__ = [
     "SUPPORTED_EXTENSIONS",
 ]
 
-SUPPORTED_EXTENSIONS = (".ply", ".ptx", ".e57", ".las", ".laz")
+SUPPORTED_EXTENSIONS = (".ply", ".ptx", ".e57", ".las", ".laz", ".pcd")
 
 # Optional Python packages that unlock extra formats: (import name, pip spec,
 # what it enables). PLY, PTX and uncompressed LAS need none of these.
@@ -318,12 +319,145 @@ def load_las_vertices(filepath):
     return verts, cols
 
 
+_PCD_NUMPY = {
+    ("F", 4): "f4", ("F", 8): "f8",
+    ("U", 1): "u1", ("U", 2): "u2", ("U", 4): "u4", ("U", 8): "u8",
+    ("I", 1): "i1", ("I", 2): "i2", ("I", 4): "i4", ("I", 8): "i8",
+}
+
+
+def _pcd_unpack_rgb(packed):
+    """Decode a packed 24/32-bit RGB(A) integer array into (N, 4) RGBA 0-1."""
+    packed = np.asarray(packed, dtype=np.uint32)
+    r = ((packed >> 16) & 0xFF).astype(np.float64) / 255.0
+    g = ((packed >> 8) & 0xFF).astype(np.float64) / 255.0
+    b = (packed & 0xFF).astype(np.float64) / 255.0
+    a = ((packed >> 24) & 0xFF).astype(np.float64) / 255.0
+    # PCD "rgb" leaves the top byte 0; treat a fully-zero alpha as opaque.
+    if not np.any(a):
+        a = np.ones_like(a)
+    return np.column_stack([r, g, b, a])
+
+
+def load_pcd_vertices(filepath):
+    """Load a PCD (Point Cloud Data) file — ascii or (uncompressed) binary.
+
+    Reads the header, then the ``x``/``y``/``z`` fields and, when present, a
+    packed ``rgb``/``rgba`` colour field. ``binary_compressed`` PCDs use LZF,
+    which has no stdlib decoder, so those are read via Open3D when available.
+    """
+    with open(filepath, "rb") as f:
+        fields = sizes = types = counts = None
+        npoints = 0
+        width = height = 1
+        data_kind = None
+        while True:
+            raw = f.readline()
+            if not raw:
+                raise RuntimeError("Unexpected EOF while reading PCD header")
+            line = raw.decode("ascii", "ignore").strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, rest = line.partition(" ")
+            key = key.upper()
+            if key == "FIELDS":
+                fields = rest.split()
+            elif key == "SIZE":
+                sizes = [int(x) for x in rest.split()]
+            elif key == "TYPE":
+                types = rest.split()
+            elif key == "COUNT":
+                counts = [int(x) for x in rest.split()]
+            elif key == "WIDTH":
+                width = int(rest.split()[0])
+            elif key == "HEIGHT":
+                height = int(rest.split()[0])
+            elif key == "POINTS":
+                npoints = int(rest.split()[0])
+            elif key == "DATA":
+                data_kind = rest.split()[0].lower() if rest.split() else "ascii"
+                break
+
+        if not fields or "x" not in fields:
+            raise RuntimeError("PCD file has no x/y/z fields")
+        if counts is None:
+            counts = [1] * len(fields)
+        if npoints <= 0:
+            npoints = width * height
+
+        if data_kind == "binary_compressed":
+            return _load_pcd_with_open3d(filepath)
+
+        # Scalar-column offset of each field (fields with COUNT>1 span several).
+        col_of = {}
+        offset = 0
+        for name, cnt in zip(fields, counts):
+            col_of[name] = offset
+            offset += cnt
+
+        color_field = "rgba" if "rgba" in fields else ("rgb" if "rgb" in fields else None)
+
+        if data_kind == "ascii":
+            data = np.loadtxt(f, max_rows=npoints, ndmin=2)
+            if data.size == 0:
+                return np.empty((0, 3), dtype=np.float64), None
+            verts = data[:, [col_of["x"], col_of["y"], col_of["z"]]].astype(np.float64)
+            cols = None
+            if color_field is not None:
+                packed = data[:, col_of[color_field]].astype(np.float32).view(np.uint32)
+                cols = _pcd_unpack_rgb(packed)
+            return verts, cols
+
+        if data_kind == "binary":
+            names, formats = [], []
+            for i, name in enumerate(fields):
+                for j in range(counts[i]):
+                    key = _PCD_NUMPY[(types[i].upper(), int(sizes[i]))]
+                    names.append(name if counts[i] == 1 else f"{name}_{j}")
+                    formats.append("<" + key)
+            dt = np.dtype({"names": names, "formats": formats})
+            buf = f.read(dt.itemsize * npoints)
+            arr = np.frombuffer(buf, dtype=dt, count=min(npoints, len(buf) // dt.itemsize))
+            verts = np.column_stack([
+                arr["x"].astype(np.float64),
+                arr["y"].astype(np.float64),
+                arr["z"].astype(np.float64),
+            ])
+            cols = None
+            if color_field is not None:
+                raw_c = arr[color_field]
+                packed = raw_c.view(np.uint32) if raw_c.dtype == np.float32 else raw_c.astype(np.uint32)
+                cols = _pcd_unpack_rgb(packed)
+            return verts, cols
+
+    raise RuntimeError(f"Unsupported PCD DATA type: {data_kind}")
+
+
+def _load_pcd_with_open3d(filepath):
+    """Read a PCD via Open3D (used for binary_compressed). Returns (verts, cols)."""
+    try:
+        import open3d as o3d
+    except ImportError as exc:
+        raise RuntimeError(
+            "Compressed (binary_compressed) PCD import needs the 'open3d' "
+            "package, or re-save the file as ascii/binary PCD."
+        ) from exc
+    pcd = o3d.io.read_point_cloud(filepath)
+    verts = np.asarray(pcd.points, dtype=np.float64)
+    cols = None
+    if pcd.has_colors():
+        rgb = np.asarray(pcd.colors, dtype=np.float64)  # already 0-1
+        cols = np.column_stack([rgb, np.ones((len(rgb), 1), dtype=np.float64)])
+    return verts, cols
+
+
 _LOADERS = {
     ".ply": load_ply_vertices,
     ".ptx": load_ptx_vertices,
     ".e57": load_e57_vertices,
     ".las": load_las_vertices,
     ".laz": load_las_vertices,
+    ".pcd": load_pcd_vertices,
 }
 
 

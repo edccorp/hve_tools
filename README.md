@@ -82,7 +82,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Toggle the motion-path overlay in the active 3D View.
 - **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
 - **Point Cloud Tools**: import, filter, and surface point clouds for vehicle simulations. Numpy-vectorized, so it stays fast on million-point clouds.
-  - **Import point clouds** — PLY (ASCII or binary), PTX, E57, and LAS/LAZ — as a coloured, GeoNodes-displayed mesh (also on **File → Import**). E57 needs the `pye57` package and LAZ needs `laspy[lazrs]`; PLY/PTX and uncompressed LAS are read natively.
+  - **Import point clouds** — PLY (ASCII or binary), PTX, E57, LAS/LAZ, and PCD — as a coloured, GeoNodes-displayed mesh (also on **File → Import**). E57 needs the `pye57` package and LAZ needs `laspy[lazrs]`; PLY, PTX, uncompressed LAS, and ascii/binary PCD are read natively (compressed PCD uses Open3D).
   - Optional **pre-filters** before surfacing: **voxel subsample** (thin to one averaged point per voxel) and **Statistical Outlier Removal** (drop points with unusually distant neighbours).
   - Build a draped ground surface: set the grid **resolution** (cell size, in scene units), and sample ground height per cell with a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
   - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
@@ -233,7 +233,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 
 ### 11. Point Cloud Tools (import, filter, surface)
 
-1. Open **Other Tools → Point Cloud Tools** and click **Import Point Cloud** to load a scan (PLY, PTX, E57, or LAS/LAZ), or use an existing mesh point cloud. Select it, or set it as the **Point Cloud**. (E57 needs the `pye57` package; LAZ needs `laspy[lazrs]`.)
+1. Open **Other Tools → Point Cloud Tools** and click **Import Point Cloud** to load a scan (PLY, PTX, E57, LAS/LAZ, or PCD), or use an existing mesh point cloud. Select it, or set it as the **Point Cloud**. (E57 needs the `pye57` package; LAZ needs `laspy[lazrs]`.)
 2. *(Optional)* Set **Clip To Object** to surface only the points inside a boundary mesh. **Clip Shape → Bounding Box** (fast) clips the object's oriented box — a box/cube trims points above and below too, a flat plane clips just its XY footprint. **Clip Shape → Mesh Volume** (exact) clips to a closed mesh's actual concave shape via a ray-cast test. Scale it over the area of interest to trim away far-off points.
 3. *(Optional)* Under **Pre-filter**, enable **Subsample (Voxel)** and/or **Remove Outliers (SOR)** to clean the cloud before surfacing. Filters run per-click and never modify the source; **Filter → Create New Point Cloud** adds a filtered copy without surfacing. The texture always bakes from the full, unfiltered cloud, so filtering thins only the geometry.
 4. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), and leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds. Point colour is always carried onto the surface and baked to a JPG texture — save the `.blend` first so the texture can be written next to it.

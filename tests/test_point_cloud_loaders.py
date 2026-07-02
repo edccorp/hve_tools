@@ -17,9 +17,9 @@ module_ast = ast.parse(module_path.read_text())
 WANTED_FUNCS = {
     "_read_floats", "_parse_ptx_block", "load_ptx_vertices",
     "_normalize_rgb", "load_las_vertices", "missing_optional_deps",
-    "deps_for_extension",
+    "deps_for_extension", "_pcd_unpack_rgb", "load_pcd_vertices",
 }
-WANTED_ASSIGN = {"_LAS_COLOR_OFFSET", "OPTIONAL_DEPS", "_EXTENSION_DEP"}
+WANTED_ASSIGN = {"_LAS_COLOR_OFFSET", "OPTIONAL_DEPS", "_EXTENSION_DEP", "_PCD_NUMPY"}
 
 ns = {"os": os, "struct": struct, "np": np}
 for node in module_ast.body:
@@ -32,6 +32,7 @@ for node in module_ast.body:
 
 load_ptx_vertices = ns["load_ptx_vertices"]
 load_las_vertices = ns["load_las_vertices"]
+load_pcd_vertices = ns["load_pcd_vertices"]
 missing_optional_deps = ns["missing_optional_deps"]
 deps_for_extension = ns["deps_for_extension"]
 OPTIONAL_DEPS = ns["OPTIONAL_DEPS"]
@@ -199,3 +200,51 @@ def test_deps_for_extension_maps_e57_and_laz():
     laz = deps_for_extension(".LAZ")  # case-insensitive
     assert [d[0] for d in e57] == ["pye57"]
     assert [d[0] for d in laz] == ["laspy"]
+
+
+# --- PCD ---------------------------------------------------------------------
+
+def _pcd_header(n, data_kind, fields="x y z rgb", size="4 4 4 4", typ="F F F F", count="1 1 1 1"):
+    return (
+        "# .PCD v0.7\nVERSION 0.7\n"
+        f"FIELDS {fields}\nSIZE {size}\nTYPE {typ}\nCOUNT {count}\n"
+        f"WIDTH {n}\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\n"
+        f"POINTS {n}\nDATA {data_kind}\n"
+    )
+
+
+def _rgb_float(r, g, b):
+    packed = (int(r) << 16) | (int(g) << 8) | int(b)
+    return struct.unpack("<f", struct.pack("<I", packed))[0]
+
+
+def test_pcd_ascii_with_packed_rgb():
+    body = (
+        _pcd_header(2, "ascii")
+        + f"1 2 3 {_rgb_float(255, 0, 0)!r}\n"
+        + f"4 5 6 {_rgb_float(0, 255, 0)!r}\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        verts, cols = load_pcd_vertices(_write(tmp, "a.pcd", body))
+    assert verts.tolist() == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    assert np.allclose(cols, [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]])
+
+
+def test_pcd_ascii_without_color():
+    body = _pcd_header(1, "ascii", fields="x y z", size="4 4 4", typ="F F F", count="1 1 1") + "7 8 9\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        verts, cols = load_pcd_vertices(_write(tmp, "b.pcd", body))
+    assert verts.tolist() == [[7.0, 8.0, 9.0]]
+    assert cols is None
+
+
+def test_pcd_binary_with_packed_rgb():
+    header = _pcd_header(2, "binary").encode("ascii")
+    body = (
+        struct.pack("<ffff", 1.0, 2.0, 3.0, _rgb_float(0, 0, 255))
+        + struct.pack("<ffff", 4.0, 5.0, 6.0, _rgb_float(255, 255, 255))
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        verts, cols = load_pcd_vertices(_write(tmp, "c.pcd", header + body, binary=True))
+    assert np.allclose(verts, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    assert np.allclose(cols, [[0.0, 0.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]])

@@ -1042,7 +1042,7 @@ class HVE_PT_pc_import(HVE_PT_mechanist_base):
 
     def draw(self, context):
         c = self.layout.column()
-        c.label(text="PLY / PTX / E57 / LAS", icon='IMPORT')
+        c.label(text="PLY / PTX / E57 / LAS / PCD", icon='IMPORT')
         c.operator("import_scene.ply_pointcloud_geonodes", text="Import Point Cloud", icon='IMPORT')
         # Offer a one-click install for the optional E57 / LAZ packages, but only
         # when they're actually missing (keeps the panel clean once installed).
