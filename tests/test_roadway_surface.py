@@ -24,6 +24,8 @@ WANTED = {
     "generate_surface",
     "bake_point_color_texture",
     "grid_uvs",
+    "voxel_downsample",
+    "statistical_outlier_mask",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -40,6 +42,8 @@ build_mesh_arrays = ns["build_mesh_arrays"]
 generate_surface = ns["generate_surface"]
 bake_point_color_texture = ns["bake_point_color_texture"]
 grid_uvs = ns["grid_uvs"]
+voxel_downsample = ns["voxel_downsample"]
+statistical_outlier_mask = ns["statistical_outlier_mask"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -108,6 +112,33 @@ def test_generate_surface_end_to_end_with_color():
     # Per-vertex colours carried through and aligned with verts.
     assert result["colors"].shape == (9, 4)
     assert np.allclose(result["colors"][:, 0], 0.2)
+
+
+def test_voxel_downsample_averages_per_voxel():
+    # Two points inside the same 1.0 3D voxel, one far away -> two output points.
+    pts = np.array([(0.1, 0.1, 0.1), (0.9, 0.9, 0.9), (5.0, 5.0, 5.0)])
+    cols = np.array([(1.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)])
+    ds_pts, ds_cols = voxel_downsample(pts, cols, 1.0)
+    assert ds_pts.shape[0] == 2
+    # The merged voxel is the average of its two points.
+    merged = ds_pts[np.argmin(ds_pts[:, 0])]
+    assert np.allclose(merged, [0.5, 0.5, 0.5])
+    assert ds_cols.shape == (2, 4)
+
+
+def test_voxel_downsample_noop_without_size():
+    pts = np.array([(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)])
+    ds_pts, ds_cols = voxel_downsample(pts, None, 0.0)
+    assert ds_pts.shape == (2, 3)
+    assert ds_cols is None
+
+
+def test_statistical_outlier_mask_drops_far_point():
+    # One clearly-distant mean distance is rejected; the tight cluster is kept.
+    dists = np.array([1.0, 1.1, 0.9, 1.0, 10.0])
+    keep = statistical_outlier_mask(dists, ratio=1.0)
+    assert keep[:4].all()
+    assert not keep[4]
 
 
 def test_generate_surface_rejects_tiny_input():

@@ -27,7 +27,7 @@ tasks step by step. For a terse feature-by-feature reference, see
      - [4.9 Create timed location markers](#49-create-timed-location-markers)
      - [4.10 Scale an object to a known distance](#410-scale-an-object-to-a-known-distance)
      - [4.11 Bake speed and acceleration](#411-bake-speed-and-acceleration)
-     - [4.12 Build a roadway surface from a point cloud](#412-build-a-roadway-surface-from-a-point-cloud)
+     - [4.12 Point Cloud Tools (import, filter, surface)](#412-point-cloud-tools-import-filter-surface)
 5. [Units and scale](#5-units-and-scale)
 6. [Troubleshooting](#6-troubleshooting)
 7. [Example files](#7-example-files)
@@ -79,7 +79,7 @@ The **HVE** tab groups everything into three top-level panels:
 |-------|-----------|------------|
 | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
 | **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
-| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration**, **Roadway Surface** |
+| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration**, **Point Cloud Tools** |
 
 Most panels are collapsed by default — click a panel header to expand it. The
 task guides below follow this same order: Pre-Simulation Setup, then
@@ -318,15 +318,30 @@ Results are baked as animated custom properties (average speed, forward speed,
 forward/lateral/vertical acceleration) on a helper empty named
 `SpeedData_<object name>`.
 
-### 4.12 Build a roadway surface from a point cloud
+### 4.12 Point Cloud Tools (import, filter, surface)
 
-Open **Other Tools → Roadway Surface** to drape a clean ground surface over a
-point cloud (for example an imported PLY) so it can be used as environment
+Open **Other Tools → Point Cloud Tools** to import a point cloud, optionally
+clean it up, and drape a clean ground surface over it for use as environment
 geometry in vehicle simulations.
 
-1. Import your point cloud as a mesh object (a PLY imports as mesh vertices).
-2. Select it, or set it explicitly in **Point Cloud** (leave empty to use the
-   active object).
+**Import.** Click **Import PLY Point Cloud** to load a `.ply` (ASCII or binary).
+It comes in as a mesh of vertices with a `Col` colour attribute and a Geometry
+Nodes display so you can see the points. (The importer is also available from
+**File → Import → PLY Point Cloud**.)
+
+**Surface it:**
+
+1. Select the point cloud, or set it explicitly in **Point Cloud** (leave empty
+   to use the active object). The surface tool reads the raw imported points, so
+   the display modifier doesn't interfere.
+2. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:
+   - **Subsample (Voxel)** thins the cloud to one averaged point per **Voxel
+     Size** cube — faster and more uniform; run this first on huge clouds.
+   - **Remove Outliers (SOR)** drops points whose neighbours are unusually far
+     away (floating noise, stray returns). **SOR Neighbors (k)** is how many
+     neighbours are averaged; **SOR Std Ratio** sets how aggressive it is (lower
+     removes more). SOR does a neighbour search per point, so subsample first on
+     large clouds.
 3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
 4. Set **Ground Percentile** — how the height of each grid cell is chosen from

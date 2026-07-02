@@ -21,6 +21,7 @@ try:
         motionpaths, xyz_importer, xyz_importer_ui,
         edr_importer, scale_objects, speed_accel, import_xyzrpy,
         roadway_surface,
+        ply_pointcloud,
 
     )
 
@@ -232,6 +233,38 @@ try:
             type=bpy.types.Object,
             poll=_roadway_source_poll,
         )
+        bpy.types.Scene.roadway_subsample = bpy.props.BoolProperty(
+            name="Subsample (Voxel)",
+            description="Thin the point cloud to one averaged point per voxel before surfacing (faster, more uniform)",
+            default=False,
+        )
+        bpy.types.Scene.roadway_voxel_size = FloatProperty(
+            name="Voxel Size",
+            description="Edge length of the subsampling voxel, in the scene's units",
+            default=0.1,
+            min=0.0,
+            soft_max=5.0,
+            unit='LENGTH',
+        )
+        bpy.types.Scene.roadway_sor = bpy.props.BoolProperty(
+            name="Remove Outliers (SOR)",
+            description="Statistical Outlier Removal: drop points whose neighbours are unusually far away (floating noise, stray returns). Runs after subsampling",
+            default=False,
+        )
+        bpy.types.Scene.roadway_sor_neighbors = IntProperty(
+            name="SOR Neighbors (k)",
+            description="Number of nearest neighbours averaged per point for outlier removal",
+            default=16,
+            min=1,
+            soft_max=64,
+        )
+        bpy.types.Scene.roadway_sor_ratio = FloatProperty(
+            name="SOR Std Ratio",
+            description="Keep points whose mean neighbour distance is within mean + ratio x std; lower removes more",
+            default=2.0,
+            min=0.0,
+            soft_max=10.0,
+        )
         bpy.types.Scene.roadway_cell_size = FloatProperty(
             name="Resolution (Cell Size)",
             description="Spacing of the generated surface grid, in the scene's units; smaller is finer and slower",
@@ -292,9 +325,13 @@ try:
             default='YAW_RATE',
         )
 
+        ply_pointcloud.register()
+
         ui.update_panel_bl_category(None, bpy.context)
 
     def unregister():
+        ply_pointcloud.unregister()
+
         del bpy.types.Scene.scale_target_distance
         del bpy.types.Scene.speed_accel_target_object
         del bpy.types.Scene.speed_accel_forward_axis
@@ -324,6 +361,11 @@ try:
         del bpy.types.Scene.fbx_shape_key_max_samples
         del bpy.types.Scene.fbx_process_collection
         del bpy.types.Scene.roadway_source_object
+        del bpy.types.Scene.roadway_subsample
+        del bpy.types.Scene.roadway_voxel_size
+        del bpy.types.Scene.roadway_sor
+        del bpy.types.Scene.roadway_sor_neighbors
+        del bpy.types.Scene.roadway_sor_ratio
         del bpy.types.Scene.roadway_cell_size
         del bpy.types.Scene.roadway_fill_distance
         del bpy.types.Scene.roadway_ground_percentile

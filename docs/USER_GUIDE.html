@@ -62,7 +62,7 @@ li { margin: .2rem 0; }
 <li><a href="#49-create-timed-location-markers">4.9 Create timed location markers</a></li>
 <li><a href="#410-scale-an-object-to-a-known-distance">4.10 Scale an object to a known distance</a></li>
 <li><a href="#411-bake-speed-and-acceleration">4.11 Bake speed and acceleration</a></li>
-<li><a href="#412-build-a-roadway-surface-from-a-point-cloud">4.12 Build a roadway surface from a point cloud</a></li>
+<li><a href="#412-point-cloud-tools-import-filter-surface">4.12 Point Cloud Tools (import, filter, surface)</a></li>
 </ul></li>
 </ul></li>
 <li><a href="#5-units-and-scale">Units and scale</a></li>
@@ -104,7 +104,7 @@ li { margin: .2rem 0; }
 <tbody>
 <tr><td><strong>Pre-Simulation Setup</strong></td><td>Getting Blender objects ready for HVE and exporting them</td><td><strong>H3D Setup</strong>, <strong>Export to HVE</strong></td></tr>
 <tr><td><strong>Post-Simulation Processing</strong></td><td>Bringing HVE results back into Blender</td><td><strong>HVE FBX Importer</strong>, <strong>Variable Output Importer</strong>, <strong>RaceRender Converter</strong></td></tr>
-<tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong>, <strong>Roadway Surface</strong></td></tr>
+<tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong>, <strong>Point Cloud Tools</strong></td></tr>
 </tbody></table>
 <p>Most panels are collapsed by default — click a panel header to expand it. The task guides below follow this same order: Pre-Simulation Setup, then Post-Simulation Processing, then Other Tools.</p>
 <hr>
@@ -238,11 +238,16 @@ li { margin: .2rem 0; }
 <li>Click <strong>Calculate Speed + Acceleration</strong>.</li>
 </ol>
 <p>Results are baked as animated custom properties (average speed, forward speed, forward/lateral/vertical acceleration) on a helper empty named <code>SpeedData_&lt;object name&gt;</code>.</p>
-<h3 id="412-build-a-roadway-surface-from-a-point-cloud">4.12 Build a roadway surface from a point cloud</h3>
-<p>Open <strong>Other Tools → Roadway Surface</strong> to drape a clean ground surface over a point cloud (for example an imported PLY) so it can be used as environment geometry in vehicle simulations.</p>
+<h3 id="412-point-cloud-tools-import-filter-surface">4.12 Point Cloud Tools (import, filter, surface)</h3>
+<p>Open <strong>Other Tools → Point Cloud Tools</strong> to import a point cloud, optionally clean it up, and drape a clean ground surface over it for use as environment geometry in vehicle simulations.</p>
+<p><strong>Import.</strong> Click <strong>Import PLY Point Cloud</strong> to load a <code>.ply</code> (ASCII or binary). It comes in as a mesh of vertices with a <code>Col</code> colour attribute and a Geometry Nodes display so you can see the points. (The importer is also available from <strong>File → Import → PLY Point Cloud</strong>.)</p>
+<p><strong>Surface it:</strong></p>
 <ol>
-<li>Import your point cloud as a mesh object (a PLY imports as mesh vertices).</li>
-<li>Select it, or set it explicitly in <strong>Point Cloud</strong> (leave empty to use the active object).</li>
+<li>Select the point cloud, or set it explicitly in <strong>Point Cloud</strong> (leave empty to use the active object). The surface tool reads the raw imported points, so the display modifier doesn't interfere.</li>
+<li>*(Optional)* Under <strong>Pre-filter</strong>, clean the cloud before surfacing:<ul>
+<li><strong>Subsample (Voxel)</strong> thins the cloud to one averaged point per <strong>Voxel Size</strong> cube — faster and more uniform; run this first on huge clouds.</li>
+<li><strong>Remove Outliers (SOR)</strong> drops points whose neighbours are unusually far away (floating noise, stray returns). <strong>SOR Neighbors (k)</strong> is how many neighbours are averaged; <strong>SOR Std Ratio</strong> sets how aggressive it is (lower removes more). SOR does a neighbour search per point, so subsample first on large clouds.</li>
+</ul></li>
 <li>Set <strong>Resolution (Cell Size)</strong> — the grid spacing, in the scene's units (metres or feet, matching your unit setup). Smaller is finer and slower.</li>
 <li>Set <strong>Ground Percentile</strong> — how the height of each grid cell is chosen from the point heights that land in it (see below). Default 5.</li>
 <li>Leave <strong>Fill Holes</strong> on to interpolate empty cells so sparse spots don't leave gaps, and set <strong>Max Fill Distance</strong> (scene units) to bound how far the fill reaches; 0 = unlimited.</li>

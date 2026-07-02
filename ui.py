@@ -103,7 +103,7 @@ def update_panel_bl_category(self, context):
         HVE_PT_timed_location_markers,
         HVE_PT_scale_objects,
         HVE_PT_speed_acceleration,
-        HVE_PT_roadway_surface,
+        HVE_PT_point_cloud_tools,
         HVE_PT_race_render_exporter,
     )
 
@@ -942,11 +942,11 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
             map_box.operator("import_xyz.import_mapped_points", text="Import Points")
 
 
-class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
+class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "HVE"
-    bl_label = "Roadway Surface"
+    bl_label = "Point Cloud Tools"
     bl_parent_id = "HVE_PT_other_tools"
     bl_options = {'DEFAULT_CLOSED'}
     @classmethod
@@ -958,6 +958,12 @@ class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
         l = self.layout
         c = l.column()
 
+        # --- Import a point cloud ---
+        c.label(text="Import a PLY point cloud", icon='IMPORT')
+        c.operator("import_scene.ply_pointcloud_geonodes", text="Import PLY Point Cloud", icon='IMPORT')
+        c.separator()
+
+        # --- Build a ground surface ---
         c.label(text="Build a ground surface from a point cloud", icon="MESH_GRID")
         c.label(text="Drapes a grid onto a PLY-style point cloud", icon='INFO')
 
@@ -968,6 +974,17 @@ class HVE_PT_roadway_surface(HVE_PT_mechanist_base):
             else:
                 c.label(text="Select a mesh point cloud, or set one below", icon='INFO')
         c.prop(scene, "roadway_source_object")
+
+        # --- Optional pre-filters (applied before surfacing) ---
+        filt = c.box()
+        filt.label(text="Pre-filter (optional)", icon='FILTER')
+        filt.prop(scene, "roadway_subsample")
+        if scene.roadway_subsample:
+            filt.prop(scene, "roadway_voxel_size")
+        filt.prop(scene, "roadway_sor")
+        if scene.roadway_sor:
+            filt.prop(scene, "roadway_sor_neighbors")
+            filt.prop(scene, "roadway_sor_ratio")
 
         c.prop(scene, "roadway_cell_size")
         c.prop(scene, "roadway_ground_percentile")
@@ -1039,7 +1056,7 @@ classes = (
     HVE_PT_scale_objects,
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
-    HVE_PT_roadway_surface,
+    HVE_PT_point_cloud_tools,
     HVE_PT_race_render_exporter,
     HVE_PT_documentation,
     HVE_OT_save_preset,

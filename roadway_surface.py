@@ -177,6 +177,51 @@ def grid_uvs(nx, ny):
     return np.column_stack([uu.ravel(), vv.ravel()])
 
 
+# ---------------------------------------------------------------------------
+# Optional point-cloud pre-filters
+# ---------------------------------------------------------------------------
+
+def voxel_downsample(points, colors, voxel_size):
+    """Thin a cloud to one averaged point (and colour) per occupied voxel.
+
+    Returns ``(points, colors)`` as numpy arrays; ``colors`` is None when no
+    colours were supplied. A ``voxel_size`` <= 0 or an empty cloud is a no-op.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    cols = np.asarray(colors, dtype=np.float64) if colors is not None else None
+    if voxel_size <= 0 or pts.shape[0] == 0:
+        return pts, cols
+
+    keys = np.floor(pts / voxel_size).astype(np.int64)
+    _, inverse, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
+    inverse = inverse.ravel()
+    n_vox = counts.shape[0]
+
+    sums = np.zeros((n_vox, 3), dtype=np.float64)
+    np.add.at(sums, inverse, pts)
+    ds_pts = sums / counts[:, None]
+
+    ds_cols = None
+    if cols is not None:
+        csum = np.zeros((n_vox, cols.shape[1]), dtype=np.float64)
+        np.add.at(csum, inverse, cols)
+        ds_cols = csum / counts[:, None]
+    return ds_pts, ds_cols
+
+
+def statistical_outlier_mask(mean_distances, ratio):
+    """Keep-mask for statistical outlier removal.
+
+    Given each point's mean distance to its neighbours, keep points whose mean
+    distance is within ``global_mean + ratio * global_std``.
+    """
+    d = np.asarray(mean_distances, dtype=np.float64)
+    if d.size == 0:
+        return np.ones(0, dtype=bool)
+    threshold = d.mean() + ratio * d.std()
+    return d <= threshold
+
+
 def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None):
     """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
 
@@ -373,6 +418,30 @@ def _apply_baked_texture(source_name, new_mesh, points, colors, result,
     return jpg_path
 
 
+def _sor_neighbor_mean_distances(points, k):
+    """Mean distance from each point to its ``k`` nearest neighbours.
+
+    Uses Blender's bundled ``mathutils.kdtree``. This is a per-point query, so
+    subsampling first keeps it affordable on large clouds.
+    """
+    from mathutils.kdtree import KDTree
+
+    pts = np.asarray(points, dtype=np.float64)
+    n = pts.shape[0]
+    tree = KDTree(n)
+    for i in range(n):
+        tree.insert((float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2])), i)
+    tree.balance()
+
+    means = np.zeros(n, dtype=np.float64)
+    for i in range(n):
+        found = tree.find_n((float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2])), k + 1)
+        dists = [d for (_co, idx, d) in found if idx != i]
+        if dists:
+            means[i] = sum(dists) / len(dists)
+    return means
+
+
 def _find_point_color_attribute(mesh):
     """Return a POINT-domain colour attribute on ``mesh``, preferring the active one."""
     color_attributes = getattr(mesh, "color_attributes", None)
@@ -409,36 +478,52 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
         try:
             wm.progress_update(5)
-            depsgraph = context.evaluated_depsgraph_get()
-            eval_obj = source.evaluated_get(depsgraph)
-            mesh = eval_obj.to_mesh()
-            try:
-                count = len(mesh.vertices)
-                if count < 3:
-                    eval_obj.to_mesh_clear()
-                    self.report({'ERROR'}, "Source object has too few vertices for a surface.")
-                    return {'CANCELLED'}
-                # Bulk-read coordinates (fast even for millions of vertices).
-                local = np.empty(count * 3, dtype=np.float64)
-                mesh.vertices.foreach_get("co", local)
-                local = local.reshape(count, 3)
+            # Read the raw base-mesh vertices, not the evaluated mesh: a point
+            # cloud imported with a GeoNodes display modifier would otherwise
+            # yield the display geometry instead of the original points.
+            mesh = source.data
+            count = len(mesh.vertices)
+            if count < 3:
+                self.report({'ERROR'}, "Source object has too few vertices for a surface.")
+                return {'CANCELLED'}
+            # Bulk-read coordinates (fast even for millions of vertices).
+            local = np.empty(count * 3, dtype=np.float64)
+            mesh.vertices.foreach_get("co", local)
+            local = local.reshape(count, 3)
 
-                colors = None
-                if bool(scene.roadway_transfer_color):
-                    color_attr = _find_point_color_attribute(mesh)
-                    if color_attr is not None:
-                        raw = np.empty(count * 4, dtype=np.float64)
-                        color_attr.data.foreach_get("color", raw)
-                        colors = raw.reshape(count, 4)
-            finally:
-                eval_obj.to_mesh_clear()
+            colors = None
+            if bool(scene.roadway_transfer_color):
+                color_attr = _find_point_color_attribute(mesh)
+                if color_attr is not None and len(color_attr.data) == count:
+                    raw = np.empty(count * 4, dtype=np.float64)
+                    color_attr.data.foreach_get("color", raw)
+                    colors = raw.reshape(count, 4)
 
-            wm.progress_update(25)
+            wm.progress_update(20)
 
             # Transform to world space with a single vectorized matrix multiply.
             matrix = np.array(source.matrix_world, dtype=np.float64)
             points = local @ matrix[:3, :3].T + matrix[:3, 3]
 
+            # Optional pre-filters: voxel subsample, then statistical outlier
+            # removal, before any surfacing.
+            filtered_note = ""
+            n_before = len(points)
+            if bool(scene.roadway_subsample) and float(scene.roadway_voxel_size) > 0:
+                points, colors = voxel_downsample(points, colors, float(scene.roadway_voxel_size))
+            if bool(scene.roadway_sor) and len(points) > int(scene.roadway_sor_neighbors) + 1:
+                means = _sor_neighbor_mean_distances(points, int(scene.roadway_sor_neighbors))
+                keep = statistical_outlier_mask(means, float(scene.roadway_sor_ratio))
+                points = points[keep]
+                if colors is not None:
+                    colors = colors[keep]
+            if len(points) != n_before:
+                filtered_note = f" Filtered {n_before}->{len(points)} points."
+            if len(points) < 3:
+                self.report({'WARNING'}, "Pre-filter left too few points; relax the filters.")
+                return {'CANCELLED'}
+
+            wm.progress_update(35)
             cell_size = float(scene.roadway_cell_size)
             fill_distance = float(scene.roadway_fill_distance)
             ground_percentile = float(scene.roadway_ground_percentile)
@@ -514,7 +599,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 {'INFO'},
                 f"Roadway surface{colored}: {result['nx']}x{result['ny']} grid, "
                 f"{len(result['faces'])} faces, {result['sampled']}/{result['total']} cells "
-                f"sampled from {len(points)} points.{texture_note}",
+                f"sampled from {len(points)} points.{filtered_note}{texture_note}",
             )
             return {'FINISHED'}
         finally:
