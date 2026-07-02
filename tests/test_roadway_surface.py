@@ -30,6 +30,7 @@ WANTED = {
     "clip_box_axis_count",
     "points_in_local_box",
     "_clip_box_epsilon",
+    "points_in_mesh_volume",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -51,6 +52,7 @@ statistical_outlier_mask = ns["statistical_outlier_mask"]
 mask_points_near_ground = ns["mask_points_near_ground"]
 clip_box_axis_count = ns["clip_box_axis_count"]
 points_in_local_box = ns["points_in_local_box"]
+points_in_mesh_volume = ns["points_in_mesh_volume"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -276,3 +278,78 @@ def test_box_clip_respects_object_transform():
     ])
     mask = points_in_local_box(pts, inv, bmin, bmax)
     assert mask.tolist() == [True, False]
+
+
+# --- Exact mesh-volume clip (ray-cast parity containment) --------------------
+
+def _box_tris(bmin, bmax):
+    """12 triangles of an axis-aligned box, as an (12, 3, 3) array."""
+    x0, y0, z0 = bmin
+    x1, y1, z1 = bmax
+    v = [
+        (x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),  # bottom 0-3
+        (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1),  # top 4-7
+    ]
+    quads = [
+        (0, 3, 2, 1),  # bottom
+        (4, 5, 6, 7),  # top
+        (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7),  # sides
+    ]
+    tris = []
+    for a, b, c, d in quads:
+        tris.append([v[a], v[b], v[c]])
+        tris.append([v[a], v[c], v[d]])
+    return np.array(tris, dtype=float)
+
+
+def _prism_tris(poly_xy, z0, z1, cap_tris):
+    """Extrude a 2D outline into a closed prism (top/bottom caps + walls)."""
+    bottom = [(x, y, z0) for (x, y) in poly_xy]
+    top = [(x, y, z1) for (x, y) in poly_xy]
+    tris = []
+    for a, b, c in cap_tris:
+        tris.append([bottom[a], bottom[c], bottom[b]])  # bottom (reversed)
+        tris.append([top[a], top[b], top[c]])           # top
+    n = len(poly_xy)
+    for i in range(n):
+        j = (i + 1) % n
+        tris.append([bottom[i], bottom[j], top[j]])
+        tris.append([bottom[i], top[j], top[i]])
+    return np.array(tris, dtype=float)
+
+
+def test_mesh_volume_cube():
+    tris = _box_tris([-1, -1, -1], [1, 1, 1])
+    pts = np.array([
+        [0.0, 0.0, 0.0],    # inside
+        [0.5, -0.5, 0.5],   # inside
+        [0.0, 0.0, 5.0],    # above
+        [0.0, 0.0, -5.0],   # below
+        [3.0, 0.0, 0.0],    # outside in X
+    ])
+    mask = points_in_mesh_volume(pts, tris)
+    assert mask.tolist() == [True, True, False, False, False]
+
+
+def test_mesh_volume_respects_concavity():
+    # An L-shaped prism: the square notch at [1,2]x[1,2] is NOT part of the
+    # volume, so a point there is rejected even though it's inside the bbox.
+    poly = [(0, 0), (2, 0), (2, 1), (1, 1), (1, 2), (0, 2)]
+    cap = [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5)]
+    tris = _prism_tris(poly, 0.0, 1.0, cap)
+    pts = np.array([
+        [0.5, 0.5, 0.5],   # left-bottom of the L -> inside
+        [1.5, 0.5, 0.5],   # bottom strip -> inside
+        [0.5, 1.5, 0.5],   # left column -> inside
+        [1.5, 1.5, 0.5],   # the notch -> OUTSIDE (concavity)
+        [1.5, 1.5, 5.0],   # above the notch -> outside
+    ])
+    mask = points_in_mesh_volume(pts, tris)
+    assert mask.tolist() == [True, True, True, False, False]
+
+
+def test_mesh_volume_empty_inputs():
+    tris = _box_tris([0, 0, 0], [1, 1, 1])
+    assert points_in_mesh_volume(np.empty((0, 3)), tris).shape == (0,)
+    pts = np.array([[0.5, 0.5, 0.5]])
+    assert points_in_mesh_volume(pts, np.empty((0, 3, 3))).tolist() == [False]

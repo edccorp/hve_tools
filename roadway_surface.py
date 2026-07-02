@@ -224,6 +224,53 @@ def points_in_local_box(points, inv_matrix, bbox_min, bbox_max, tol=0.0):
     return mask
 
 
+def points_in_mesh_volume(points, tris):
+    """Keep-mask for points inside a closed triangle mesh (exact clip).
+
+    Ray-casting parity test: for each point, count how many triangles a vertical
+    ``+Z`` ray through it crosses *above* the point; an odd count means the point
+    is inside the solid. This respects concavity exactly (unlike the bounding
+    box), so an L-shaped or hollow boundary volume clips to its true shape. The
+    boundary mesh must be closed/watertight for the parity test to be meaningful.
+
+    ``tris`` is an ``(M, 3, 3)`` array of world-space triangle corners (M
+    triangles, 3 vertices, XYZ). Vectorized over points; loops over triangles
+    (a clip boundary usually has few faces), so memory stays ``O(points)``.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    tris = np.asarray(tris, dtype=np.float64)
+    if pts.shape[0] == 0:
+        return np.ones(0, dtype=bool)
+    if tris.shape[0] == 0:
+        return np.zeros(pts.shape[0], dtype=bool)
+
+    # Shift the vertical rays by a tiny, unequal XY offset so points that land
+    # exactly on a shared triangle edge/vertex (e.g. grid points under a cap's
+    # diagonal) aren't double-counted, which would flip the parity.
+    scale = float(np.abs(tris).max()) if tris.size else 1.0
+    jitter = scale * 1e-9 + 1e-12
+    px = pts[:, 0] + jitter
+    py = pts[:, 1] + jitter * 0.5
+    pz = pts[:, 2]
+    count = np.zeros(pts.shape[0], dtype=np.int64)
+    for tri in tris:
+        (x0, y0, z0), (x1, y1, z1), (x2, y2, z2) = tri
+        # Twice the signed XY area; ~0 means a vertical triangle the +Z ray runs
+        # parallel to, which contributes no crossing.
+        denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
+        if abs(denom) < 1e-12:
+            continue
+        # Barycentric coordinates of each point in the triangle's XY projection.
+        a = ((y1 - y2) * (px - x2) + (x2 - x1) * (py - y2)) / denom
+        b = ((y2 - y0) * (px - x2) + (x0 - x2) * (py - y2)) / denom
+        c = 1.0 - a - b
+        inside_xy = (a >= 0.0) & (b >= 0.0) & (c >= 0.0)
+        # Height of the triangle plane directly above/below the point.
+        z_hit = a * z0 + b * z1 + c * z2
+        count += inside_xy & (z_hit > pz)
+    return (count % 2) == 1
+
+
 def voxel_downsample(points, colors, voxel_size):
     """Thin a cloud to one averaged point (and colour) per occupied voxel.
 
@@ -559,6 +606,34 @@ def _clip_object_box(clip_obj):
     return inv, bbox_min, bbox_max
 
 
+def _clip_object_triangles(clip_obj):
+    """World-space triangles of a boundary mesh as an ``(M, 3, 3)`` array.
+
+    Returns ``None`` when the object is not a usable mesh. Used by the exact
+    (mesh-volume) clip mode.
+    """
+    if clip_obj is None or getattr(clip_obj, "type", None) != 'MESH':
+        return None
+    mesh = clip_obj.data
+    mesh.calc_loop_triangles()
+    n_tris = len(mesh.loop_triangles)
+    n_verts = len(mesh.vertices)
+    if n_tris == 0 or n_verts == 0:
+        return None
+
+    co = np.empty(n_verts * 3, dtype=np.float64)
+    mesh.vertices.foreach_get("co", co)
+    co = co.reshape(n_verts, 3)
+
+    idx = np.empty(n_tris * 3, dtype=np.int64)
+    mesh.loop_triangles.foreach_get("vertices", idx)
+    idx = idx.reshape(n_tris, 3)
+
+    matrix = np.array(clip_obj.matrix_world, dtype=np.float64)
+    world = co @ matrix[:3, :3].T + matrix[:3, 3]
+    return world[idx]
+
+
 def _run_prefilters(scene, points, colors):
     """Apply the enabled pre-filters (voxel subsample, then SOR).
 
@@ -627,22 +702,58 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                     points_full = t_local @ t_matrix[:3, :3].T + t_matrix[:3, 3]
                     colors_full = t_colors
 
-            # Optional clip: keep only points inside a boundary object's box, so
-            # far-away scan points don't get draped or textured. A box/cube
-            # clips in 3D (above and below too); a flat plane clips its footprint.
+            # Optional clip: keep only points inside a boundary object, so
+            # far-away scan points don't get draped or textured. Box mode uses
+            # the object's oriented bounding box (fast; a box/cube clips in 3D,
+            # a flat plane clips its footprint); Mesh mode clips to the exact
+            # (possibly concave) mesh volume via a ray-cast parity test.
             clip_note = ""
             clip_obj = getattr(scene, "roadway_clip_object", None)
             if clip_obj is not None and clip_obj is not source:
-                clip = _clip_object_box(clip_obj)
-                if clip is not None and clip_box_axis_count(clip[1], clip[2]) >= 2:
-                    inv, bmin, bmax = clip
-                    keep = points_in_local_box(points, inv, bmin, bmax)
+                clip_mode = getattr(scene, "roadway_clip_mode", 'BOX')
+                clip_fn = None
+
+                if clip_mode == 'MESH':
+                    tris = _clip_object_triangles(clip_obj)
+                    if tris is not None and tris.shape[0] >= 4:
+                        # Cull to the mesh's world AABB first (cheap, vectorized),
+                        # then ray-cast only the survivors for the exact test.
+                        flat = tris.reshape(-1, 3)
+                        tmin, tmax = flat.min(axis=0), flat.max(axis=0)
+
+                        def clip_fn(pp, _tris=tris, _tmin=tmin, _tmax=tmax):
+                            in_box = np.all((pp >= _tmin) & (pp <= _tmax), axis=1)
+                            keep = np.zeros(pp.shape[0], dtype=bool)
+                            if in_box.any():
+                                keep[in_box] = points_in_mesh_volume(pp[in_box], _tris)
+                            return keep
+                    else:
+                        self.report(
+                            {'WARNING'},
+                            f"Clip boundary '{clip_obj.name}' has no faces for a mesh "
+                            "volume; ignoring it.",
+                        )
+                else:
+                    clip = _clip_object_box(clip_obj)
+                    if clip is not None and clip_box_axis_count(clip[1], clip[2]) >= 2:
+                        inv, bmin, bmax = clip
+
+                        def clip_fn(pp, _inv=inv, _bmin=bmin, _bmax=bmax):
+                            return points_in_local_box(pp, _inv, _bmin, _bmax)
+                    else:
+                        self.report(
+                            {'WARNING'},
+                            f"Clip boundary '{clip_obj.name}' has no usable volume; ignoring it.",
+                        )
+
+                if clip_fn is not None:
+                    keep = clip_fn(points)
                     n_clip = len(points)
                     points = points[keep]
                     if colors is not None:
                         colors = colors[keep]
-                    # Clip the texture cloud to the same box too.
-                    keep_full = points_in_local_box(points_full, inv, bmin, bmax)
+                    # Clip the texture cloud to the same boundary too.
+                    keep_full = clip_fn(points_full)
                     points_full = points_full[keep_full]
                     if colors_full is not None:
                         colors_full = colors_full[keep_full]
@@ -652,14 +763,9 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                         self.report(
                             {'WARNING'},
                             f"Clip boundary '{clip_obj.name}' left too few points; "
-                            "check it overlaps the cloud.",
+                            "check it overlaps the cloud (and is closed for Mesh mode).",
                         )
                         return {'CANCELLED'}
-                else:
-                    self.report(
-                        {'WARNING'},
-                        f"Clip boundary '{clip_obj.name}' has no usable volume; ignoring it.",
-                    )
 
             # Optional pre-filters: voxel subsample, then statistical outlier
             # removal, before any surfacing.

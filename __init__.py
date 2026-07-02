@@ -235,9 +235,20 @@ try:
         )
         bpy.types.Scene.roadway_clip_object = PointerProperty(
             name="Clip To Object",
-            description="Optional: only surface points inside this object's box. A box/cube clips a true 3D volume (trimming points above and below too); a flat plane clips just its XY footprint. Scale it over the area of interest to trim away far-off scan points",
+            description="Optional: only surface points inside this object. Scale it over the area of interest to trim away far-off scan points",
             type=bpy.types.Object,
             poll=_roadway_source_poll,
+        )
+        bpy.types.Scene.roadway_clip_mode = EnumProperty(
+            name="Clip Shape",
+            description="How the clip boundary's shape is interpreted",
+            items=[
+                ('BOX', "Bounding Box",
+                 "Fast: use the object's oriented bounding box. A box/cube clips a true 3D volume (above and below too); a flat plane clips just its XY footprint"),
+                ('MESH', "Mesh Volume",
+                 "Exact: clip to the boundary mesh's actual (possibly concave) volume via a ray-cast test. The mesh must be closed/watertight. Slower on very large clouds"),
+            ],
+            default='BOX',
         )
         bpy.types.Scene.roadway_subsample = bpy.props.BoolProperty(
             name="Subsample (Voxel)",
@@ -367,6 +378,7 @@ try:
         del bpy.types.Scene.fbx_process_collection
         del bpy.types.Scene.roadway_source_object
         del bpy.types.Scene.roadway_clip_object
+        del bpy.types.Scene.roadway_clip_mode
         del bpy.types.Scene.roadway_subsample
         del bpy.types.Scene.roadway_voxel_size
         del bpy.types.Scene.roadway_sor

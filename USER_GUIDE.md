@@ -353,16 +353,23 @@ reports exactly what to install; convert to PLY/PTX as a fallback.
    can adjust how many points the viewport shows (display only — it never
    changes the data, surfacing, or texture).
 2. *(Optional)* Set **Clip To Object** to surface only the points inside a
-   boundary object's box. Add a mesh and scale/rotate it to cover just the area
-   of interest, then pick it here — only points inside it are draped and
-   textured, so far-off scan points, adjacent buildings, or the rest of a large
-   site are trimmed away. The clip uses the object's oriented bounding box:
-   - A **box or cube** clips a true **3D volume** — points above and below it
+   boundary object. Add a mesh and scale/rotate it to cover just the area of
+   interest, then pick it here — only points inside it are draped and textured,
+   so far-off scan points, adjacent buildings, or the rest of a large site are
+   trimmed away. **Clip Shape** controls how the boundary is interpreted:
+   - **Bounding Box** *(default, fast)* uses the object's oriented bounding box.
+     A **box or cube** clips a true **3D volume** — points above and below it
      are trimmed too, so you can isolate a road deck under an overpass or ignore
-     everything beyond a certain height.
-   - A **flat plane** has no thickness, so it clips just its **XY footprint**
-     (points at any height inside the outline are kept) — handy when you only
-     want to trim the extent and keep the full height range.
+     everything beyond a certain height. A **flat plane** has no thickness, so it
+     clips just its **XY footprint** (points at any height inside the outline are
+     kept) — handy when you only want to trim the extent and keep the full
+     height range.
+   - **Mesh Volume** *(exact)* clips to the boundary mesh's actual, possibly
+     **concave** shape (an L-shaped intersection, a curved corridor, a mesh with
+     a hole). The boundary mesh must be **closed/watertight** for this to work.
+     It ray-casts each candidate point, so it is slower than Bounding Box on very
+     large clouds — the tool first culls to the mesh's bounding box, then tests
+     only the survivors.
 
    The clip applies to the texture colour cloud as well.
 3. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:

@@ -1015,7 +1015,11 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
 
         c.prop(scene, "roadway_clip_object")
         if getattr(scene, "roadway_clip_object", None) is not None:
-            c.label(text="Box/cube clips in 3D; a plane clips its footprint", icon='INFO')
+            c.prop(scene, "roadway_clip_mode")
+            if scene.roadway_clip_mode == 'MESH':
+                c.label(text="Clips to the exact (closed) mesh volume", icon='INFO')
+            else:
+                c.label(text="Box/cube clips in 3D; a plane clips its footprint", icon='INFO')
 
         # --- Optional pre-filters (applied before surfacing) ---
         filt = c.box()
