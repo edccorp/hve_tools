@@ -76,6 +76,7 @@ li { margin: .2rem 0; }
 <li><strong>Set up and export</strong> scene objects (vehicles, environments, GATB surfaces) as HVE <code>.h3d</code> files.</li>
 <li><strong>Import simulation results</strong> back into Blender (variable-output CSV/HVO, HVE FBX, RaceRender conversion).</li>
 <li><strong>Recreate motion</strong> from crash-data sources such as EDR reports, XYZ/RPY motion tables, and survey points.</li>
+<li><strong>Build environment geometry from point clouds</strong> — import PLY scans, filter them, and drape a textured roadway surface for vehicle simulations.</li>
 <li><strong>Analyze</strong> motion with motion-path tools, two-point scaling, and speed/acceleration baking.</li>
 </ul>
 <p>Everything lives in one sidebar tab in the 3D View.</p>
@@ -94,7 +95,7 @@ li { margin: .2rem 0; }
 <p>If you don't see the <strong>HVE</strong> tab, confirm the add-on is enabled and that you are in the 3D View (not, say, the Shader Editor).</p>
 <hr>
 <h2 id="3-how-the-sidebar-is-organized">3. How the sidebar is organized</h2>
-<p>The <strong>HVE</strong> tab groups everything into three top-level panels:</p>
+<p>The <strong>HVE</strong> tab groups everything into top-level panels:</p>
 <table>
 <thead><tr>
 <th>Panel</th>
@@ -105,6 +106,7 @@ li { margin: .2rem 0; }
 <tr><td><strong>Pre-Simulation Setup</strong></td><td>Getting Blender objects ready for HVE and exporting them</td><td><strong>H3D Setup</strong>, <strong>Export to HVE</strong></td></tr>
 <tr><td><strong>Post-Simulation Processing</strong></td><td>Bringing HVE results back into Blender</td><td><strong>HVE FBX Importer</strong>, <strong>Variable Output Importer</strong>, <strong>RaceRender Converter</strong></td></tr>
 <tr><td><strong>Other Tools</strong></td><td>Data-driven animation and analysis utilities</td><td><strong>EDR Data Importer / Entry</strong>, <strong>Motion Data Importer</strong>, <strong>Point Importer</strong>, <strong>Motion Path Tools</strong>, <strong>Timed Location Markers</strong>, <strong>Scale Objects</strong>, <strong>Speed + Acceleration</strong>, <strong>Point Cloud Tools</strong></td></tr>
+<tr><td><strong>Documentation</strong></td><td>Opening this guide</td><td><strong>Open User Guide</strong> opens the bundled offline copy in your browser</td></tr>
 </tbody></table>
 <p>Most panels are collapsed by default — click a panel header to expand it. The task guides below follow this same order: Pre-Simulation Setup, then Post-Simulation Processing, then Other Tools.</p>
 <hr>
@@ -282,6 +284,10 @@ li { margin: .2rem 0; }
 <p><strong>The vehicle faces or turns the wrong way.</strong> For Path Follow and speed/accel baking, set the correct <strong>forward axis</strong> / <strong>yaw offset</strong>. For yaw-rate data, confirm the sign convention and scene unit system.</p>
 <p><strong>Motion stops partway along a path.</strong> In Path Follow mode, the speed profile travelled farther than the path is long, so the object stops at the path end (a warning is shown). Use a longer path or lower speeds.</p>
 <p><strong>Nothing animates after import.</strong> Confirm the frame range covers the data (timeline start is set to 0 on import; the end is extended to the last frame) and that you clicked the animate/import-and-animate button, not just load.</p>
+<p><strong>Roadway texture is grey or full of holes.</strong> The <strong>Color Height Tolerance</strong> may be too tight for a sloped road (points fall outside the band), or cells are too sparse. Raise the tolerance, increase the cell size, or turn on <strong>Fill Holes</strong>.</p>
+<p><strong>Roadway texture picks up colour from cars/foliage above the road.</strong> Lower the <strong>Color Height Tolerance</strong> (it defaults to 0.25 and already excludes most overhead points); <code>0</code> disables the check and uses every point.</p>
+<p><strong>Roadway colour doesn't appear in HVE.</strong> The texture must be a file on disk. Save the <code>.blend</code> first, then re-create the surface so the JPG is written next to it; the H3D export references that file.</p>
+<p><strong>Filtering / surfacing a huge cloud is slow.</strong> Statistical Outlier Removal does a neighbour search per point. Enable <strong>Subsample (Voxel)</strong> first (or use <strong>Apply Filters Only</strong> to bake a thinned copy once), then surface from the result.</p>
 <hr>
 <h2 id="7-example-files">7. Example files</h2>
 <p>Bundled at the repository root for trying each importer:</p>

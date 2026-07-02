@@ -45,6 +45,8 @@ workflows. It lets you:
   HVE FBX, RaceRender conversion).
 - **Recreate motion** from crash-data sources such as EDR reports, XYZ/RPY
   motion tables, and survey points.
+- **Build environment geometry from point clouds** — import PLY scans, filter
+  them, and drape a textured roadway surface for vehicle simulations.
 - **Analyze** motion with motion-path tools, two-point scaling, and
   speed/acceleration baking.
 
@@ -73,13 +75,14 @@ are in the 3D View (not, say, the Shader Editor).
 
 ## 3. How the sidebar is organized
 
-The **HVE** tab groups everything into three top-level panels:
+The **HVE** tab groups everything into top-level panels:
 
 | Panel | Use it for | Sub-panels |
 |-------|-----------|------------|
 | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
 | **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
 | **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration**, **Point Cloud Tools** |
+| **Documentation** | Opening this guide | **Open User Guide** opens the bundled offline copy in your browser |
 
 Most panels are collapsed by default — click a panel header to expand it. The
 task guides below follow this same order: Pre-Simulation Setup, then
@@ -452,6 +455,22 @@ warning is shown). Use a longer path or lower speeds.
 **Nothing animates after import.** Confirm the frame range covers the data
 (timeline start is set to 0 on import; the end is extended to the last frame)
 and that you clicked the animate/import-and-animate button, not just load.
+
+**Roadway texture is grey or full of holes.** The **Color Height Tolerance** may
+be too tight for a sloped road (points fall outside the band), or cells are too
+sparse. Raise the tolerance, increase the cell size, or turn on **Fill Holes**.
+
+**Roadway texture picks up colour from cars/foliage above the road.** Lower the
+**Color Height Tolerance** (it defaults to 0.25 and already excludes most
+overhead points); `0` disables the check and uses every point.
+
+**Roadway colour doesn't appear in HVE.** The texture must be a file on disk.
+Save the `.blend` first, then re-create the surface so the JPG is written next
+to it; the H3D export references that file.
+
+**Filtering / surfacing a huge cloud is slow.** Statistical Outlier Removal does
+a neighbour search per point. Enable **Subsample (Voxel)** first (or use **Apply
+Filters Only** to bake a thinned copy once), then surface from the result.
 
 ---
 
