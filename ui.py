@@ -104,6 +104,7 @@ def update_panel_bl_category(self, context):
         HVE_PT_scale_objects,
         HVE_PT_speed_acceleration,
         HVE_PT_point_cloud_tools,
+        HVE_PT_surface_reconstruct,
         HVE_PT_race_render_exporter,
     )
 
@@ -1075,6 +1076,37 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             c.label(text="Uses Texture Resolution above; no mesh rebuild", icon='INFO')
 
 
+class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "HVE"
+    bl_label = "3D Surface Reconstruction"
+    bl_parent_id = "HVE_PT_point_cloud_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        scene = context.scene
+        l = self.layout
+        c = l.column()
+
+        c.label(text="Full 3D mesh (Open3D) — for vertical / overhanging geometry", icon='MESH_ICOSPHERE')
+        c.label(text="Uses the Point Cloud + pre-filters/clip above", icon='INFO')
+        c.prop(scene, "roadway_recon_method")
+        if scene.roadway_recon_method == 'POISSON':
+            c.prop(scene, "roadway_recon_depth")
+            c.prop(scene, "roadway_recon_density_trim")
+        elif scene.roadway_recon_method == 'ALPHA':
+            c.prop(scene, "roadway_recon_alpha")
+        c.prop(scene, "roadway_recon_normals_k")
+        c.operator("object.reconstruct_surface_3d", text="Reconstruct 3D Surface", icon='MOD_REMESH')
+        c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
+        c.label(text="For drivable ground, use Create Roadway Surface instead", icon='INFO')
+
+
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -1128,6 +1160,7 @@ classes = (
     HVE_PT_speed_acceleration,
     HVE_PT_point_importer,
     HVE_PT_point_cloud_tools,
+    HVE_PT_surface_reconstruct,
     HVE_PT_race_render_exporter,
     HVE_PT_documentation,
     HVE_OT_save_preset,

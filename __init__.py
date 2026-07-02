@@ -20,7 +20,7 @@ try:
         fbx_importer, fbx_importer_ui,
         motionpaths, xyz_importer, xyz_importer_ui,
         edr_importer, scale_objects, speed_accel, import_xyzrpy,
-        roadway_surface,
+        roadway_surface, surface_reconstruct,
         ply_pointcloud,
 
     )
@@ -42,7 +42,7 @@ try:
         ui, materials, prefs, ops, export_vehicle_ui, export_environment_ui,
         contacts_exporter_ui, variableoutput_importer_ui, racerender_exporter_ui,
         fbx_importer_ui, motionpaths, xyz_importer_ui, edr_importer, scale_objects,
-        import_xyzrpy, speed_accel, roadway_surface,
+        import_xyzrpy, speed_accel, roadway_surface, surface_reconstruct,
     ]
 
     # Aggregate all classes from modules
@@ -332,6 +332,51 @@ try:
             soft_max=16384,
         )
 
+        # --- Full 3D surface reconstruction (Open3D) ---
+        bpy.types.Scene.roadway_recon_method = EnumProperty(
+            name="Method",
+            description="Open3D reconstruction algorithm",
+            items=[
+                ('POISSON', "Poisson",
+                 "Screened Poisson: smooth, watertight surface. Best all-round for scanned surfaces; needs the density trim to cut back the balloon it grows past the data"),
+                ('BPA', "Ball Pivoting",
+                 "Rolls a ball over the points to connect triangles. Keeps the original points as vertices; good for evenly dense clouds"),
+                ('ALPHA', "Alpha Shape",
+                 "Delaunay-based shape at a given alpha radius. Simple and fast; alpha controls how tightly it wraps the points"),
+            ],
+            default='POISSON',
+        )
+        bpy.types.Scene.roadway_recon_depth = IntProperty(
+            name="Poisson Depth",
+            description="Octree depth for Poisson: higher captures finer detail but is slower and can amplify noise",
+            default=9,
+            min=4,
+            soft_max=12,
+            max=14,
+        )
+        bpy.types.Scene.roadway_recon_density_trim = FloatProperty(
+            name="Density Trim",
+            description="Poisson: remove this fraction of the lowest-density vertices to cut away the surface the algorithm invents beyond the data; 0 keeps everything",
+            default=0.05,
+            min=0.0,
+            max=0.9,
+        )
+        bpy.types.Scene.roadway_recon_alpha = FloatProperty(
+            name="Alpha",
+            description="Alpha Shape radius in scene units; 0 auto-picks from the average point spacing",
+            default=0.0,
+            min=0.0,
+            soft_max=10.0,
+            unit='LENGTH',
+        )
+        bpy.types.Scene.roadway_recon_normals_k = IntProperty(
+            name="Normal Neighbors (k)",
+            description="Nearest neighbours used to estimate and orient point normals before reconstruction",
+            default=30,
+            min=4,
+            soft_max=100,
+        )
+
         bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
         bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
         bpy.types.Object.edr_input_mode_preference = EnumProperty(
@@ -391,6 +436,11 @@ try:
         del bpy.types.Scene.roadway_ground_percentile
         del bpy.types.Scene.roadway_fill_holes
         del bpy.types.Scene.roadway_texture_size
+        del bpy.types.Scene.roadway_recon_method
+        del bpy.types.Scene.roadway_recon_depth
+        del bpy.types.Scene.roadway_recon_density_trim
+        del bpy.types.Scene.roadway_recon_alpha
+        del bpy.types.Scene.roadway_recon_normals_k
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
         del bpy.types.Object.vehicle_path_entries

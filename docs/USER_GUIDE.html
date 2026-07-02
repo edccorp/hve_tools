@@ -76,7 +76,7 @@ li { margin: .2rem 0; }
 <li><strong>Set up and export</strong> scene objects (vehicles, environments, GATB surfaces) as HVE <code>.h3d</code> files.</li>
 <li><strong>Import simulation results</strong> back into Blender (variable-output CSV/HVO, HVE FBX, RaceRender conversion).</li>
 <li><strong>Recreate motion</strong> from crash-data sources such as EDR reports, XYZ/RPY motion tables, and survey points.</li>
-<li><strong>Build environment geometry from point clouds</strong> — import PLY, PTX, E57 or LAS/LAZ scans, clip and filter them, and drape a textured roadway surface for vehicle simulations.</li>
+<li><strong>Build environment geometry from point clouds</strong> — import PLY, PTX, E57 or LAS/LAZ scans, clip and filter them, drape a textured roadway surface for vehicle simulations, or reconstruct a full 3D mesh (Open3D) for vertical geometry.</li>
 <li><strong>Analyze</strong> motion with motion-path tools, two-point scaling, and speed/acceleration baking.</li>
 </ul>
 <p>Everything lives in one sidebar tab in the 3D View.</p>
@@ -275,6 +275,13 @@ li { margin: .2rem 0; }
 <blockquote>
 <p>This is a first version that uses the cloud's rectangular (bounding-box) extent. Cells with no points become holes (or are filled from neighbours); very isolated cells may leave a flat spot at Z 0.</p>
 </blockquote>
+<p><strong>3D Surface Reconstruction (Open3D).</strong> Nested under Point Cloud Tools is a <strong>3D Surface Reconstruction</strong> panel — a *complement* to the heightfield tool, not a replacement. Where Create Roadway Surface makes a clean 2.5D drivable ground (one height per XY spot), this reconstructs a true 3D mesh that can follow vertical and overhanging geometry: barriers, walls, embankments, buildings, overpass structures. It uses <strong>Open3D</strong> (installed automatically on first use — a large download that may need a Blender restart, and which occasionally has no wheel for a given Blender build). It reuses the <strong>Point Cloud</strong> selection and the pre-filters/clip above. Pick a <strong>Method</strong>:</p>
+<ul>
+<li><strong>Poisson</strong> *(default)* — smooth, watertight surface; the best all-round choice for scanned surfaces. Set <strong>Poisson Depth</strong> (higher = finer, slower, noisier) and <strong>Density Trim</strong> (fraction of the lowest-density, invented-past-the-data vertices to cut away).</li>
+<li><strong>Ball Pivoting</strong> — connects the original points into triangles; good for evenly dense clouds.</li>
+<li><strong>Alpha Shape</strong> — wraps the points at an <strong>Alpha</strong> radius (0 auto-picks from the average spacing).</li>
+</ul>
+<p><strong>Normal Neighbors (k)</strong> controls the normal estimation/orientation that all methods rely on. The result is classified as <strong>Environment</strong>, with vertex colours carried through when the cloud has colour. For the drivable road itself, keep using <strong>Create Roadway Surface</strong> — a 3D reconstruction of the road is noisier and harder for HVE to use.</p>
 <hr>
 <h2 id="5-units-and-scale">5. Units and scale</h2>
 <ul>

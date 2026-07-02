@@ -46,8 +46,9 @@ workflows. It lets you:
 - **Recreate motion** from crash-data sources such as EDR reports, XYZ/RPY
   motion tables, and survey points.
 - **Build environment geometry from point clouds** — import PLY, PTX, E57 or
-  LAS/LAZ scans, clip and filter them, and drape a textured roadway surface for
-  vehicle simulations.
+  LAS/LAZ scans, clip and filter them, drape a textured roadway surface for
+  vehicle simulations, or reconstruct a full 3D mesh (Open3D) for vertical
+  geometry.
 - **Analyze** motion with motion-path tools, two-point scaling, and
   speed/acceleration baking.
 
@@ -454,6 +455,31 @@ cell.
 > This is a first version that uses the cloud's rectangular (bounding-box)
 > extent. Cells with no points become holes (or are filled from neighbours);
 > very isolated cells may leave a flat spot at Z 0.
+
+**3D Surface Reconstruction (Open3D).** Nested under Point Cloud Tools is a
+**3D Surface Reconstruction** panel — a *complement* to the heightfield tool, not
+a replacement. Where Create Roadway Surface makes a clean 2.5D drivable ground
+(one height per XY spot), this reconstructs a true 3D mesh that can follow
+vertical and overhanging geometry: barriers, walls, embankments, buildings,
+overpass structures. It uses **Open3D** (installed automatically on first use — a
+large download that may need a Blender restart, and which occasionally has no
+wheel for a given Blender build). It reuses the **Point Cloud** selection and the
+pre-filters/clip above. Pick a **Method**:
+
+- **Poisson** *(default)* — smooth, watertight surface; the best all-round choice
+  for scanned surfaces. Set **Poisson Depth** (higher = finer, slower, noisier)
+  and **Density Trim** (fraction of the lowest-density, invented-past-the-data
+  vertices to cut away).
+- **Ball Pivoting** — connects the original points into triangles; good for
+  evenly dense clouds.
+- **Alpha Shape** — wraps the points at an **Alpha** radius (0 auto-picks from the
+  average spacing).
+
+**Normal Neighbors (k)** controls the normal estimation/orientation that all
+methods rely on. The result is classified as **Environment**, with vertex colours
+carried through when the cloud has colour. For the drivable road itself, keep
+using **Create Roadway Surface** — a 3D reconstruction of the road is noisier and
+harder for HVE to use.
 
 ---
 
