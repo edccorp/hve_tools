@@ -942,9 +942,14 @@ class HVE_PT_point_importer(HVE_PT_mechanist_base):
             map_box.operator("import_xyz.import_mapped_points", text="Import Points")
 
 
+# Names the point-cloud display input may carry ("Subsample Percent" is the
+# legacy name used by clouds imported before the rename to "Points Visible %").
+_POINTS_VISIBLE_NAMES = {"Points Visible %", "Subsample Percent"}
+
+
 def _geonodes_subsample_input(obj):
     """Return ``(modifier, socket_identifier)`` for a point cloud's GeoNodes
-    "Subsample Percent" display input, or None if the object doesn't have one."""
+    points-visible display input, or None if the object doesn't have one."""
     if obj is None:
         return None
     for mod in obj.modifiers:
@@ -955,11 +960,11 @@ def _geonodes_subsample_input(obj):
         if iface is not None and hasattr(iface, "items_tree"):
             for item in iface.items_tree:
                 if (getattr(item, "in_out", "") == 'INPUT'
-                        and getattr(item, "name", "") == "Subsample Percent"):
+                        and getattr(item, "name", "") in _POINTS_VISIBLE_NAMES):
                     return mod, item.identifier
         else:  # Blender 3.x
             for inp in getattr(ng, "inputs", []):
-                if inp.name == "Subsample Percent":
+                if inp.name in _POINTS_VISIBLE_NAMES:
                     return mod, inp.identifier
     return None
 
@@ -1004,7 +1009,7 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         if sub is not None:
             mod, ident = sub
             try:
-                c.prop(mod, '["%s"]' % ident, text="Display Subsample %")
+                c.prop(mod, '["%s"]' % ident, text="Points Visible %")
             except Exception:
                 pass
 

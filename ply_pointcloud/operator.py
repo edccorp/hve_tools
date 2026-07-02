@@ -20,8 +20,8 @@ class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
     point_radius: FloatProperty(name="Point Radius", default=0.1, min=0.000001, soft_max=0.1)
     color_attribute: StringProperty(name="Color Attribute", default="Col")
     display_subsample: FloatProperty(
-        name="Display Subsample %",
-        description="Percentage of points shown by the viewport display; display only, all points are kept in the data",
+        name="Points Visible %",
+        description="Percentage of points shown in the viewport; display only, all points are kept in the data",
         default=100.0, min=0.0, max=100.0, subtype='PERCENTAGE',
     )
 

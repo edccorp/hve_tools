@@ -41,8 +41,8 @@ def _set_group_radius_default_4x(ng, radius: float) -> None:
 def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None, subsample_percent=100.0):
     """Create a Geometry Nodes group for displaying point clouds (3.6 & 4.x safe).
 
-    ``subsample_percent`` sets the default of the display-only "Subsample
-    Percent" input: the percentage of points shown in the viewport. It never
+    ``subsample_percent`` sets the default of the display-only "Points
+    Visible %" input: the percentage of points shown in the viewport. It never
     removes points from the mesh data.
     """
     ng = bpy.data.node_groups.new(name, 'GeometryNodeTree')
@@ -61,7 +61,7 @@ def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None, subsamp
             in_out='INPUT',
         )
         subsample_in = ng.interface.new_socket(
-            name="Subsample Percent",
+            name="Points Visible %",
             socket_type="NodeSocketFloat",
             in_out='INPUT',
         )
@@ -90,7 +90,7 @@ def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None, subsamp
         # Blender 3.x
         gi_geo = ng.inputs.new('NodeSocketGeometry', 'Geometry')
         gi_rad = ng.inputs.new('NodeSocketFloat', 'Point Radius')
-        gi_subsample = ng.inputs.new('NodeSocketFloat', 'Subsample Percent')
+        gi_subsample = ng.inputs.new('NodeSocketFloat', 'Points Visible %')
         gi_rad.default_value = radius
         gi_subsample.default_value = subsample_percent
         go_geo = ng.outputs.new('NodeSocketGeometry', 'Geometry')
@@ -153,10 +153,10 @@ def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None, subsamp
     except Exception:
         pass
     try:
-        links.new(gi.outputs['Subsample Percent'], less_than.inputs['B'])
+        links.new(gi.outputs['Points Visible %'], less_than.inputs['B'])
     except Exception:
         for out_socket in gi.outputs:
-            if out_socket.name.lower().replace("_", " ") == "subsample percent":
+            if out_socket.name.lower().replace("_", " ") == "points visible %":
                 try:
                     links.new(out_socket, less_than.inputs['B'])
                 except Exception:

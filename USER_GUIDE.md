@@ -329,20 +329,20 @@ geometry in vehicle simulations.
 
 **Import.** Click **Import PLY Point Cloud** to load a `.ply` (ASCII or binary).
 It comes in as a mesh of vertices with a `Col` colour attribute and a Geometry
-Nodes display so you can see the points. The import dialog's **Display
-Subsample %** (default 100) sets what fraction of points the *viewport display*
-shows — it is display-only and never removes points from the data, so it has no
-effect on surfacing or textures; lower it for very dense clouds to keep the
-viewport responsive. (The importer is also available from **File → Import →
-PLY Point Cloud**.)
+Nodes display so you can see the points. The import dialog's **Points Visible %**
+(default 100) sets what fraction of points the *viewport display* shows — it is
+display-only and never removes points from the data, so it has no effect on
+surfacing or textures; lower it for very dense clouds to keep the viewport
+responsive. (The importer is also available from **File → Import → PLY Point
+Cloud**.)
 
 **Surface it:**
 
 1. Select the point cloud, or set it explicitly in **Point Cloud** (leave empty
    to use the active object). The surface tool reads the raw imported points, so
    the display modifier doesn't interfere. If the selected cloud has the
-   importer's GeoNodes display, a **Display Subsample %** slider appears here so
-   you can adjust how many points the viewport shows (display only — it never
+   importer's GeoNodes display, a **Points Visible %** slider appears here so you
+   can adjust how many points the viewport shows (display only — it never
    changes the data, surfacing, or texture).
 2. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:
    - **Subsample (Voxel)** thins the cloud to one averaged point per **Voxel
