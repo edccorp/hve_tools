@@ -329,6 +329,27 @@ def mask_points_near_ground(points, z_grid, min_x, min_y, cell_size, tol):
     return ~np.isnan(ground) & (np.abs(pts[:, 2] - ground) <= tol)
 
 
+def reconstruct_z_grid(verts_xyz, min_x, min_y, cell_size, nx, ny, valid=None):
+    """Rebuild the ``(ny, nx)`` height grid from a surface mesh's vertices.
+
+    The inverse of :func:`build_mesh_arrays`: each vertex maps back to its grid
+    cell and stores its height. ``build_mesh_arrays`` keeps a Z-0 vertex for hole
+    cells (they simply have no face), so pass ``valid`` — a per-vertex bool mask
+    of vertices actually used by a face — to leave hole/clipped cells NaN. Lets
+    the texture be re-baked from an existing surface without rebuilding the mesh.
+    """
+    v = np.asarray(verts_xyz, dtype=np.float64)
+    z = np.full((ny, nx), np.nan, dtype=np.float64)
+    if valid is not None:
+        v = v[np.asarray(valid, dtype=bool)]
+    if v.shape[0] == 0:
+        return z
+    ix = np.clip(np.floor((v[:, 0] - min_x) / cell_size).astype(np.int64), 0, nx - 1)
+    iy = np.clip(np.floor((v[:, 1] - min_y) / cell_size).astype(np.int64), 0, ny - 1)
+    z[iy, ix] = v[:, 2]
+    return z
+
+
 def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None,
                      color_height_tol=0.0):
     """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
@@ -859,6 +880,24 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             except (AttributeError, TypeError):
                 pass
 
+            # Stash the grid + colour-source metadata so the texture can be
+            # re-baked at a different resolution later without rebuilding the
+            # mesh (see HVE_OT_RebakeRoadwayTexture).
+            if "colors" in result:
+                eff_tex = source.name
+                if tex_src is not None and tex_src.type == 'MESH' and tex_src is not source:
+                    eff_tex = tex_src.name
+                new_obj["roadway_surface"] = 1
+                new_obj["roadway_min_x"] = float(result["min_x"])
+                new_obj["roadway_min_y"] = float(result["min_y"])
+                new_obj["roadway_cell_size"] = float(result["cell_size"])
+                new_obj["roadway_nx"] = int(result["nx"])
+                new_obj["roadway_ny"] = int(result["ny"])
+                new_obj["roadway_color_height_tol"] = float(scene.roadway_color_height_tol)
+                new_obj["roadway_fill_distance"] = float(scene.roadway_fill_distance)
+                new_obj["roadway_source_name"] = source.name
+                new_obj["roadway_tex_source"] = eff_tex
+
             for obj in list(context.selected_objects):
                 obj.select_set(False)
             new_obj.select_set(True)
@@ -973,7 +1012,138 @@ class HVE_OT_FilterPointCloud(bpy.types.Operator):
                 window.cursor_set('DEFAULT')
 
 
+class HVE_OT_RebakeRoadwayTexture(bpy.types.Operator):
+    """Re-bake the colour texture of the selected roadway surface at the current Texture Resolution, without rebuilding the mesh"""
+    bl_idname = "object.rebake_roadway_texture"
+    bl_label = "Rebake Texture"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.get("roadway_surface")
+
+    def execute(self, context):
+        scene = context.scene
+        obj = context.active_object
+        if obj is None or not obj.get("roadway_surface"):
+            self.report({'ERROR'}, "Select a roadway surface created by this tool.")
+            return {'CANCELLED'}
+
+        # Grid metadata stored when the surface was created.
+        try:
+            min_x = float(obj["roadway_min_x"])
+            min_y = float(obj["roadway_min_y"])
+            cell_size = float(obj["roadway_cell_size"])
+            nx = int(obj["roadway_nx"])
+            ny = int(obj["roadway_ny"])
+        except (KeyError, TypeError, ValueError):
+            self.report({'ERROR'}, "This surface is missing its grid data; re-create it to enable rebaking.")
+            return {'CANCELLED'}
+        tol = float(obj.get("roadway_color_height_tol", 0.0))
+        fill_distance = float(obj.get("roadway_fill_distance", 0.0))
+        source_name = str(obj.get("roadway_source_name", obj.name))
+        tex_source_name = str(obj.get("roadway_tex_source", source_name))
+
+        # Resolve the colour cloud to sample from.
+        tex_obj = bpy.data.objects.get(tex_source_name) or bpy.data.objects.get(source_name)
+        if tex_obj is None or tex_obj.type != 'MESH':
+            self.report(
+                {'ERROR'},
+                f"Colour source '{tex_source_name}' not found; keep the original "
+                "point cloud in the scene to rebake.",
+            )
+            return {'CANCELLED'}
+
+        window = context.window
+        wm = context.window_manager
+        wm.progress_begin(0, 100)
+        if window is not None:
+            window.cursor_set('WAIT')
+        try:
+            wm.progress_update(15)
+            local_c, colors, _attr = _read_point_cloud(tex_obj, True)
+            if colors is None or len(local_c) == 0:
+                self.report({'ERROR'}, f"Colour source '{tex_obj.name}' has no per-point colour.")
+                return {'CANCELLED'}
+
+            # Work in the surface object's local frame so the stored grid lines up
+            # even if the surface has since been moved.
+            surf_inv = np.linalg.inv(np.array(obj.matrix_world, dtype=np.float64))
+            src_mw = np.array(tex_obj.matrix_world, dtype=np.float64)
+            world_c = local_c @ src_mw[:3, :3].T + src_mw[:3, 3]
+            pts = world_c @ surf_inv[:3, :3].T + surf_inv[:3, 3]
+
+            # Reconstruct the height grid from the mesh's own vertices. Vertices
+            # not used by any face are hole cells (Z 0) and must stay NaN.
+            mesh = obj.data
+            nv = len(mesh.vertices)
+            co = np.empty(nv * 3, dtype=np.float64)
+            mesh.vertices.foreach_get("co", co)
+            verts = co.reshape(nv, 3)
+            used = np.zeros(nv, dtype=bool)
+            nl = len(mesh.loops)
+            if nl:
+                lv = np.empty(nl, dtype=np.int64)
+                mesh.loops.foreach_get("vertex_index", lv)
+                used[lv] = True
+            z_grid = reconstruct_z_grid(verts, min_x, min_y, cell_size, nx, ny, valid=used)
+
+            wm.progress_update(40)
+            # Restrict to the surface extent, then to points near the ground.
+            max_x = min_x + (nx - 1) * cell_size
+            max_y = min_y + (ny - 1) * cell_size
+            inside = (
+                (pts[:, 0] >= min_x) & (pts[:, 0] <= max_x)
+                & (pts[:, 1] >= min_y) & (pts[:, 1] <= max_y)
+            )
+            if inside.any():
+                pts, colors = pts[inside], colors[inside]
+            if tol > 0:
+                near = mask_points_near_ground(pts, z_grid, min_x, min_y, cell_size, tol)
+                if near.any():
+                    pts, colors = pts[near], colors[near]
+            if len(pts) == 0:
+                self.report({'ERROR'}, "No colour points fell on the surface; nothing to bake.")
+                return {'CANCELLED'}
+
+            wm.progress_update(65)
+            # Clear the old UVs / material / image so the rebake replaces them.
+            while mesh.uv_layers:
+                mesh.uv_layers.remove(mesh.uv_layers[0])
+            mesh.materials.clear()
+            old_img = bpy.data.images.get(f"Roadway Color: {source_name}")
+            if old_img is not None:
+                bpy.data.images.remove(old_img)
+
+            result = {
+                "min_x": min_x, "min_y": min_y, "cell_size": cell_size,
+                "nx": nx, "ny": ny, "z_grid": z_grid,
+            }
+            blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+            saved = _apply_baked_texture(
+                source_name, mesh, pts, colors, result,
+                int(scene.roadway_texture_size), fill_distance, blend_dir,
+            )
+            wm.progress_update(100)
+            size_note = f"{int(scene.roadway_texture_size)} px" if int(scene.roadway_texture_size) > 0 else "grid resolution"
+            if saved is None:
+                self.report(
+                    {'WARNING'},
+                    f"Rebaked texture at {size_note} (packed into the .blend; save the "
+                    ".blend and rebake to write the JPG for H3D export).",
+                )
+            else:
+                self.report({'INFO'}, f"Rebaked texture at {size_note}: {os.path.basename(saved)}.")
+            return {'FINISHED'}
+        finally:
+            wm.progress_end()
+            if window is not None:
+                window.cursor_set('DEFAULT')
+
+
 classes = [
     HVE_OT_CreateRoadwaySurface,
     HVE_OT_FilterPointCloud,
+    HVE_OT_RebakeRoadwayTexture,
 ]

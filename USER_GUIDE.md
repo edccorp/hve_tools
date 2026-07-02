@@ -432,6 +432,15 @@ progress while it runs, and the report line notes the grid size and how many
 cells were sampled — if it warns that no cells had enough points, increase the
 cell size.
 
+**Rebake the texture at a different size.** To change the texture resolution
+without rebuilding the mesh, select the roadway surface, set a new **Texture
+Resolution**, and click **Rebake Texture (Selected Surface)** (it appears under
+the Create button when a surface is selected). It re-samples the colour from the
+same point cloud onto the existing surface at the new size, overwriting the JPG
+in place — much faster than re-creating the surface, and it keeps the mesh
+untouched. Keep the original point cloud in the scene so the colour can be
+re-sampled; if you moved the surface, the rebake still lines up.
+
 **How Ground Percentile works.** For every grid cell, the tool looks at the Z of
 all points that fall in that cell and takes the value at the chosen percentile.
 A low value (the default is 10) picks near the bottom of that stack — the road

@@ -1066,6 +1066,14 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
         c.label(text="Result is classified as Environment", icon='WORLD')
 
+        # Rebake the texture of an existing surface at a new Texture Resolution
+        # without regenerating the mesh. Enabled when a surface is selected.
+        active = context.active_object
+        if active is not None and active.get("roadway_surface"):
+            c.separator()
+            c.operator("object.rebake_roadway_texture", text="Rebake Texture (Selected Surface)", icon='TEXTURE')
+            c.label(text="Uses Texture Resolution above; no mesh rebuild", icon='INFO')
+
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'

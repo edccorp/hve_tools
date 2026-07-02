@@ -31,6 +31,7 @@ WANTED = {
     "points_in_local_box",
     "_clip_box_epsilon",
     "points_in_mesh_volume",
+    "reconstruct_z_grid",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -53,6 +54,7 @@ mask_points_near_ground = ns["mask_points_near_ground"]
 clip_box_axis_count = ns["clip_box_axis_count"]
 points_in_local_box = ns["points_in_local_box"]
 points_in_mesh_volume = ns["points_in_mesh_volume"]
+reconstruct_z_grid = ns["reconstruct_z_grid"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -353,3 +355,42 @@ def test_mesh_volume_empty_inputs():
     assert points_in_mesh_volume(np.empty((0, 3)), tris).shape == (0,)
     pts = np.array([[0.5, 0.5, 0.5]])
     assert points_in_mesh_volume(pts, np.empty((0, 3, 3))).tolist() == [False]
+
+
+# --- z-grid reconstruction (for texture rebake without mesh rebuild) ---------
+
+def test_reconstruct_z_grid_roundtrips_build_mesh_arrays():
+    # A known height grid -> mesh verts -> reconstructed grid should match on
+    # every non-empty cell.
+    z = np.array([[0.0, 0.5, 1.0],
+                  [0.2, 0.7, 1.2]])
+    verts, _faces = build_mesh_arrays(0.0, 0.0, 1.0, z)
+    grid = reconstruct_z_grid(verts, 0.0, 0.0, 1.0, 3, 2)
+    assert grid.shape == (2, 3)
+    assert np.allclose(grid, z)
+
+
+def test_reconstruct_z_grid_marks_holes_nan():
+    # A corner hole in a 3x3 grid: build_mesh_arrays keeps a Z-0 vertex there but
+    # only the quad touching it is dropped, so the used-vertex mask leaves just
+    # that cell NaN while the rest reconstruct exactly.
+    z = np.array([[np.nan, 1.0, 2.0],
+                  [3.0, 4.0, 5.0],
+                  [6.0, 7.0, 8.0]])
+    verts, faces = build_mesh_arrays(0.0, 0.0, 1.0, z)
+    used = np.zeros(len(verts), dtype=bool)
+    used[faces.ravel()] = True
+    grid = reconstruct_z_grid(verts, 0.0, 0.0, 1.0, 3, 3, valid=used)
+    assert np.isnan(grid[0, 0])
+    assert not np.isnan(grid[1, 1])
+    assert np.allclose(grid[~np.isnan(grid)], z[~np.isnan(z)])
+
+
+def test_reconstruct_z_grid_without_valid_uses_all_verts():
+    # With fill-holes on (the default) every cell has a real vertex, so no mask
+    # is needed and reconstruction is exact.
+    z = np.array([[0.0, 0.5, 1.0],
+                  [0.2, 0.7, 1.2]])
+    verts, _faces = build_mesh_arrays(0.0, 0.0, 1.0, z)
+    grid = reconstruct_z_grid(verts, 0.0, 0.0, 1.0, 3, 2)
+    assert np.allclose(grid, z)
