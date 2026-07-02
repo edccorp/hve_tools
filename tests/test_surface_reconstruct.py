@@ -35,3 +35,11 @@ def test_ball_pivoting_radii_handles_zero_spacing():
     assert ball_pivoting_radii(0.0) == [0.0, 0.0, 0.0]
     # Negative spacing is clamped to 0 rather than producing negative radii.
     assert ball_pivoting_radii(-3.0) == [0.0, 0.0, 0.0]
+
+
+def test_ball_pivoting_radii_scale_widens_the_ladder():
+    base = ball_pivoting_radii(1.0, multipliers=(1.0, 2.0))
+    scaled = ball_pivoting_radii(1.0, multipliers=(1.0, 2.0), scale=3.0)
+    assert scaled == [b * 3.0 for b in base]
+    # A negative scale is clamped to 0 rather than flipping the radii.
+    assert ball_pivoting_radii(1.0, scale=-2.0) == [0.0, 0.0, 0.0]

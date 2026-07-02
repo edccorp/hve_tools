@@ -1108,6 +1108,9 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         if scene.roadway_recon_method == 'POISSON':
             c.prop(scene, "roadway_recon_depth")
             c.prop(scene, "roadway_recon_density_trim")
+        elif scene.roadway_recon_method == 'BPA':
+            c.prop(scene, "roadway_recon_bpa_radius_mult")
+            c.label(text="Raise to close holes in sparse areas", icon='INFO')
         elif scene.roadway_recon_method == 'ALPHA':
             c.prop(scene, "roadway_recon_alpha")
         c.prop(scene, "roadway_recon_normals_k")

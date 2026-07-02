@@ -377,6 +377,13 @@ try:
             soft_max=10.0,
             unit='LENGTH',
         )
+        bpy.types.Scene.roadway_recon_bpa_radius_mult = FloatProperty(
+            name="BPA Radius Multiplier",
+            description="Ball Pivoting: scale the ball radii (derived from average point spacing). Raise it to span wider gaps and close holes; too large bridges fine detail",
+            default=1.0,
+            min=0.1,
+            soft_max=10.0,
+        )
         bpy.types.Scene.roadway_recon_normals_k = IntProperty(
             name="Normal Neighbors (k)",
             description="Nearest neighbours used to estimate and orient point normals before reconstruction",
@@ -449,6 +456,7 @@ try:
         del bpy.types.Scene.roadway_recon_depth
         del bpy.types.Scene.roadway_recon_density_trim
         del bpy.types.Scene.roadway_recon_alpha
+        del bpy.types.Scene.roadway_recon_bpa_radius_mult
         del bpy.types.Scene.roadway_recon_normals_k
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries

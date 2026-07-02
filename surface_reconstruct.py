@@ -30,15 +30,17 @@ from .roadway_surface import (
 __all__ = ["HVE_OT_ReconstructSurface3D", "ball_pivoting_radii", "classes"]
 
 
-def ball_pivoting_radii(avg_spacing, multipliers=(0.75, 1.5, 3.0)):
+def ball_pivoting_radii(avg_spacing, multipliers=(0.75, 1.5, 3.0), scale=1.0):
     """Ball-pivoting radii derived from a cloud's average point spacing.
 
     A short ladder of increasing ball sizes lets the algorithm bridge both dense
-    and sparse regions. Returns a plain list of floats (bpy-free, so it can be
-    unit-tested without Open3D).
+    and sparse regions. ``scale`` widens the whole ladder — larger balls span
+    bigger gaps and close holes (at the cost of bridging fine detail). Returns a
+    plain list of floats (bpy-free, so it can be unit-tested without Open3D).
     """
     s = max(float(avg_spacing), 0.0)
-    return [s * m for m in multipliers]
+    m = max(float(scale), 0.0)
+    return [s * mult * m for mult in multipliers]
 
 
 def _build_color_attribute_material(name, attribute_name):
@@ -167,7 +169,8 @@ def _reconstruct_mesh(o3d, points, colors, scene):
     elif method == 'BPA':
         dists = np.asarray(pcd.compute_nearest_neighbor_distance())
         avg = float(np.mean(dists)) if dists.size else 0.0
-        radii = ball_pivoting_radii(avg)
+        scale = float(getattr(scene, "roadway_recon_bpa_radius_mult", 1.0))
+        radii = ball_pivoting_radii(avg, scale=scale)
         mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
             pcd, o3d.utility.DoubleVector(radii)
         )

@@ -480,8 +480,11 @@ pre-filters/clip above. Pick a **Method**:
   for scanned surfaces. Set **Poisson Depth** (higher = finer, slower, noisier)
   and **Density Trim** (fraction of the lowest-density, invented-past-the-data
   vertices to cut away).
-- **Ball Pivoting** — connects the original points into triangles; good for
-  evenly dense clouds.
+- **Ball Pivoting** — rolls a ball over the points and connects the ones it
+  touches into triangles; keeps the original points, good for evenly dense
+  clouds. Where the points are too far apart for the ball, it leaves **holes** —
+  raise **BPA Radius Multiplier** to use a bigger ball that spans wider gaps and
+  closes them (too large starts bridging fine detail).
 - **Alpha Shape** — wraps the points at an **Alpha** radius (0 auto-picks from the
   average spacing).
 
