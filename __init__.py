@@ -233,6 +233,12 @@ try:
             type=bpy.types.Object,
             poll=_roadway_source_poll,
         )
+        bpy.types.Scene.roadway_clip_object = PointerProperty(
+            name="Clip To Object",
+            description="Optional: only surface points inside this object's XY footprint (its convex outline). Draw or scale a plane/box over the area of interest to trim away far-off scan points",
+            type=bpy.types.Object,
+            poll=_roadway_source_poll,
+        )
         bpy.types.Scene.roadway_subsample = bpy.props.BoolProperty(
             name="Subsample (Voxel)",
             description="Thin the point cloud to one averaged point per voxel before surfacing (faster, more uniform)",
@@ -365,6 +371,7 @@ try:
         del bpy.types.Scene.fbx_shape_key_max_samples
         del bpy.types.Scene.fbx_process_collection
         del bpy.types.Scene.roadway_source_object
+        del bpy.types.Scene.roadway_clip_object
         del bpy.types.Scene.roadway_subsample
         del bpy.types.Scene.roadway_voxel_size
         del bpy.types.Scene.roadway_sor

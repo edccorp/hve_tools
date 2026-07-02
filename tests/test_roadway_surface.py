@@ -27,6 +27,8 @@ WANTED = {
     "voxel_downsample",
     "statistical_outlier_mask",
     "mask_points_near_ground",
+    "convex_hull_2d",
+    "points_in_convex_polygon",
 }
 
 ns = {"np": np, "warnings": warnings}
@@ -46,6 +48,8 @@ grid_uvs = ns["grid_uvs"]
 voxel_downsample = ns["voxel_downsample"]
 statistical_outlier_mask = ns["statistical_outlier_mask"]
 mask_points_near_ground = ns["mask_points_near_ground"]
+convex_hull_2d = ns["convex_hull_2d"]
+points_in_convex_polygon = ns["points_in_convex_polygon"]
 
 
 def _flat_ground(step=0.1, extent=2.0):
@@ -216,3 +220,50 @@ def test_grid_uvs_corners():
     assert tuple(uv[2]) == (1.0, 0.0)
     assert tuple(uv[3]) == (0.0, 1.0)
     assert tuple(uv[5]) == (1.0, 1.0)
+
+
+# --- Convex-hull clip (surface only points inside a boundary object) ---------
+
+def test_convex_hull_of_square():
+    # Interior point should be dropped from the hull; corners kept.
+    pts = [(0, 0), (2, 0), (2, 2), (0, 2), (1, 1)]
+    hull = convex_hull_2d(pts)
+    assert hull.shape == (4, 2)
+    corners = {tuple(p) for p in hull.tolist()}
+    assert corners == {(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)}
+
+
+def test_convex_hull_degenerate_is_empty():
+    assert convex_hull_2d([(0, 0), (1, 1)]).shape == (0, 2)
+    assert convex_hull_2d([(0, 0), (1, 1), (2, 2)]).shape == (0, 2)  # collinear
+
+
+def test_points_in_convex_polygon_square():
+    hull = convex_hull_2d([(0, 0), (4, 0), (4, 4), (0, 4)])
+    pts = np.array([
+        [2.0, 2.0],   # inside
+        [0.0, 0.0],   # on a corner -> inside
+        [4.0, 2.0],   # on an edge -> inside
+        [5.0, 2.0],   # outside
+        [-1.0, -1.0],  # outside
+    ])
+    mask = points_in_convex_polygon(pts, hull)
+    assert mask.tolist() == [True, True, True, False, False]
+
+
+def test_points_in_empty_hull_keeps_all():
+    pts = np.array([[0.0, 0.0], [9.0, 9.0]])
+    mask = points_in_convex_polygon(pts, np.empty((0, 2)))
+    assert mask.all()
+
+
+def test_clip_filters_a_cloud_to_boundary():
+    # A 5x5 grid of points, clipped to the lower-left 2x2 region.
+    xs = np.arange(5.0)
+    pts = np.array([[x, y] for x in xs for y in xs])
+    hull = convex_hull_2d([(0, 0), (2, 0), (2, 2), (0, 2)])
+    keep = points_in_convex_polygon(pts, hull)
+    kept = pts[keep]
+    assert kept.min() >= 0.0 and kept[:, 0].max() <= 2.0 and kept[:, 1].max() <= 2.0
+    # 3x3 lattice of integer points lies within [0,2]x[0,2].
+    assert keep.sum() == 9

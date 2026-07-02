@@ -181,6 +181,63 @@ def grid_uvs(nx, ny):
 # Optional point-cloud pre-filters
 # ---------------------------------------------------------------------------
 
+def convex_hull_2d(points_xy):
+    """Return the convex hull of 2D points as a CCW ``(M, 2)`` array.
+
+    Andrew's monotone chain — O(n log n). Fewer than three unique points (a
+    degenerate hull) returns an empty ``(0, 2)`` array so callers can skip
+    clipping. Used to clip a cloud to a boundary object's XY footprint.
+    """
+    pts = np.asarray(points_xy, dtype=np.float64)
+    if pts.shape[0] < 3:
+        return np.empty((0, 2), dtype=np.float64)
+    pts = np.unique(pts, axis=0)  # also sorts lexicographically by (x, y)
+    if pts.shape[0] < 3:
+        return np.empty((0, 2), dtype=np.float64)
+
+    def _cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower = []
+    for p in pts:
+        while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper = []
+    for p in pts[::-1]:
+        while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    hull = np.array(lower[:-1] + upper[:-1], dtype=np.float64)
+    if hull.shape[0] < 3:
+        return np.empty((0, 2), dtype=np.float64)
+    return hull
+
+
+def points_in_convex_polygon(points_xy, hull_ccw):
+    """Boolean keep-mask for points inside (or on) a CCW convex polygon.
+
+    Vectorized half-plane test: a point is inside a counter-clockwise convex
+    polygon when it lies to the left of, or on, every edge. An empty hull keeps
+    all points (no clipping).
+    """
+    pts = np.asarray(points_xy, dtype=np.float64)
+    hull = np.asarray(hull_ccw, dtype=np.float64)
+    if hull.shape[0] < 3 or pts.shape[0] == 0:
+        return np.ones(pts.shape[0], dtype=bool)
+
+    inside = np.ones(pts.shape[0], dtype=bool)
+    px, py = pts[:, 0], pts[:, 1]
+    n = hull.shape[0]
+    for i in range(n):
+        ax, ay = hull[i]
+        bx, by = hull[(i + 1) % n]
+        # Cross product of edge (A->B) with (A->P); >= 0 means left/on the edge.
+        cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+        inside &= cross >= -1e-9
+    return inside
+
+
 def voxel_downsample(points, colors, voxel_size):
     """Thin a cloud to one averaged point (and colour) per occupied voxel.
 
@@ -493,6 +550,26 @@ def _read_point_cloud(source, want_colors):
     return local, colors, attr_name
 
 
+def _boundary_hull_xy(clip_obj):
+    """CCW XY convex hull of a boundary object's world-space vertices.
+
+    Returns an ``(M, 2)`` array, or an empty ``(0, 2)`` array when ``clip_obj``
+    is unusable (not a mesh, too few vertices) so callers skip clipping.
+    """
+    if clip_obj is None or getattr(clip_obj, "type", None) != 'MESH':
+        return np.empty((0, 2), dtype=np.float64)
+    verts = clip_obj.data.vertices
+    n = len(verts)
+    if n < 3:
+        return np.empty((0, 2), dtype=np.float64)
+    local = np.empty(n * 3, dtype=np.float64)
+    verts.foreach_get("co", local)
+    local = local.reshape(n, 3)
+    matrix = np.array(clip_obj.matrix_world, dtype=np.float64)
+    world = local @ matrix[:3, :3].T + matrix[:3, 3]
+    return convex_hull_2d(world[:, :2])
+
+
 def _run_prefilters(scene, points, colors):
     """Apply the enabled pre-filters (voxel subsample, then SOR).
 
@@ -560,6 +637,38 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                     t_matrix = np.array(tex_src.matrix_world, dtype=np.float64)
                     points_full = t_local @ t_matrix[:3, :3].T + t_matrix[:3, 3]
                     colors_full = t_colors
+
+            # Optional clip: keep only points inside a boundary object's XY
+            # footprint, so far-away scan points don't get draped or textured.
+            clip_note = ""
+            clip_obj = getattr(scene, "roadway_clip_object", None)
+            if clip_obj is not None and clip_obj is not source:
+                hull = _boundary_hull_xy(clip_obj)
+                if hull.shape[0] >= 3:
+                    keep = points_in_convex_polygon(points[:, :2], hull)
+                    n_clip = len(points)
+                    points = points[keep]
+                    if colors is not None:
+                        colors = colors[keep]
+                    # Clip the texture cloud to the same footprint too.
+                    keep_full = points_in_convex_polygon(points_full[:, :2], hull)
+                    points_full = points_full[keep_full]
+                    if colors_full is not None:
+                        colors_full = colors_full[keep_full]
+                    if keep.sum() != n_clip:
+                        clip_note = f" Clipped to {int(keep.sum())} points inside {clip_obj.name}."
+                    if len(points) < 3:
+                        self.report(
+                            {'WARNING'},
+                            f"Clip boundary '{clip_obj.name}' left too few points; "
+                            "check it overlaps the cloud.",
+                        )
+                        return {'CANCELLED'}
+                else:
+                    self.report(
+                        {'WARNING'},
+                        f"Clip boundary '{clip_obj.name}' has no usable footprint; ignoring it.",
+                    )
 
             # Optional pre-filters: voxel subsample, then statistical outlier
             # removal, before any surfacing.
@@ -665,7 +774,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 {'INFO'},
                 f"Roadway surface{colored}: {result['nx']}x{result['ny']} grid, "
                 f"{len(result['faces'])} faces, {result['sampled']}/{result['total']} cells "
-                f"sampled from {len(points)} points.{filtered_note}{texture_note}",
+                f"sampled from {len(points)} points.{clip_note}{filtered_note}{texture_note}",
             )
             return {'FINISHED'}
         finally:

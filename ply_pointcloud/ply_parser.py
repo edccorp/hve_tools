@@ -3,7 +3,7 @@ import struct
 
 import numpy as np
 
-__all__ = ["load_ply_vertices", "import_ply"]
+__all__ = ["load_ply_vertices", "build_point_cloud_object", "import_ply"]
 
 
 
@@ -165,7 +165,31 @@ def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribut
         The newly created ``bpy.types.Object``.
     """
     verts, cols = load_ply_vertices(filepath)
-    mesh = bpy.data.meshes.new(name=f"PLY_{bpy.path.display_name_from_filepath(filepath)}")
+    name = f"PLY_{bpy.path.display_name_from_filepath(filepath)}"
+    return build_point_cloud_object(
+        verts, cols, name, setup_geonodes=setup_geonodes, point_radius=point_radius,
+        color_attribute=color_attribute, display_subsample=display_subsample,
+    )
+
+
+def build_point_cloud_object(verts, cols, name, setup_geonodes=False, point_radius=0.01,
+                             color_attribute="Col", display_subsample=100.0):
+    """Build a point-cloud mesh object from loaded vertices/colours.
+
+    Shared by every importer (PLY / PTX / E57) so they all produce the same
+    kind of object with the same Geometry Nodes + material setup.
+
+    Args:
+        verts: (N, 3) array of point positions.
+        cols: (N, 4) RGBA array in 0-1, or ``None`` for no colour.
+        name: Mesh/object name.
+        setup_geonodes, point_radius, color_attribute, display_subsample: see
+            :func:`import_ply`.
+
+    Returns:
+        The newly created ``bpy.types.Object``.
+    """
+    mesh = bpy.data.meshes.new(name=name)
 
     # Bulk-create the vertices (fast even for millions of points).
     n = len(verts)

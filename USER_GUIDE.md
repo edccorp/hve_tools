@@ -45,8 +45,9 @@ workflows. It lets you:
   HVE FBX, RaceRender conversion).
 - **Recreate motion** from crash-data sources such as EDR reports, XYZ/RPY
   motion tables, and survey points.
-- **Build environment geometry from point clouds** — import PLY scans, filter
-  them, and drape a textured roadway surface for vehicle simulations.
+- **Build environment geometry from point clouds** — import PLY, PTX, E57 or
+  LAS/LAZ scans, clip and filter them, and drape a textured roadway surface for
+  vehicle simulations.
 - **Analyze** motion with motion-path tools, two-point scaling, and
   speed/acceleration baking.
 
@@ -327,14 +328,21 @@ Open **Other Tools → Point Cloud Tools** to import a point cloud, optionally
 clean it up, and drape a clean ground surface over it for use as environment
 geometry in vehicle simulations.
 
-**Import.** Click **Import PLY Point Cloud** to load a `.ply` (ASCII or binary).
-It comes in as a mesh of vertices with a `Col` colour attribute and a Geometry
-Nodes display so you can see the points. The import dialog's **Points Visible %**
-(default 100) sets what fraction of points the *viewport display* shows — it is
-display-only and never removes points from the data, so it has no effect on
-surfacing or textures; lower it for very dense clouds to keep the viewport
-responsive. (The importer is also available from **File → Import → PLY Point
-Cloud**.)
+**Import.** Click **Import Point Cloud** to load a scan. Supported formats are
+**PLY** (ASCII or binary), **PTX** (Leica ASCII grid scans), **E57**, and
+**LAS/LAZ** (LiDAR). It comes in as a mesh of vertices with a `Col` colour
+attribute and a Geometry Nodes display so you can see the points. The import
+dialog's **Points Visible %** (default 100) sets what fraction of points the
+*viewport display* shows — it is display-only and never removes points from the
+data, so it has no effect on surfacing or textures; lower it for very dense
+clouds to keep the viewport responsive. (The importer is also available from
+**File → Import → Point Cloud (PLY / PTX / E57 / LAS)**.)
+
+A few formats need an extra Python package installed in Blender's Python:
+**E57** requires `pye57`, and compressed **LAZ** requires `laspy` with LAZ
+support (`pip install laspy[lazrs]`). Uncompressed `.las`, `.ply` and `.ptx`
+are read natively with no extra packages. If a package is missing, the importer
+reports exactly what to install; convert to PLY/PTX as a fallback.
 
 **Surface it:**
 
@@ -344,7 +352,14 @@ Cloud**.)
    importer's GeoNodes display, a **Points Visible %** slider appears here so you
    can adjust how many points the viewport shows (display only — it never
    changes the data, surfacing, or texture).
-2. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:
+2. *(Optional)* Set **Clip To Object** to surface only the points inside a
+   boundary object's footprint. Add a plane (or any mesh) and scale/rotate it to
+   cover just the area of interest, then pick it here — only points inside its
+   convex XY outline are draped and textured, so far-off scan points, adjacent
+   buildings, or the rest of a large site are trimmed away. The clip uses the
+   object's convex outline (a box or plane gives exactly that rectangle), and it
+   applies to the texture colour cloud too.
+3. *(Optional)* Under **Pre-filter**, clean the cloud before surfacing:
    - **Subsample (Voxel)** thins the cloud to one averaged point per **Voxel
      Size** cube — faster and more uniform; run this first on huge clouds.
    - **Remove Outliers (SOR)** drops points whose neighbours are unusually far
@@ -361,14 +376,14 @@ Cloud**.)
    Place** to instead replace the selected cloud's points. The texture always
    bakes from the full, unfiltered cloud, so filtering the geometry never costs
    you colour detail.
-3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
+4. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
-4. Set **Ground Percentile** — how the height of each grid cell is chosen from
+5. Set **Ground Percentile** — how the height of each grid cell is chosen from
    the point heights that land in it (see below). Default 10.
-5. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
+6. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
    gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
    reaches; 0 = unlimited.
-6. The cloud's per-point colour is always carried onto the surface and baked to
+7. The cloud's per-point colour is always carried onto the surface and baked to
    a texture (it's simply skipped if the cloud has no colour). **Color Height
    Tolerance** (default 0.25) keeps the colour honest: only points within that
    distance of the sampled ground height contribute colour, so vehicles,
@@ -390,7 +405,7 @@ Cloud**.)
      the other). If the `.blend` isn't saved yet, the image is packed into the
      file — save the `.blend` and re-create the surface to write the JPG needed
      for H3D export.
-7. Click **Create Roadway Surface**.
+8. Click **Create Roadway Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**

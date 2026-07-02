@@ -1013,6 +1013,8 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             except Exception:
                 pass
 
+        c.prop(scene, "roadway_clip_object")
+
         # --- Optional pre-filters (applied before surfacing) ---
         filt = c.box()
         filt.label(text="Pre-filter (optional)", icon='FILTER')
