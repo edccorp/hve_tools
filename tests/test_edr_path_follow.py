@@ -5,7 +5,7 @@ import pathlib
 
 # Extract the pure (bpy-free) path-following helpers from edr_importer.py so
 # they can be exercised without Blender, matching the other AST-based tests.
-module_path = pathlib.Path(__file__).resolve().parents[1] / "edr_importer.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "motion_data_tools" / "edr_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 

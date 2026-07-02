@@ -4,7 +4,7 @@ import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "build_user_guide_html.py"
-HTML = REPO / "docs" / "USER_GUIDE.html"
+HTML = REPO / "hve_tools" / "docs" / "USER_GUIDE.html"
 
 
 def _load_builder():

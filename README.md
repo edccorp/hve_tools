@@ -1,12 +1,20 @@
 # HVE Tools
 
-HVE Tools is a Blender add-on package for Human Vehicle Environment (HVE) workflows. It adds an **HVE** sidebar tab in the 3D View with pre-simulation setup tools, H3D exporters, post-simulation importers, animation utilities, data analysis helpers, and CSV conversion tools.
+HVE Tools is a suite of three Blender add-ons for Human Vehicle Environment (HVE) and crash-reconstruction workflows. Each add-on installs and works independently:
 
-The add-on targets Blender 4.x and uses Blender's bundled Python modules plus standard Python libraries. No separate Python package installation is required for normal Blender use.
+| Add-on | Folder | Sidebar tab | What it does |
+|--------|--------|-------------|--------------|
+| **HVE Tools** | `hve_tools/` | **HVE** | Pre-simulation setup (materials, object types, terrain properties, presets), H3D vehicle/environment export, GATB contact export, and post-simulation import (variable output, HVE FBX, RaceRender conversion) |
+| **Motion Data Tools** | `motion_data_tools/` | **Motion Data** | Data-driven animation and analysis: EDR data import/entry, XYZ/RPY motion import, survey point import, motion path tools, timed location markers, two-point scaling, and speed/acceleration baking |
+| **Point Cloud Tools** | `point_cloud_tools/` | **Point Cloud** | PLY point-cloud import with GeoNodes display, voxel/SOR pre-filters, and draped roadway surfaces with baked color textures |
 
-> **New to the add-on?** See the step-by-step [User Guide](USER_GUIDE.md) for a hands-on walkthrough of every tool. This README is a compact feature reference. Inside Blender you can open the guide any time from the **Documentation** panel at the bottom of the HVE tab — its **Open User Guide** button opens a bundled offline copy (`docs/USER_GUIDE.html`) in your browser, falling back to the online guide if the file is missing.
+The add-ons target Blender 4.x and use Blender's bundled Python modules plus standard Python libraries. No separate Python package installation is required for normal Blender use.
+
+> **New to the add-ons?** See the step-by-step [User Guide](USER_GUIDE.md) for a hands-on walkthrough of every tool. This README is a compact feature reference. Inside Blender you can open the guide any time from each add-on's **Documentation** panel — the HVE tab's **Open User Guide** button opens a bundled offline copy (`hve_tools/docs/USER_GUIDE.html`) in your browser, falling back to the online guide if the file is missing.
 
 ## Capabilities
+
+## HVE Tools (add-on)
 
 ### Pre-simulation setup
 
@@ -46,6 +54,10 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Provides a post-import **Process Imported FBX** step that reduces shape keys (capped by **Max Shape Key Samples**), merges body meshes, and smooths geometry.
 - **RaceRender converter** (`.csv`): convert HVE variable-output data into RaceRender-ready CSV files.
 
+## Motion Data Tools (add-on)
+
+Formerly the **Other Tools** panel of the single HVE add-on. All panels live in the **Motion Data** sidebar tab, and the tab name is configurable in the add-on preferences.
+
 ### EDR and motion animation tools
 
 - **EDR data importer / entry**:
@@ -81,13 +93,6 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Convert selected motion paths to 3D curve objects in a **Motion Paths** collection.
   - Toggle the motion-path overlay in the active 3D View.
 - **Timed location markers** (own panel): drop triangle markers at a fixed time interval along an animated object's motion, with optional time-value labels, configurable interval, zero frame, size, forward axis, and yaw offset.
-- **Point Cloud Tools**: import, filter, and surface point clouds for vehicle simulations. Numpy-vectorized, so it stays fast on million-point clouds.
-  - **Import PLY point clouds** (ASCII or binary) as a coloured, GeoNodes-displayed mesh (also on **File → Import**).
-  - Optional **pre-filters** before surfacing: **voxel subsample** (thin to one averaged point per voxel) and **Statistical Outlier Removal** (drop points with unusually distant neighbours).
-  - Build a draped ground surface: set the grid **resolution** (cell size, in scene units), and sample ground height per cell with a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
-  - Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
-  - Optionally transfer the point cloud's per-point colour and bake it to a JPG texture (saved next to the .blend) with UVs and an image-texture material, so the colour exports to HVE through the standard texture path. The texture is sampled directly from the point cloud at a chosen **Texture Resolution**, so it can be sharper than the surface grid.
-  - Classifies the result as an **Environment** object for H3D environment export.
 - **Scale objects by two points**:
   - In Edit Mode, select exactly two vertices on a mesh.
   - Enter a target distance in scene units.
@@ -101,15 +106,30 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
   - Use scene units automatically, or force meters or feet.
   - Optionally ignore vertical displacement, include acceleration outputs (off by default), replace prior curves, and parent the helper to the source object.
 
+## Point Cloud Tools (add-on)
+
+All tools live in the **Point Cloud** sidebar tab (configurable in the add-on preferences).
+
+Import, filter, and surface point clouds for vehicle simulations. Numpy-vectorized, so it stays fast on million-point clouds.
+
+- **Import PLY point clouds** (ASCII or binary) as a coloured, GeoNodes-displayed mesh (also on **File → Import**).
+- Optional **pre-filters** before surfacing: **voxel subsample** (thin to one averaged point per voxel) and **Statistical Outlier Removal** (drop points with unusually distant neighbours).
+- Build a draped ground surface: set the grid **resolution** (cell size, in scene units), and sample ground height per cell with a low **percentile** ("from below") that rejects overhead noise and stray below-ground points.
+- Optionally fill sparse holes from neighbours, bounded by a **max fill distance**.
+- Optionally transfer the point cloud's per-point colour and bake it to a JPG texture (saved next to the .blend) with UVs and an image-texture material, so the colour exports to HVE through the standard texture path. The texture is sampled directly from the point cloud at a chosen **Texture Resolution**, so it can be sharper than the surface grid.
+- Classifies the result as an **Environment** object for H3D environment export.
+
 ## Installation
 
 1. Install **Blender 4.x or later**.
-2. Download or clone this repository.
-3. In Blender, open **Edit → Preferences → Add-ons**.
-4. Click **Install…**.
-5. Select this add-on package. If you downloaded the repository as a folder, install the folder or a `.zip` of the folder, depending on your Blender version and add-on installation workflow.
-6. Enable **HVE Menu** in the add-ons list.
-7. Open the 3D View sidebar with **N**, then select the **HVE** tab.
+2. Download or clone this repository. Each add-on is a folder at the repository root: `hve_tools/`, `motion_data_tools/`, and `point_cloud_tools/`.
+3. Zip the folder(s) you want to install, or run `python scripts/build_addon_zips.py` to build all three zips into `dist/`.
+4. In Blender, open **Edit → Preferences → Add-ons**.
+5. Click **Install…** and select an add-on `.zip`. Repeat for each add-on you want.
+6. Enable **HVE Tools**, **Motion Data Tools**, and/or **Point Cloud Tools** in the add-ons list.
+7. Open the 3D View sidebar with **N**, then select the **HVE**, **Motion Data**, or **Point Cloud** tab.
+
+> Each add-on's preferences let you rename its sidebar tab. Point them all at the same name (e.g. **HVE**) to group every panel under one tab like earlier single-add-on versions.
 
 ## Basic workflow
 
@@ -147,7 +167,7 @@ The add-on targets Blender 4.x and uses Blender's bundled Python modules plus st
 
 ### 5. Animate from EDR data
 
-1. Open **Other Tools → EDR Data Importer / Entry**.
+1. Open **Motion Data → Motion Data Tools → EDR Data Importer / Entry**.
 2. Select the target object.
 3. Choose the input mode — **Yaw Rate**, **Steering Wheel Angle**, or **Path Follow**. The inputs shown below the selector change to match the chosen mode.
 4. If using **Steering Wheel Angle**, set wheelbase and steering gear ratio. For **Yaw Rate** or **Steering Wheel Angle** you can also enable slip estimate and tune slip gain / maximum slip. For **Path Follow**, pick the **Path Object** (a curve or polyline mesh) and optionally enable **Align to Path** with a **Path Yaw Offset**.
@@ -180,7 +200,7 @@ To drive the object along a path you already have (an imported point polyline, a
 
 ### 6. Animate from XYZ/RPY motion data
 
-1. Open **Other Tools → Motion Data Importer**.
+1. Open **Motion Data → Motion Data Tools → Motion Data Importer**.
 2. Select the motion target object.
 3. Set frame rate and extrapolation mode.
 4. Under **Import CSV (map columns)**, click **Load CSV File** and choose a CSV. A typical file has this row format:
@@ -193,7 +213,7 @@ Time,X,Y,Z,Roll,Pitch,Yaw
 
 ### 7. Import XYZ points
 
-1. Open **Other Tools → Point Importer**.
+1. Open **Motion Data → Motion Data Tools → Point Importer**.
 2. Under **Import CSV (map columns)**, click **Load CSV File** and choose a CSV. A typical file has this row format:
 
 ```csv
@@ -207,24 +227,24 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 ### 8. Create and convert motion paths
 
 1. Select animated objects.
-2. Open **Other Tools → Motion Path Tools**.
+2. Open **Motion Data → Motion Data Tools → Motion Path Tools**.
 3. Use **Generate Motion Paths** to create Blender motion paths.
 4. Use **Convert Motion Paths To Curve** to create editable curve objects.
 5. Use **Show/Hide Motion Paths** to toggle viewport display.
-6. To place time markers along the motion, use the separate **Other Tools → Timed Location Markers** panel: set the interval, zero frame, size, forward axis, and yaw offset, then click **Create Location Markers**.
+6. To place time markers along the motion, use the separate **Motion Data → Motion Data Tools → Timed Location Markers** panel: set the interval, zero frame, size, forward axis, and yaw offset, then click **Create Location Markers**.
 
 ### 9. Scale an object from two selected vertices
 
 1. Select a mesh object.
 2. Enter **Edit Mode**.
 3. Select exactly two vertices that represent a known distance.
-4. Open **Other Tools → Scale Objects**.
+4. Open **Motion Data → Motion Data Tools → Scale Objects**.
 5. Enter the target distance in scene units.
 6. Click **Scale Object**.
 
 ### 10. Bake speed and acceleration data
 
-1. Select an animated object or assign one in **Other Tools → Speed + Acceleration**.
+1. Select an animated object or assign one in **Motion Data → Motion Data Tools → Speed + Acceleration**.
 2. Choose the object's forward axis and optional yaw offset.
 3. Set the averaging window and unit mode. The averaging window is a sampled frame count; for example, a 3-frame window compares the previous and next sampled positions.
 4. Choose whether to use XY-only displacement, include acceleration outputs, and replace existing output curves.
@@ -233,10 +253,10 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 
 ### 11. Point Cloud Tools (import, filter, surface)
 
-1. Open **Other Tools → Point Cloud Tools** and click **Import PLY Point Cloud** to load a `.ply` (or use an existing mesh point cloud). Select it, or set it as the **Point Cloud**.
+1. Open the **Point Cloud** tab → **Point Cloud Tools** and click **Import PLY Point Cloud** to load a `.ply` (or use an existing mesh point cloud). Select it, or set it as the **Point Cloud**.
 2. *(Optional)* Under **Pre-filter**, enable **Subsample (Voxel)** and/or **Remove Outliers (SOR)** to clean the cloud before surfacing. Filters run per-click and never modify the source; **Apply Filters Only** saves a filtered copy (or replaces the points with **Filter In Place**) without surfacing. The texture always bakes from the full, unfiltered cloud, so filtering thins only the geometry.
 3. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds, and leave **Transfer Point Color** on. With **Bake Color to Texture** (default), save the `.blend` first so the JPG texture can be written next to it.
-4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export; with baking on it carries a texture that exports to HVE.
+4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export (when the HVE Tools add-on is installed); with baking on it carries a texture that exports to HVE.
 
 ## Included examples
 
@@ -262,7 +282,7 @@ Useful development notes:
 - Keep Blender-specific imports (`bpy`, `mathutils`) at module scope where the add-on expects them; do not wrap imports in `try` / `except` blocks.
 - Many tests use Blender API stubs and can run outside Blender, but full add-on workflows should still be validated in Blender.
 - Prefer `rg` for repository searches.
-- `USER_GUIDE.md` is the single source of truth for the guide. After editing it, regenerate the bundled HTML (used by the in-Blender **Open User Guide** button) with `python scripts/build_user_guide_html.py`. A test (`tests/test_user_guide_html.py`) fails if `docs/USER_GUIDE.html` is out of sync.
+- `USER_GUIDE.md` is the single source of truth for the guide. After editing it, regenerate the bundled HTML (used by the in-Blender **Open User Guide** button) with `python scripts/build_user_guide_html.py`. A test (`tests/test_user_guide_html.py`) fails if `hve_tools/docs/USER_GUIDE.html` is out of sync.
 
 ## License
 

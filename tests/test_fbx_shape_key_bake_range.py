@@ -2,7 +2,7 @@ import ast
 import pathlib
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / 'fbx_importer.py'
+module_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "fbx_importer.py"
 module_ast = ast.parse(module_path.read_text())
 
 

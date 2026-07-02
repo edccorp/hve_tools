@@ -1,0 +1,229 @@
+bl_info = {
+    "name": "Motion Data Tools",
+    "author": "Engnineering Dynamics Company : Anthony Cornetto",
+    "version": (1, 0),
+    "blender": (4, 0, 0),
+    "description": "Data-driven animation and analysis: EDR data import, motion CSV import, survey point import, motion paths, timed markers, speed/acceleration baking, and two-point scaling",
+    'warning': '',
+    "category": "Animation",
+}
+
+try:
+    import bpy
+    from . import (
+        props, ui, prefs,
+        edr_importer, import_xyzrpy,
+        xyz_importer, xyz_importer_ui,
+        motionpaths, scale_objects, speed_accel,
+    )
+
+    from bpy.props import (
+        IntProperty,
+        EnumProperty,
+        PointerProperty,
+        FloatProperty,
+        CollectionProperty,
+    )
+
+    modules = [
+        ui, prefs, xyz_importer_ui, motionpaths, edr_importer,
+        scale_objects, import_xyzrpy, speed_accel,
+    ]
+
+    # Aggregate all classes from modules
+    classes = [cls for module in modules for cls in module.classes]
+
+    def register():
+        props.register()
+
+        from .edr_importer import VehiclePathEntry  # Ensure correct module
+        bpy.utils.register_class(VehiclePathEntry)  # Register VehiclePathEntry FIRST
+
+        for cls in classes:
+            bpy.utils.register_class(cls)
+
+        bpy.types.Scene.scale_target_distance = bpy.props.FloatProperty(
+            name="Target Distance",
+            description="Distance to scale the object to, based on scene units",
+            default=1.0,
+            min=0.001,
+        )
+        bpy.types.Scene.speed_accel_target_object = PointerProperty(
+            name="Source Object",
+            description="Animated object used to calculate speed and acceleration",
+            type=bpy.types.Object,
+        )
+        bpy.types.Scene.speed_accel_forward_axis = EnumProperty(
+            name="Forward Direction",
+            description="Local object axis treated as the object's forward direction",
+            items=[
+                ('LOCAL_X', "+X", "Use the object's local +X axis as forward"),
+                ('LOCAL_NEG_X', "-X", "Use the object's local -X axis as forward"),
+                ('LOCAL_Y', "+Y", "Use the object's local +Y axis as forward"),
+                ('LOCAL_NEG_Y', "-Y", "Use the object's local -Y axis as forward"),
+                ('LOCAL_Z', "+Z", "Use the object's local +Z axis as forward"),
+                ('LOCAL_NEG_Z', "-Z", "Use the object's local -Z axis as forward"),
+            ],
+            default='LOCAL_X',
+        )
+        bpy.types.Scene.speed_accel_forward_yaw_offset = FloatProperty(
+            name="Forward Yaw Offset (deg)",
+            description="Additional yaw offset applied to the selected forward direction in degrees",
+            default=0.0,
+            soft_min=-180.0,
+            soft_max=180.0,
+        )
+        bpy.types.Scene.speed_accel_window_frames = IntProperty(
+            name="Average Window (Frames)",
+            description="Number of sampled frames used for the centered average velocity window; 3 compares the previous and next frames",
+            default=3,
+            min=2,
+        )
+        bpy.types.Scene.speed_accel_unit_mode = EnumProperty(
+            name="Distance Units",
+            description="Units represented by object location values before conversion to mph and g",
+            items=[
+                ('AUTO', "Auto", "Use the scene unit scale to convert Blender Units to mph and g"),
+                ('METERS', "Meters", "Treat object location values as meters"),
+                ('FEET', "Feet", "Treat object location values as feet"),
+            ],
+            default='AUTO',
+        )
+        bpy.types.Scene.speed_accel_use_xy_only = bpy.props.BoolProperty(
+            name="Use XY Only",
+            description="Ignore vertical displacement when calculating speed",
+            default=True,
+        )
+        bpy.types.Scene.speed_accel_include_acceleration = bpy.props.BoolProperty(
+            name="Include Acceleration",
+            description="Bake forward, lateral, and vertical acceleration custom properties in addition to speed",
+            default=False,
+        )
+        bpy.types.Scene.speed_accel_remove_old_curves = bpy.props.BoolProperty(
+            name="Replace Existing Curves",
+            description="Remove previously baked speed and acceleration curves from the helper before baking",
+            default=True,
+        )
+        bpy.types.Scene.speed_accel_parent_helper = bpy.props.BoolProperty(
+            name="Parent Helper to Source",
+            description="Parent the SpeedData helper empty to the source object after baking",
+            default=False,
+        )
+
+        bpy.types.Scene.motion_marker_interval_seconds = FloatProperty(
+            name="Marker Interval (sec)",
+            description="Time spacing between generated object location markers",
+            default=1.0,
+            min=0.001,
+        )
+        bpy.types.Scene.motion_marker_size = FloatProperty(
+            name="Marker Size",
+            description="Triangle marker size in scene units",
+            default=1.0,
+            min=0.001,
+        )
+        bpy.types.Scene.motion_marker_zero_frame = FloatProperty(
+            name="Zero Frame",
+            description="Frame used as time zero; markers are generated forward and backward from this frame",
+            default=1.0,
+        )
+        bpy.types.Scene.motion_marker_forward_axis = EnumProperty(
+            name="Marker Forward Direction",
+            description="Local object axis that the triangle tip should point along",
+            items=[
+                ('LOCAL_X', "+X", "Use the object's local +X axis as forward"),
+                ('LOCAL_NEG_X', "-X", "Use the object's local -X axis as forward"),
+                ('LOCAL_Y', "+Y", "Use the object's local +Y axis as forward"),
+                ('LOCAL_NEG_Y', "-Y", "Use the object's local -Y axis as forward"),
+                ('LOCAL_Z', "+Z", "Use the object's local +Z axis as forward"),
+                ('LOCAL_NEG_Z', "-Z", "Use the object's local -Z axis as forward"),
+            ],
+            default='LOCAL_X',
+        )
+        bpy.types.Scene.motion_marker_yaw_offset = FloatProperty(
+            name="Marker Yaw Offset (deg)",
+            description="Additional yaw offset applied to marker direction in degrees",
+            default=0.0,
+            soft_min=-180.0,
+            soft_max=180.0,
+        )
+        bpy.types.Scene.motion_marker_create_time_labels = bpy.props.BoolProperty(
+            name="Create Time Labels",
+            description="Add text labels showing each marker time relative to the zero frame",
+            default=True,
+        )
+        bpy.types.Scene.motion_marker_label_size = FloatProperty(
+            name="Time Label Size",
+            description="Text size for marker time labels in scene units",
+            default=0.5,
+            min=0.001,
+        )
+        bpy.types.Scene.motion_marker_replace_existing = bpy.props.BoolProperty(
+            name="Replace Existing Markers",
+            description="Remove the existing marker mesh for the object before creating a new one",
+            default=True,
+        )
+
+        bpy.types.Object.vehicle_path_entries = CollectionProperty(type=edr_importer.VehiclePathEntry)
+        bpy.types.Object.motion_data_entries = CollectionProperty(type=import_xyzrpy.MotionDataEntry)
+        bpy.types.Object.edr_input_mode_preference = EnumProperty(
+            name="EDR Input Mode Preference",
+            description="Stores which EDR input mode this object uses",
+            items=props.AnimationSettings.EDR_INPUT_MODE_ITEMS,
+            default='YAW_RATE',
+        )
+
+        ui.register()
+        ui.update_panel_bl_category(None, bpy.context)
+
+    def unregister():
+        ui.unregister()
+
+        del bpy.types.Scene.scale_target_distance
+        del bpy.types.Scene.speed_accel_target_object
+        del bpy.types.Scene.speed_accel_forward_axis
+        del bpy.types.Scene.speed_accel_forward_yaw_offset
+        del bpy.types.Scene.speed_accel_window_frames
+        del bpy.types.Scene.speed_accel_unit_mode
+        del bpy.types.Scene.speed_accel_use_xy_only
+        del bpy.types.Scene.speed_accel_include_acceleration
+        del bpy.types.Scene.speed_accel_remove_old_curves
+        del bpy.types.Scene.speed_accel_parent_helper
+        del bpy.types.Scene.motion_marker_interval_seconds
+        del bpy.types.Scene.motion_marker_size
+        del bpy.types.Scene.motion_marker_zero_frame
+        del bpy.types.Scene.motion_marker_forward_axis
+        del bpy.types.Scene.motion_marker_yaw_offset
+        del bpy.types.Scene.motion_marker_create_time_labels
+        del bpy.types.Scene.motion_marker_label_size
+        del bpy.types.Scene.motion_marker_replace_existing
+        del bpy.types.Object.edr_input_mode_preference
+        del bpy.types.Object.motion_data_entries
+        del bpy.types.Object.vehicle_path_entries
+
+        for cls in reversed(classes):
+            bpy.utils.unregister_class(cls)
+
+        from .edr_importer import VehiclePathEntry
+        bpy.utils.unregister_class(VehiclePathEntry)
+
+        props.unregister()
+
+except ModuleNotFoundError:
+    bpy = None
+    modules = []
+    classes = []
+
+    # When running tests or outside Blender, provide no-op register/unregister
+    def register():
+        """Placeholder register function when bpy is unavailable."""
+        pass
+
+    def unregister():
+        """Placeholder unregister function when bpy is unavailable."""
+        pass
+
+if __name__ == "__main__":
+    register()
+
+print("Motion Data Tools successfully (re)loaded")

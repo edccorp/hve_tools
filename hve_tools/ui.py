@@ -1,9 +1,7 @@
 import os
-import numpy as np
 import json
 import bpy
 import re
-import csv
 from bpy.props import FloatProperty, CollectionProperty, StringProperty
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy_extras.io_utils import ImportHelper
@@ -83,27 +81,13 @@ def preferences():
     return p
 
 
-def sync_fps_with_scene(self, context):
-    """Syncs UI FPS field when scene FPS is changed externally"""
-    if context.scene.render.fps != context.scene.anim_settings.anim_fps:
-        context.scene.anim_settings.anim_fps = context.scene.render.fps
-        
 def update_panel_bl_category(self, context):
-    main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_other_tools, HVE_PT_documentation)
+    main_panels = (HVE_PT_pre, HVE_PT_post, HVE_PT_documentation)
     sub_panels = (
         HVE_PT_mechanist_setup,
         HVE_PT_mechanist_export,
         HVE_PT_fbx_importer,
         HVE_PT_variableoutput_importer,
-        HVE_PT_edr_importer,
-        HVE_PT_xyzrpy_importer,
-
-        HVE_PT_point_importer,
-        HVE_PT_motion_paths,
-        HVE_PT_timed_location_markers,
-        HVE_PT_scale_objects,
-        HVE_PT_speed_acceleration,
-        HVE_PT_point_cloud_tools,
         HVE_PT_race_render_exporter,
     )
 
@@ -572,7 +556,6 @@ class HVE_PT_variableoutput_importer(HVE_PT_mechanist_base):
        
     def draw(self, context):
         scene = context.scene
-        target_obj = scene.anim_settings.anim_object
         l = self.layout
         c = l.column()
         
@@ -606,448 +589,6 @@ class HVE_PT_fbx_importer(HVE_PT_mechanist_base):
             l.label(text=f"Only meshes under '{scene.fbx_process_collection.name}'", icon='FILTER')
         else:
             l.label(text="Empty = process all imported vehicles", icon='INFO')
-
-class HVE_PT_other_tools(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Other Tools"
-
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def draw(self, context):
-        l = self.layout
-        col = l.column(align=True)
-        col.label(text="Utilities for data prep and analysis.", icon='TOOL_SETTINGS')
-        col.label(text="Select a utility panel below.")
-
-class HVE_PT_edr_importer(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "EDR Data Importer / Entry"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-       
-    def draw(self, context):
-        scene = context.scene        
-        anim_settings = scene.anim_settings  # Access property group
-        anim_settings.sync_edr_settings_from_target()
-        target_obj = anim_settings.edr_anim_object
-        edr_mode = anim_settings.edr_input_mode
-
-        l = self.layout
-        c = l.column()
-
-        # Mode-specific CSV format hint
-        if edr_mode == 'STEERING_WHEEL_ANGLE':
-            c.label(text="CSV Format: Time,Speed,SteeringWheelAngle")
-        elif edr_mode == 'PATH_FOLLOW':
-            c.label(text="CSV Format: Time,Speed (path sets heading)")
-        else:
-            c.label(text="CSV Format: Time,Speed,YawRate")
-
-        c.label(text="Select EDR Object:")
-        c.prop(anim_settings, "edr_anim_object")
-        c.prop(anim_settings, "edr_input_mode")
-
-        # --- Inputs that depend on the selected mode ---
-        if edr_mode == 'PATH_FOLLOW':
-            path_box = l.box()
-            path_box.label(text="Path Follow", icon='CURVE_PATH')
-            path_box.label(text="Speed-Time data sets position along the path")
-            path_box.prop(anim_settings, "edr_path_object")
-            path_box.prop(anim_settings, "edr_path_align_orientation")
-            if anim_settings.edr_path_align_orientation:
-                path_box.prop(anim_settings, "edr_path_yaw_offset")
-        else:
-            needs_wheelbase = (edr_mode == 'STEERING_WHEEL_ANGLE') or anim_settings.edr_use_slip_estimate
-            if needs_wheelbase:
-                c.prop(anim_settings, "edr_wheelbase")
-
-            if edr_mode == 'STEERING_WHEEL_ANGLE':
-                c.prop(anim_settings, "edr_steering_gear_ratio")
-                c.label(text="yaw_rate = speed / wheelbase * tan(steering_wheel_angle / steering_gear_ratio)")
-                c.label(text="Tip: lower steering ratio increases computed yaw rate.", icon='INFO')
-
-            c.prop(anim_settings, "edr_use_slip_estimate")
-            if anim_settings.edr_use_slip_estimate:
-                c.prop(anim_settings, "edr_slip_gain")
-                c.prop(anim_settings, "edr_slip_max_deg")
-                c.label(text="beta ≈ gain * atan(wheelbase * yaw_rate / speed)")
-                c.label(text="Tip: start with small gain and increase gradually.", icon='INFO')
-                if edr_mode == 'STEERING_WHEEL_ANGLE':
-                    c.label(text="(yaw_rate is first estimated from steering)")
-
-        c.label(text="Frame Rate:")
-        c.prop(anim_settings, "anim_fps")  # Editable FPS field
-
-        c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
-        c.separator()
-
-        # --- Flexible CSV import: load a file, map columns, then import ---
-        import_box = l.box()
-        import_box.label(text="Import CSV (map columns)", icon='IMPORT')
-        import_box.operator("object.load_edr_csv_headers", text="Load CSV File")
-        if anim_settings.edr_csv_filepath:
-            import_box.label(text=f"File: {os.path.basename(anim_settings.edr_csv_filepath)}")
-            if not anim_settings.edr_csv_has_header:
-                import_box.label(text="No header row detected - map columns below", icon='INFO')
-            # Always expose every column so the mapping is ready if you switch
-            # input methods later; unused columns are simply ignored per mode.
-            import_box.prop(anim_settings, "edr_col_time")
-            import_box.prop(anim_settings, "edr_col_speed")
-            import_box.prop(anim_settings, "edr_col_yaw_rate")
-            import_box.prop(anim_settings, "edr_col_steering")
-            import_box.operator("object.import_edr_mapped_csv", text="Import Mapped Data")
-
-        c.separator()
-
-        # --- Animate using the chosen mode ---
-        if edr_mode == 'PATH_FOLLOW':
-            c.operator("object.animate_path_from_speed", text="Animate Along Path")
-        else:
-            c.operator("object.animate_vehicle", text="Animate Object")
-
-        if target_obj:
-            c.label(text=f"Entries for: {target_obj.name}")
-            entries = target_obj.vehicle_path_entries
-        else:
-            c.label(text="No target object selected")
-            entries = []
-
-        for i, entry in enumerate(entries):
-            row = c.row()
-            row.prop(entry, "time", text="Time (s)")
-            row.prop(entry, "speed", text="Speed")
-            if edr_mode == 'STEERING_WHEEL_ANGLE':
-                row.prop(entry, "steering_wheel_angle", text="Steering Wheel Angle (°)")
-            elif edr_mode == 'YAW_RATE':
-                row.prop(entry, "yaw_rate", text="Yaw Rate (°/s)")
-
-        c.operator("object.add_path_entry", text="Add Entry")
-        c.operator("object.remove_path_entry", text="Remove Last Entry")
-        c.operator("object.remove_all_entries", text="Remove All Entries")
-
-
- 
-class HVE_PT_xyzrpy_importer(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Motion Data Importer"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-       
-    def draw(self, context):
-        scene = context.scene
-        anim_settings = scene.anim_settings
-        target_obj = anim_settings.motion_anim_object
-        l = self.layout
-        c = l.column()
-        c.label(text="CSV Format: Time,X,Y,Z,Roll,Pitch,Yaw")
-        c.label(text="Select Motion Object:")
-        c.prop(anim_settings, "motion_anim_object")
-
-        c.label(text="Frame Rate:")
-        c.prop(anim_settings, "anim_fps")  # Editable FPS field
-        c.label(text="Extrapolation Mode:")
-        c.prop(anim_settings, "extrapolation_mode")  # 🔹 User selects extrapolation type
-
-        c.label(text=f"Unit System: {scene.unit_settings.system}")  # Show unit system
-        if target_obj:
-            c.label(text=f"Stored rows for {target_obj.name}: {len(target_obj.motion_data_entries)}")
-        else:
-            c.label(text="No target object selected")
-
-        # --- Load a CSV, map its columns, then import + animate ---
-        c.separator()
-        map_box = l.box()
-        map_box.label(text="Import CSV (map columns)", icon='IMPORT')
-        map_box.operator("import_anim.load_motion_csv_headers", text="Load CSV File")
-        if anim_settings.motion_csv_filepath:
-            map_box.label(text=f"File: {os.path.basename(anim_settings.motion_csv_filepath)}")
-            if not anim_settings.motion_csv_has_header:
-                map_box.label(text="No header row detected - map columns below", icon='INFO')
-            map_box.prop(anim_settings, "motion_col_time")
-            map_box.prop(anim_settings, "motion_col_x")
-            map_box.prop(anim_settings, "motion_col_y")
-            map_box.prop(anim_settings, "motion_col_z")
-            map_box.prop(anim_settings, "motion_col_roll")
-            map_box.prop(anim_settings, "motion_col_pitch")
-            map_box.prop(anim_settings, "motion_col_yaw")
-            map_box.operator("import_anim.import_mapped_motion_csv", text="Import and Animate", icon='IMPORT')
-        
-class HVE_PT_motion_paths(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Motion Path Tools"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-       
-    def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
-
-        c.label(text="Motion Path Tools", icon="ANIM_DATA")  # Section title with an icon
-
-        c.operator("object.generate_motion_path", text="Generate Motion Paths")
-        c.operator("object.remove_motion_path", text="Remove Motion Paths")
-        c.operator("object.convert_motion_path_selected", text="Convert Motion Paths To Curve")
-        c.operator("object.toggle_motion_path_visibility", text="Show/Hide Motion Paths")
-
-
-class HVE_PT_timed_location_markers(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Timed Location Markers"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
-
-        c.label(text="Timed Location Markers", icon="EMPTY_SINGLE_ARROW")
-        c.prop(scene, "motion_marker_interval_seconds")
-        c.prop(scene, "motion_marker_zero_frame")
-        c.prop(scene, "motion_marker_size")
-        c.prop(scene, "motion_marker_forward_axis")
-        c.prop(scene, "motion_marker_yaw_offset")
-        c.prop(scene, "motion_marker_create_time_labels")
-        if scene.motion_marker_create_time_labels:
-            c.prop(scene, "motion_marker_label_size")
-        c.prop(scene, "motion_marker_replace_existing")
-        c.operator("object.create_timed_location_markers", text="Create Location Markers")
-
-
-class HVE_PT_scale_objects(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Scale Objects"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-       
-    def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
-        
-        unit_system = context.scene.unit_settings.system
-        display_unit = "m" if unit_system == 'METRIC' else "ft" if unit_system == 'IMPERIAL' else "BU"
-        
-        c.label(text=f"Scene Units: {unit_system}")
-        c.prop(context.scene, "scale_target_distance", text=f"Target Distance ({display_unit})")
-        c.operator("object.scale_by_two_points", text="Scale Object")
-
-
-class HVE_PT_speed_acceleration(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Speed + Acceleration"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
-
-        c.label(text="Bake animated speed and acceleration", icon="FORCE_FORCE")
-
-        if context.selected_objects:
-            active = context.active_object
-            source = (
-                active
-                if active in context.selected_objects
-                else context.selected_objects[0]
-            )
-            c.label(text=f"Source: {source.name} (selected)", icon="OBJECT_DATA")
-        else:
-            c.label(text="No object selected; choose a source below", icon="INFO")
-            c.prop(scene, "speed_accel_target_object")
-
-        c.prop(scene, "speed_accel_forward_axis")
-        c.prop(scene, "speed_accel_forward_yaw_offset")
-        c.prop(scene, "speed_accel_window_frames")
-        c.prop(scene, "speed_accel_unit_mode")
-        c.prop(scene, "speed_accel_use_xy_only")
-        c.prop(scene, "speed_accel_include_acceleration")
-        c.prop(scene, "speed_accel_remove_old_curves")
-        c.prop(scene, "speed_accel_parent_helper")
-        c.operator("object.calculate_speed_acceleration", text="Calculate Speed + Acceleration")
-
-
-class HVE_PT_point_importer(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Point Importer"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-       
-    def draw(self, context):
-        scene = context.scene
-        anim_settings = scene.anim_settings
-        l = self.layout
-        c = l.column()
-
-        c.label(text="Point Importer", icon="TOOL_SETTINGS")  # Section title with an icon
-        c.label(text="CSV Format: PointNumber,X,Y,Z,Description")
-
-        # --- Load a CSV, map its columns, then import ---
-        map_box = l.box()
-        map_box.label(text="Import CSV (map columns)", icon='IMPORT')
-        map_box.operator("import_xyz.load_point_csv_headers", text="Load CSV File")
-        if anim_settings.point_csv_filepath:
-            map_box.label(text=f"File: {os.path.basename(anim_settings.point_csv_filepath)}")
-            if not anim_settings.point_csv_has_header:
-                map_box.label(text="No header row detected - map columns below", icon='INFO')
-            map_box.prop(anim_settings, "point_col_number")
-            map_box.prop(anim_settings, "point_col_x")
-            map_box.prop(anim_settings, "point_col_y")
-            map_box.prop(anim_settings, "point_col_z")
-            map_box.prop(anim_settings, "point_col_description")
-            map_box.prop(anim_settings, "point_scale_factor")
-            map_box.operator("import_xyz.import_mapped_points", text="Import Points")
-
-
-# Names the point-cloud display input may carry ("Subsample Percent" is the
-# legacy name used by clouds imported before the rename to "Points Visible %").
-_POINTS_VISIBLE_NAMES = {"Points Visible %", "Subsample Percent"}
-
-
-def _geonodes_subsample_input(obj):
-    """Return ``(modifier, socket_identifier)`` for a point cloud's GeoNodes
-    points-visible display input, or None if the object doesn't have one."""
-    if obj is None:
-        return None
-    for mod in obj.modifiers:
-        if mod.type != 'NODES' or not mod.node_group:
-            continue
-        ng = mod.node_group
-        iface = getattr(ng, "interface", None)
-        if iface is not None and hasattr(iface, "items_tree"):
-            for item in iface.items_tree:
-                if (getattr(item, "in_out", "") == 'INPUT'
-                        and getattr(item, "name", "") in _POINTS_VISIBLE_NAMES):
-                    return mod, item.identifier
-        else:  # Blender 3.x
-            for inp in getattr(ng, "inputs", []):
-                if inp.name in _POINTS_VISIBLE_NAMES:
-                    return mod, inp.identifier
-    return None
-
-
-class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = "HVE"
-    bl_label = "Point Cloud Tools"
-    bl_parent_id = "HVE_PT_other_tools"
-    bl_options = {'DEFAULT_CLOSED'}
-    @classmethod
-    def poll(cls, context):
-        return True
-
-    def draw(self, context):
-        scene = context.scene
-        l = self.layout
-        c = l.column()
-
-        # --- Import a point cloud ---
-        c.label(text="Import a PLY point cloud", icon='IMPORT')
-        c.operator("import_scene.ply_pointcloud_geonodes", text="Import PLY Point Cloud", icon='IMPORT')
-        c.separator()
-
-        # --- Build a ground surface ---
-        c.label(text="Build a ground surface from a point cloud", icon="MESH_GRID")
-        c.label(text="Drapes a grid onto a PLY-style point cloud", icon='INFO')
-
-        pc_obj = scene.roadway_source_object or (
-            context.object if context.object and context.object.type == 'MESH' else None
-        )
-        if not scene.roadway_source_object:
-            if pc_obj is not None:
-                c.label(text=f"Source: {pc_obj.name} (active)", icon="OBJECT_DATA")
-            else:
-                c.label(text="Select a mesh point cloud, or set one below", icon='INFO')
-        c.prop(scene, "roadway_source_object")
-
-        # Expose the point cloud's GeoNodes display subsample, if it has one.
-        sub = _geonodes_subsample_input(pc_obj)
-        if sub is not None:
-            mod, ident = sub
-            try:
-                c.prop(mod, '["%s"]' % ident, text="Points Visible %")
-            except Exception:
-                pass
-
-        # --- Optional pre-filters (applied before surfacing) ---
-        filt = c.box()
-        filt.label(text="Pre-filter (optional)", icon='FILTER')
-        filt.prop(scene, "roadway_subsample")
-        if scene.roadway_subsample:
-            filt.prop(scene, "roadway_voxel_size")
-        filt.prop(scene, "roadway_sor")
-        if scene.roadway_sor:
-            filt.prop(scene, "roadway_sor_neighbors")
-            filt.prop(scene, "roadway_sor_ratio")
-        if scene.roadway_subsample or scene.roadway_sor:
-            filt.prop(scene, "roadway_filter_in_place")
-            filt.operator("object.filter_point_cloud", text="Apply Filters Only", icon='CHECKMARK')
-            filt.label(text="Filters also run when creating the surface", icon='INFO')
-
-        c.prop(scene, "roadway_cell_size")
-        c.prop(scene, "roadway_ground_percentile")
-        c.prop(scene, "roadway_fill_holes")
-        if scene.roadway_fill_holes:
-            c.prop(scene, "roadway_fill_distance")
-        c.prop(scene, "roadway_transfer_color")
-        if scene.roadway_transfer_color:
-            c.prop(scene, "roadway_color_height_tol")
-            c.prop(scene, "roadway_bake_texture")
-            if scene.roadway_bake_texture:
-                c.prop(scene, "roadway_texture_size")
-                c.prop(scene, "roadway_texture_source_object")
-                if not bpy.data.filepath:
-                    c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
-            else:
-                c.prop(scene, "roadway_create_material")
-
-        c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
-        c.label(text="Result is classified as Environment", icon='WORLD')
-
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):
     bl_space_type = 'VIEW_3D'
@@ -1092,15 +633,6 @@ classes = (
     HVE_PT_post,
     HVE_PT_fbx_importer,
     HVE_PT_variableoutput_importer,
-    HVE_PT_other_tools,
-    HVE_PT_edr_importer,
-    HVE_PT_xyzrpy_importer,
-    HVE_PT_motion_paths,
-    HVE_PT_timed_location_markers,
-    HVE_PT_scale_objects,
-    HVE_PT_speed_acceleration,
-    HVE_PT_point_importer,
-    HVE_PT_point_cloud_tools,
     HVE_PT_race_render_exporter,
     HVE_PT_documentation,
     HVE_OT_save_preset,
@@ -1108,13 +640,11 @@ classes = (
     HVETOOLS_OT_set_selected_hve_type,
     HVETOOLS_OT_copy_surface_to_selected,
     HVE_OT_open_user_guide,
-
-    )
+)
 
 
 def register():
-    # Sync UI FPS with scene FPS when scene FPS changes
-    bpy.app.handlers.depsgraph_update_post.append(sync_fps_with_scene)
-    
+    pass
+
 def unregister():
-    bpy.app.handlers.depsgraph_update_post.remove(sync_fps_with_scene)
+    pass

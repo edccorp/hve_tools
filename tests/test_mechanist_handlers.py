@@ -1,4 +1,5 @@
 import importlib
+import pathlib
 import sys
 import types
 
@@ -158,11 +159,19 @@ def blender_stubs(monkeypatch):
 
 @pytest.fixture
 def mechanist_modules(blender_stubs):
-    for module_name in ["hve_tools.debug", "hve_tools.mechanist", "hve_tools.ops"]:
+    # Import mechanist/ops through a synthetic parent package so the add-on's
+    # __init__.py (which imports every submodule) is not executed against the
+    # minimal bpy stubs above, while relative imports still resolve.
+    pkg_name = "hve_tools_mechanist_test_pkg"
+    for module_name in [pkg_name, f"{pkg_name}.debug", f"{pkg_name}.mechanist", f"{pkg_name}.ops"]:
         sys.modules.pop(module_name, None)
 
-    mechanist = importlib.import_module("hve_tools.mechanist")
-    ops = importlib.import_module("hve_tools.ops")
+    pkg = types.ModuleType(pkg_name)
+    pkg.__path__ = [str(pathlib.Path(__file__).resolve().parents[1] / "hve_tools")]
+    sys.modules[pkg_name] = pkg
+
+    mechanist = importlib.import_module(f"{pkg_name}.mechanist")
+    ops = importlib.import_module(f"{pkg_name}.ops")
 
     # Provide minimal implementations expected by the operator wrappers.
     mechanist.HVEMechanist.draw_handler = staticmethod(lambda: None)

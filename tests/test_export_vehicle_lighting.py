@@ -3,7 +3,7 @@ import pathlib
 import re
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / "export_vehicle.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "export_vehicle.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {"re": re}

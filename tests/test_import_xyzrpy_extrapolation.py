@@ -2,7 +2,7 @@ import ast
 import pathlib
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / "import_xyzrpy.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "motion_data_tools" / "import_xyzrpy.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 

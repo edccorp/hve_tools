@@ -1,13 +1,17 @@
 import pathlib
 
 repo = pathlib.Path(__file__).resolve().parents[1]
-ui_source = (repo / "ui.py").read_text()
-props_source = (repo / "props.py").read_text()
-init_source = (repo / "__init__.py").read_text()
-materials_source = (repo / "materials.py").read_text()
-racerender_ui_source = (repo / "racerender_exporter_ui.py").read_text()
-fbx_ui_source = (repo / "fbx_importer_ui.py").read_text()
-fbx_importer_source = (repo / "fbx_importer.py").read_text()
+ui_source = (repo / "hve_tools" / "ui.py").read_text()
+props_source = (repo / "hve_tools" / "props.py").read_text()
+init_source = (repo / "hve_tools" / "__init__.py").read_text()
+materials_source = (repo / "hve_tools" / "materials.py").read_text()
+racerender_ui_source = (repo / "hve_tools" / "racerender_exporter_ui.py").read_text()
+fbx_ui_source = (repo / "hve_tools" / "fbx_importer_ui.py").read_text()
+fbx_importer_source = (repo / "hve_tools" / "fbx_importer.py").read_text()
+motion_ui_source = (repo / "motion_data_tools" / "ui.py").read_text()
+motion_init_source = (repo / "motion_data_tools" / "__init__.py").read_text()
+pointcloud_ui_source = (repo / "point_cloud_tools" / "ui.py").read_text()
+pointcloud_init_source = (repo / "point_cloud_tools" / "__init__.py").read_text()
 
 
 def test_object_type_enum_includes_gatb_surface():
@@ -82,21 +86,62 @@ def test_fbx_importer_file_browser_panel_has_no_inline_options():
     assert 'layout.prop(operator, "find_missing_files")' not in fbx_ui_source
 
 
-def test_other_tools_child_panels_default_closed():
+def test_hve_ui_no_longer_hosts_motion_or_point_cloud_panels():
+    # The Other Tools group moved to the Motion Data Tools add-on, and the
+    # point cloud panel moved to the Point Cloud Tools add-on.
+    assert "HVE_PT_other_tools" not in ui_source
+    assert "Point Cloud Tools" not in ui_source
+    assert "anim_settings" not in ui_source
+    assert "roadway_" not in ui_source
+
+
+def test_motion_tools_child_panels_default_closed():
     for panel_name in (
-        "HVE_PT_edr_importer",
-        "HVE_PT_xyzrpy_importer",
-        "HVE_PT_motion_paths",
-        "HVE_PT_timed_location_markers",
-        "HVE_PT_scale_objects",
-        "HVE_PT_speed_acceleration",
-        "HVE_PT_point_importer",
+        "MOTION_PT_edr_importer",
+        "MOTION_PT_xyzrpy_importer",
+        "MOTION_PT_motion_paths",
+        "MOTION_PT_timed_location_markers",
+        "MOTION_PT_scale_objects",
+        "MOTION_PT_speed_acceleration",
+        "MOTION_PT_point_importer",
     ):
-        start = ui_source.index(f"class {panel_name}")
-        end = ui_source.find("\nclass ", start + 1)
-        section = ui_source[start:end if end != -1 else len(ui_source)]
-        assert 'bl_parent_id = "HVE_PT_other_tools"' in section
+        start = motion_ui_source.index(f"class {panel_name}")
+        end = motion_ui_source.find("\nclass ", start + 1)
+        section = motion_ui_source[start:end if end != -1 else len(motion_ui_source)]
+        assert 'bl_parent_id = "MOTION_PT_tools"' in section
         assert "bl_options = {'DEFAULT_CLOSED'}" in section
+
+
+def test_each_addon_defines_its_own_bl_info():
+    for source, name in (
+        (init_source, '"name": "HVE Tools"'),
+        (motion_init_source, '"name": "Motion Data Tools"'),
+        (pointcloud_init_source, '"name": "Point Cloud Tools"'),
+    ):
+        assert "bl_info" in source
+        assert name in source
+
+
+def test_addon_scene_properties_are_registered_with_their_addon():
+    # Motion Data Tools owns the marker/speed/scale scene props and the
+    # per-object EDR and motion entries.
+    assert "motion_marker_interval_seconds" in motion_init_source
+    assert "speed_accel_target_object" in motion_init_source
+    assert "scale_target_distance" in motion_init_source
+    assert "vehicle_path_entries" in motion_init_source
+    # Point Cloud Tools owns the roadway props.
+    assert "roadway_source_object" in pointcloud_init_source
+    assert "roadway_cell_size" in pointcloud_init_source
+    # The HVE add-on no longer registers any of them.
+    for prop in ("motion_marker_", "speed_accel_", "roadway_", "vehicle_path_entries"):
+        assert prop not in init_source
+
+
+def test_point_cloud_panel_is_top_level_in_its_addon():
+    assert "class POINTCLOUD_PT_tools" in pointcloud_ui_source
+    assert "bl_parent_id" not in pointcloud_ui_source.split("class POINTCLOUD_PT_tools")[1].split("class ")[0]
+    assert "import_scene.ply_pointcloud_geonodes" in pointcloud_ui_source
+    assert "object.create_roadway_surface" in pointcloud_ui_source
 
 
 def test_fbx_importer_reports_progress_to_blender_ui():

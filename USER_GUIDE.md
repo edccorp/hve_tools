@@ -1,9 +1,15 @@
 # HVE Tools — User Guide
 
-A hands-on guide to using the HVE Tools Blender add-on. It walks you through
-installing the add-on, finding its panels, and completing the most common
-tasks step by step. For a terse feature-by-feature reference, see
-[`README.md`](README.md).
+A hands-on guide to using the HVE Tools add-on suite for Blender. The suite is
+three add-ons that install separately and work together:
+
+- **HVE Tools** — HVE simulation setup, H3D export, and result import.
+- **Motion Data Tools** — data-driven animation and analysis utilities.
+- **Point Cloud Tools** — PLY point-cloud import, filtering, and surfacing.
+
+This guide walks you through installing the add-ons, finding their panels, and
+completing the most common tasks step by step. For a terse feature-by-feature
+reference, see [`README.md`](README.md).
 
 ---
 
@@ -18,7 +24,7 @@ tasks step by step. For a terse feature-by-feature reference, see
      - [4.2 Export H3D files](#42-export-h3d-files)
    - **Post-Simulation Processing**
      - [4.3 Import post-simulation results](#43-import-post-simulation-results)
-   - **Other Tools**
+   - **Motion Data Tools**
      - [4.4 Understanding the CSV column mapping](#44-understanding-the-csv-column-mapping)
      - [4.5 Animate from EDR data](#45-animate-from-edr-data)
      - [4.6 Animate from XYZ/RPY motion data](#46-animate-from-xyzrpy-motion-data)
@@ -27,6 +33,7 @@ tasks step by step. For a terse feature-by-feature reference, see
      - [4.9 Create timed location markers](#49-create-timed-location-markers)
      - [4.10 Scale an object to a known distance](#410-scale-an-object-to-a-known-distance)
      - [4.11 Bake speed and acceleration](#411-bake-speed-and-acceleration)
+   - **Point Cloud Tools**
      - [4.12 Point Cloud Tools (import, filter, surface)](#412-point-cloud-tools-import-filter-surface)
 5. [Units and scale](#5-units-and-scale)
 6. [Troubleshooting](#6-troubleshooting)
@@ -34,59 +41,66 @@ tasks step by step. For a terse feature-by-feature reference, see
 
 ---
 
-## 1. What this add-on does
+## 1. What this add-on suite does
 
-HVE Tools bridges Blender and **HVE (Human Vehicle Environment)** simulation
-workflows. It lets you:
+The suite bridges Blender and **HVE (Human Vehicle Environment)** simulation
+workflows. Each add-on covers one part of the job:
 
-- **Set up and export** scene objects (vehicles, environments, GATB surfaces)
-  as HVE `.h3d` files.
-- **Import simulation results** back into Blender (variable-output CSV/HVO,
-  HVE FBX, RaceRender conversion).
-- **Recreate motion** from crash-data sources such as EDR reports, XYZ/RPY
-  motion tables, and survey points.
-- **Build environment geometry from point clouds** — import PLY scans, filter
-  them, and drape a textured roadway surface for vehicle simulations.
-- **Analyze** motion with motion-path tools, two-point scaling, and
-  speed/acceleration baking.
+- **HVE Tools** — **set up and export** scene objects (vehicles, environments,
+  GATB surfaces) as HVE `.h3d` files, and **import simulation results** back
+  into Blender (variable-output CSV/HVO, HVE FBX, RaceRender conversion).
+- **Motion Data Tools** — **recreate motion** from crash-data sources such as
+  EDR reports, XYZ/RPY motion tables, and survey points, and **analyze** motion
+  with motion-path tools, two-point scaling, and speed/acceleration baking.
+- **Point Cloud Tools** — **build environment geometry from point clouds**:
+  import PLY scans, filter them, and drape a textured roadway surface for
+  vehicle simulations.
 
-Everything lives in one sidebar tab in the 3D View.
+Each add-on gets its own sidebar tab in the 3D View (**HVE**, **Motion Data**,
+and **Point Cloud**). Install just the ones you need — they have no
+dependencies on each other.
 
 ---
 
 ## 2. Install and find the panels
 
 1. Install **Blender 4.x or later**.
-2. Download or clone this repository (or a `.zip` of it).
+2. Download or clone this repository. The three add-ons live in their own
+   folders: `hve_tools/`, `motion_data_tools/`, and `point_cloud_tools/`.
+   Zip each folder you want (or run `python scripts/build_addon_zips.py` to
+   build all three zips into `dist/`).
 3. In Blender: **Edit → Preferences → Add-ons → Install…**, then select the
-   add-on package (the folder or its `.zip`).
-4. Tick **HVE Menu** in the add-ons list to enable it.
-5. In the 3D View, press **N** to open the sidebar, then click the **HVE** tab.
+   add-on `.zip` (repeat for each add-on you want).
+4. Tick **HVE Tools**, **Motion Data Tools**, and/or **Point Cloud Tools** in
+   the add-ons list to enable them.
+5. In the 3D View, press **N** to open the sidebar, then click the **HVE**,
+   **Motion Data**, or **Point Cloud** tab.
 
-> **Tip — rename the tab.** In **Edit → Preferences → Add-ons → HVE Menu**,
-> expand the preferences to choose the **HVE** tab, the **Human Vehicle
-> Environment** tab, or a **Custom Tab Name**. Useful if you want HVE Tools to
-> share an existing sidebar tab.
+> **Tip — rename the tabs.** Each add-on's preferences (**Edit → Preferences →
+> Add-ons**, expand the add-on) let you choose its sidebar tab name. Set them
+> all to the same name (e.g. **HVE**) if you'd like every panel to share one
+> tab like earlier versions of this package.
 
-If you don't see the **HVE** tab, confirm the add-on is enabled and that you
+If you don't see a tab, confirm the matching add-on is enabled and that you
 are in the 3D View (not, say, the Shader Editor).
 
 ---
 
 ## 3. How the sidebar is organized
 
-The **HVE** tab groups everything into top-level panels:
+Each add-on has its own sidebar tab with top-level panels:
 
-| Panel | Use it for | Sub-panels |
-|-------|-----------|------------|
-| **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
-| **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
-| **Other Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration**, **Point Cloud Tools** |
-| **Documentation** | Opening this guide | **Open User Guide** opens the bundled offline copy in your browser |
+| Tab (add-on) | Panel | Use it for | Sub-panels |
+|--------------|-------|-----------|------------|
+| **HVE** | **Pre-Simulation Setup** | Getting Blender objects ready for HVE and exporting them | **H3D Setup**, **Export to HVE** |
+| **HVE** | **Post-Simulation Processing** | Bringing HVE results back into Blender | **HVE FBX Importer**, **Variable Output Importer**, **RaceRender Converter** |
+| **HVE** | **Documentation** | Opening this guide | **Open User Guide** opens the bundled offline copy in your browser |
+| **Motion Data** | **Motion Data Tools** | Data-driven animation and analysis utilities | **EDR Data Importer / Entry**, **Motion Data Importer**, **Point Importer**, **Motion Path Tools**, **Timed Location Markers**, **Scale Objects**, **Speed + Acceleration** |
+| **Point Cloud** | **Point Cloud Tools** | Importing, filtering, and surfacing point clouds | — |
 
 Most panels are collapsed by default — click a panel header to expand it. The
 task guides below follow this same order: Pre-Simulation Setup, then
-Post-Simulation Processing, then Other Tools.
+Post-Simulation Processing, then Motion Data Tools, then Point Cloud Tools.
 
 ---
 
@@ -157,7 +171,10 @@ Open **Post-Simulation Processing** and pick the matching importer:
 - **RaceRender Converter** — convert HVE variable output into RaceRender-ready
   `.csv` files.
 
-### Other Tools
+### Motion Data Tools
+
+The tasks in this group live in the **Motion Data** tab (the **Motion Data
+Tools** add-on).
 
 ### 4.4 Understanding the CSV column mapping
 
@@ -188,7 +205,7 @@ Notes:
 
 ### 4.5 Animate from EDR data
 
-Open **Other Tools → EDR Data Importer / Entry** to turn speed with yaw-rate,
+Open **Motion Data Tools → EDR Data Importer / Entry** to turn speed with yaw-rate,
 steering-angle, or path data into motion.
 
 **First run (quick start).** For a fast result using the bundled
@@ -236,7 +253,7 @@ or `EDR_Combined_Example.csv` (which carries all four columns at once).
 
 ### 4.6 Animate from XYZ/RPY motion data
 
-Open **Other Tools → Motion Data Importer** for data that already contains full
+Open **Motion Data Tools → Motion Data Importer** for data that already contains full
 pose per timestamp.
 
 1. Set the **Motion Object** and **Frame Rate**.
@@ -253,7 +270,7 @@ feet to meters in Imperial scenes. Sample file: `XYZRPY_Example.csv`.
 
 ### 4.7 Import survey / point data
 
-Open **Other Tools → Point Importer** to place markers from a coordinate list.
+Open **Motion Data Tools → Point Importer** to place markers from a coordinate list.
 
 1. Under **Import CSV (map columns)**, **Load CSV File** and review the
    **Point Number / X / Y / Z / Description** dropdowns
@@ -270,7 +287,7 @@ connects points that share a description into a polyline. Sample file:
 
 ### 4.8 Motion path tools
 
-Open **Other Tools → Motion Path Tools** with animated object(s) selected:
+Open **Motion Data Tools → Motion Path Tools** with animated object(s) selected:
 
 - **Generate Motion Paths** / **Remove Motion Paths** — add or clear Blender
   motion paths.
@@ -281,7 +298,7 @@ Open **Other Tools → Motion Path Tools** with animated object(s) selected:
 
 ### 4.9 Create timed location markers
 
-Open **Other Tools → Timed Location Markers** with an animated object selected to
+Open **Motion Data Tools → Timed Location Markers** with an animated object selected to
 drop triangle markers at a fixed time interval along the motion, with optional
 time-value text labels:
 
@@ -295,7 +312,7 @@ time-value text labels:
 
 ### 4.10 Scale an object to a known distance
 
-Open **Other Tools → Scale Objects**:
+Open **Motion Data Tools → Scale Objects**:
 
 1. Select a mesh object and enter **Edit Mode**.
 2. Select **exactly two vertices** spanning a known real-world distance.
@@ -305,7 +322,7 @@ Open **Other Tools → Scale Objects**:
 
 ### 4.11 Bake speed and acceleration
 
-Open **Other Tools → Speed + Acceleration** with an animated object selected (or
+Open **Motion Data Tools → Speed + Acceleration** with an animated object selected (or
 assign a **Source Object**):
 
 1. Set the **Forward Direction** axis and optional **Forward Yaw Offset**.
@@ -321,9 +338,12 @@ Results are baked as animated custom properties (average speed, forward speed,
 forward/lateral/vertical acceleration) on a helper empty named
 `SpeedData_<object name>`.
 
+### Point Cloud Tools
+
 ### 4.12 Point Cloud Tools (import, filter, surface)
 
-Open **Other Tools → Point Cloud Tools** to import a point cloud, optionally
+Open the **Point Cloud** tab → **Point Cloud Tools** (the **Point Cloud Tools**
+add-on) to import a point cloud, optionally
 clean it up, and drape a clean ground surface over it for use as environment
 geometry in vehicle simulations.
 
@@ -400,7 +420,7 @@ Cloud**.)
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
 object so it flows into the H3D environment export (with the baked texture, if
-enabled). It shows a wait cursor and
+enabled) when the HVE Tools add-on is installed. It shows a wait cursor and
 progress while it runs, and the report line notes the grid size and how many
 cells were sampled — if it warns that no cells had enough points, increase the
 cell size.
@@ -436,9 +456,11 @@ cell.
 
 ## 6. Troubleshooting
 
-**The HVE tab is missing.** Make sure **HVE Menu** is enabled in Preferences,
-you're in the 3D View, and the sidebar is open (**N**). Check the tab name in
-the add-on preferences.
+**A tab is missing (HVE / Motion Data / Point Cloud).** Each tab belongs to its
+own add-on — make sure the matching add-on (**HVE Tools**, **Motion Data
+Tools**, or **Point Cloud Tools**) is enabled in Preferences, you're in the 3D
+View, and the sidebar is open (**N**). Check the tab name in that add-on's
+preferences.
 
 **"No target object selected."** EDR/motion tools animate the object chosen in
 that panel's object field — set it before importing or animating.

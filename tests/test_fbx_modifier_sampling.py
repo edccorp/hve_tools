@@ -3,7 +3,7 @@ import pathlib
 from contextlib import contextmanager
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / 'fbx_importer.py'
+module_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "fbx_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {'contextmanager': contextmanager}

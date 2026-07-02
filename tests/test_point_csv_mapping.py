@@ -22,9 +22,9 @@ def _load(module_name, func_names=(), assign_names=()):
             exec(compile(ast.Module([node], []), filename="<ast>", mode="exec"), ns)
 
 
-_load("edr_importer.py", func_names={"normalize_header"})
+_load("motion_data_tools/edr_importer.py", func_names={"normalize_header"})
 _load(
-    "xyz_importer.py",
+    "motion_data_tools/xyz_importer.py",
     func_names={"auto_map_point_columns", "default_point_positional_mapping"},
     assign_names={"POINT_COLUMN_FIELDS", "POINT_COLUMN_KEYWORDS"},
 )

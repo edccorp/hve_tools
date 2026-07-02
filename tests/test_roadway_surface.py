@@ -9,7 +9,7 @@ np = pytest.importorskip("numpy")  # roadway core is numpy-vectorized; skip if a
 
 # Extract the bpy-free heightfield helpers from roadway_surface.py so they can
 # be exercised without Blender, matching the other AST-based tests here.
-module_path = pathlib.Path(__file__).resolve().parents[1] / "roadway_surface.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "point_cloud_tools" / "roadway_surface.py"
 module_ast = ast.parse(module_path.read_text())
 
 WANTED = {

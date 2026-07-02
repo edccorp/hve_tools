@@ -1,8 +1,8 @@
 import pathlib
 
 repo = pathlib.Path(__file__).resolve().parents[1]
-importer_source = (repo / "variableoutput_importer.py").read_text()
-ui_source = (repo / "variableoutput_importer_ui.py").read_text()
+importer_source = (repo / "hve_tools" / "variableoutput_importer.py").read_text()
+ui_source = (repo / "hve_tools" / "variableoutput_importer_ui.py").read_text()
 
 
 def test_variableoutput_inspector_exposes_vehicle_and_group_ids():

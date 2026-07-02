@@ -2,7 +2,7 @@ import ast
 import pathlib
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / "export_environment.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "export_environment.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {}

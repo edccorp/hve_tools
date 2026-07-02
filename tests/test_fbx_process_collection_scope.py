@@ -5,7 +5,7 @@ import types
 
 # Extract the collection-scoping helpers from fbx_importer_ui.py and drive them
 # with stub collections (no Blender needed).
-module_path = pathlib.Path(__file__).resolve().parents[1] / "fbx_importer_ui.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "fbx_importer_ui.py"
 module_ast = ast.parse(module_path.read_text())
 
 WANTED = {"_collection_and_descendant_names", "get_hve_vehicle_names"}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate ``docs/USER_GUIDE.html`` from ``USER_GUIDE.md``.
+"""Generate ``hve_tools/docs/USER_GUIDE.html`` from ``USER_GUIDE.md``.
 
 The add-on ships a pre-built HTML copy of the user guide so the in-Blender
 **Open User Guide** button can display it in a browser with proper formatting
@@ -19,7 +19,7 @@ import re
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE = os.path.join(REPO_ROOT, "USER_GUIDE.md")
-OUTPUT = os.path.join(REPO_ROOT, "docs", "USER_GUIDE.html")
+OUTPUT = os.path.join(REPO_ROOT, "hve_tools", "docs", "USER_GUIDE.html")
 
 
 def slug(text):

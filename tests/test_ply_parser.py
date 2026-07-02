@@ -10,7 +10,7 @@ np = pytest.importorskip("numpy")  # parser now returns numpy arrays
 
 
 # Extract the bpy-free PLY parsing helpers from ply_pointcloud/ply_parser.py.
-module_path = pathlib.Path(__file__).resolve().parents[1] / "ply_pointcloud" / "ply_parser.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "point_cloud_tools" / "ply_pointcloud" / "ply_parser.py"
 module_ast = ast.parse(module_path.read_text())
 
 WANTED = {"_ply_parse_header", "_struct_fmt", "_numpy_fmt", "_color_indices", "load_ply_vertices"}

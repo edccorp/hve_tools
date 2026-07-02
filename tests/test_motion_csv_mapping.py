@@ -23,9 +23,9 @@ def _load(module_name, func_names=(), assign_names=()):
 
 
 # normalize_header is shared from the EDR importer.
-_load("edr_importer.py", func_names={"normalize_header"})
+_load("motion_data_tools/edr_importer.py", func_names={"normalize_header"})
 _load(
-    "import_xyzrpy.py",
+    "motion_data_tools/import_xyzrpy.py",
     func_names={"auto_map_motion_columns", "default_motion_positional_mapping"},
     assign_names={"MOTION_COLUMN_FIELDS", "MOTION_COLUMN_KEYWORDS"},
 )

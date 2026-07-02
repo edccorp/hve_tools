@@ -1,7 +1,7 @@
 import pathlib
 
 
-ui_path = pathlib.Path(__file__).resolve().parents[1] / "export_environment_ui.py"
+ui_path = pathlib.Path(__file__).resolve().parents[1] / "hve_tools" / "export_environment_ui.py"
 source = ui_path.read_text()
 
 

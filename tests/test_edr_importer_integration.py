@@ -13,7 +13,7 @@ class MathNP:
         return math.sin(value)
 
 
-module_path = pathlib.Path(__file__).resolve().parents[1] / "edr_importer.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "motion_data_tools" / "edr_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 ns = {"np": MathNP}

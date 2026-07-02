@@ -6,7 +6,7 @@ import tempfile
 
 # Extract import_mapped_csv_data (and the helpers it depends on) so the
 # end-to-end mapping/parsing can be tested without Blender, using mock objects.
-module_path = pathlib.Path(__file__).resolve().parents[1] / "edr_importer.py"
+module_path = pathlib.Path(__file__).resolve().parents[1] / "motion_data_tools" / "edr_importer.py"
 source = module_path.read_text()
 module_ast = ast.parse(source)
 
