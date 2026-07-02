@@ -351,30 +351,6 @@ def bake_point_color_texture(points, colors, min_x, min_y, cell_size, nx, ny,
 MAX_GRID_VERTS = 8_000_000
 
 
-def _build_color_attribute_material(name, attribute_name):
-    """Create a material whose Base Color is driven by a color attribute."""
-    material = bpy.data.materials.new(name)
-    material.use_nodes = True
-    tree = material.node_tree
-    tree.nodes.clear()
-
-    output = tree.nodes.new('ShaderNodeOutputMaterial')
-    output.location = (300, 0)
-    principled = tree.nodes.new('ShaderNodeBsdfPrincipled')
-    principled.location = (0, 0)
-    attribute = tree.nodes.new('ShaderNodeAttribute')
-    attribute.location = (-300, 0)
-    attribute.attribute_name = attribute_name
-    try:
-        attribute.attribute_type = 'GEOMETRY'
-    except (AttributeError, TypeError):
-        pass
-
-    tree.links.new(attribute.outputs['Color'], principled.inputs['Base Color'])
-    tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
-    return material
-
-
 def _build_image_texture_material(name, image):
     """Create a material whose Base Color comes from an Image Texture node."""
     material = bpy.data.materials.new(name)
@@ -560,7 +536,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             # Read the raw base-mesh vertices, not the evaluated mesh: a point
             # cloud imported with a GeoNodes display modifier would otherwise
             # yield the display geometry instead of the original points.
-            local, colors, _attr_name = _read_point_cloud(source, bool(scene.roadway_transfer_color))
+            local, colors, _attr_name = _read_point_cloud(source, True)
             if len(local) < 3:
                 self.report({'ERROR'}, "Source object has too few vertices for a surface.")
                 return {'CANCELLED'}
@@ -630,46 +606,42 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 color_layer = new_mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='POINT')
                 color_layer.data.foreach_set("color", result["colors"].astype(np.float32).ravel())
 
-                if bool(scene.roadway_bake_texture):
-                    blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
-                    # Always bake the texture from the full (unfiltered / dedicated)
-                    # colour cloud, restricted to the surface's XY extent so
-                    # far-away points cannot smear into the border texels.
-                    tex_points, tex_colors = points, colors
-                    if colors_full is not None:
-                        max_x = result["min_x"] + (result["nx"] - 1) * result["cell_size"]
-                        max_y = result["min_y"] + (result["ny"] - 1) * result["cell_size"]
-                        inside = (
-                            (points_full[:, 0] >= result["min_x"]) & (points_full[:, 0] <= max_x)
-                            & (points_full[:, 1] >= result["min_y"]) & (points_full[:, 1] <= max_y)
-                        )
-                        if inside.any():
-                            tex_points, tex_colors = points_full[inside], colors_full[inside]
-                    # Only points near the sampled ground colour the texture, so
-                    # vehicles/foliage above the road cannot tint it.
-                    tol = float(scene.roadway_color_height_tol)
-                    if tol > 0:
-                        near = mask_points_near_ground(
-                            tex_points, result["z_grid"], result["min_x"], result["min_y"],
-                            result["cell_size"], tol,
-                        )
-                        if near.any():
-                            tex_points, tex_colors = tex_points[near], tex_colors[near]
-                    baked_texture_path = _apply_baked_texture(
-                        source.name, new_mesh, tex_points, tex_colors, result,
-                        int(scene.roadway_texture_size),
-                        float(scene.roadway_fill_distance),
-                        blend_dir,
+                blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+                # Always bake the texture from the full (unfiltered / dedicated)
+                # colour cloud, restricted to the surface's XY extent so
+                # far-away points cannot smear into the border texels.
+                tex_points, tex_colors = points, colors
+                if colors_full is not None:
+                    max_x = result["min_x"] + (result["nx"] - 1) * result["cell_size"]
+                    max_y = result["min_y"] + (result["ny"] - 1) * result["cell_size"]
+                    inside = (
+                        (points_full[:, 0] >= result["min_x"]) & (points_full[:, 0] <= max_x)
+                        & (points_full[:, 1] >= result["min_y"]) & (points_full[:, 1] <= max_y)
                     )
-                    if baked_texture_path is None:
-                        self.report(
-                            {'WARNING'},
-                            "Texture baked into the .blend; save the .blend and re-create "
-                            "the surface to write the JPG for H3D export.",
-                        )
-                elif bool(scene.roadway_create_material):
-                    material = _build_color_attribute_material(f"Roadway Surface: {source.name}", "Col")
-                    new_mesh.materials.append(material)
+                    if inside.any():
+                        tex_points, tex_colors = points_full[inside], colors_full[inside]
+                # Only points near the sampled ground colour the texture, so
+                # vehicles/foliage above the road cannot tint it.
+                tol = float(scene.roadway_color_height_tol)
+                if tol > 0:
+                    near = mask_points_near_ground(
+                        tex_points, result["z_grid"], result["min_x"], result["min_y"],
+                        result["cell_size"], tol,
+                    )
+                    if near.any():
+                        tex_points, tex_colors = tex_points[near], tex_colors[near]
+                baked_texture_path = _apply_baked_texture(
+                    source.name, new_mesh, tex_points, tex_colors, result,
+                    int(scene.roadway_texture_size),
+                    float(scene.roadway_fill_distance),
+                    blend_dir,
+                )
+                if baked_texture_path is None:
+                    self.report(
+                        {'WARNING'},
+                        "Texture baked into the .blend; save the .blend and re-create "
+                        "the surface to write the JPG for H3D export.",
+                    )
 
             new_obj = bpy.data.objects.new(mesh_name, new_mesh)
             context.collection.objects.link(new_obj)

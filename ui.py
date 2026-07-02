@@ -1033,17 +1033,11 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         c.prop(scene, "roadway_fill_holes")
         if scene.roadway_fill_holes:
             c.prop(scene, "roadway_fill_distance")
-        c.prop(scene, "roadway_transfer_color")
-        if scene.roadway_transfer_color:
-            c.prop(scene, "roadway_color_height_tol")
-            c.prop(scene, "roadway_bake_texture")
-            if scene.roadway_bake_texture:
-                c.prop(scene, "roadway_texture_size")
-                c.prop(scene, "roadway_texture_source_object")
-                if not bpy.data.filepath:
-                    c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
-            else:
-                c.prop(scene, "roadway_create_material")
+        c.prop(scene, "roadway_color_height_tol")
+        c.prop(scene, "roadway_texture_size")
+        c.prop(scene, "roadway_texture_source_object")
+        if not bpy.data.filepath:
+            c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
 
         c.operator("object.create_roadway_surface", text="Create Roadway Surface", icon='SURFACE_NSURFACE')
         c.label(text="Result is classified as Environment", icon='WORLD')

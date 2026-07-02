@@ -368,21 +368,19 @@ Cloud**.)
 5. Leave **Fill Holes** on to interpolate empty cells so sparse spots don't leave
    gaps, and set **Max Fill Distance** (scene units) to bound how far the fill
    reaches; 0 = unlimited.
-6. Leave **Transfer Point Color** on to carry the cloud's per-point colour onto
-   the surface (averaged per cell). It's ignored if the cloud has no colour.
-   **Color Height Tolerance** (default 0.25) keeps the colour honest: only
-   points within that distance of the sampled ground height contribute colour,
-   so vehicles, foliage, and wires *above* the road cannot tint the surface or
-   texture (set 0 to use every point). With colour transfer on:
-   - **Bake Color to Texture** (default) bakes the colours to a JPG saved next to
-     your `.blend`, adds UVs, and builds an image-texture material. This is the
-     path that carries colour into HVE — it exports as a normal texture. Set
-     **Texture Resolution** (longest side, in pixels): the texture is sampled
-     **directly from the point cloud**, so it can be far sharper than the surface
-     grid — a dense cloud keeps its colour detail even on a coarse mesh. 0
-     matches the grid resolution. The texture always samples the full,
-     unfiltered cloud, so any Subsample/SOR filtering thins only the geometry,
-     never the texture.
+6. The cloud's per-point colour is always carried onto the surface and baked to
+   a texture (it's simply skipped if the cloud has no colour). **Color Height
+   Tolerance** (default 0.25) keeps the colour honest: only points within that
+   distance of the sampled ground height contribute colour, so vehicles,
+   foliage, and wires *above* the road cannot tint the surface or texture (set 0
+   to use every point). The colour is baked to a JPG saved next to your
+   `.blend`, with UVs and an image-texture material — this is the path that
+   carries colour into HVE, where it exports as a normal texture. Set **Texture
+   Resolution** (longest side, in pixels): the texture is sampled **directly
+   from the point cloud**, so it can be far sharper than the surface grid — a
+   dense cloud keeps its colour detail even on a coarse mesh. 0 matches the grid
+   resolution. The texture always samples the full, unfiltered cloud, so any
+   Subsample/SOR filtering thins only the geometry, never the texture.
    - **Texture Color Source** *(optional)* samples the texture's colour from a
      different object than the geometry. This is the fix for "I pre-filtered the
      cloud into a new object and now the texture lost detail": set **Point Cloud**
@@ -392,15 +390,12 @@ Cloud**.)
      the other). If the `.blend` isn't saved yet, the image is packed into the
      file — save the `.blend` and re-create the surface to write the JPG needed
      for H3D export.
-   - Turn baking off to instead build a simpler material driven directly by the
-     `Col` color attribute (shows in Blender's material/rendered view, but does
-     not carry into HVE).
 7. Click **Create Roadway Surface**.
 
 The tool lays a regular XY grid across the cloud's extent, samples the ground
 height per cell, builds the surface mesh, and classifies it as an **Environment**
-object so it flows into the H3D environment export (with the baked texture, if
-enabled). It shows a wait cursor and
+object so it flows into the H3D environment export (with the baked texture). It
+shows a wait cursor and
 progress while it runs, and the report line notes the grid size and how many
 cells were sampled — if it warns that no cells had enough points, increase the
 cell size.

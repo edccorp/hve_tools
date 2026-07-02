@@ -312,21 +312,6 @@ try:
             description="Interpolate empty grid cells from their neighbours so sparse spots do not leave gaps",
             default=True,
         )
-        bpy.types.Scene.roadway_transfer_color = bpy.props.BoolProperty(
-            name="Transfer Point Color",
-            description="Average the point cloud's per-point colour into each cell and store it on the surface as a color attribute",
-            default=True,
-        )
-        bpy.types.Scene.roadway_create_material = bpy.props.BoolProperty(
-            name="Create Material",
-            description="Create a material whose Base Color is driven by the transferred Col color attribute, and assign it to the surface",
-            default=True,
-        )
-        bpy.types.Scene.roadway_bake_texture = bpy.props.BoolProperty(
-            name="Bake Color to Texture",
-            description="Bake the per-cell colours to a JPG image (saved next to the .blend), add grid UVs, and build an image-texture material. Textures export to HVE more reliably than vertex colours",
-            default=True,
-        )
         bpy.types.Scene.roadway_texture_size = IntProperty(
             name="Texture Resolution",
             description="Longest side (pixels) of the baked texture, sampled directly from the point cloud so it can be sharper than the surface grid; 0 matches the grid resolution",
@@ -392,9 +377,6 @@ try:
         del bpy.types.Scene.roadway_fill_distance
         del bpy.types.Scene.roadway_ground_percentile
         del bpy.types.Scene.roadway_fill_holes
-        del bpy.types.Scene.roadway_transfer_color
-        del bpy.types.Scene.roadway_create_material
-        del bpy.types.Scene.roadway_bake_texture
         del bpy.types.Scene.roadway_texture_size
         del bpy.types.Object.edr_input_mode_preference
         del bpy.types.Object.motion_data_entries
