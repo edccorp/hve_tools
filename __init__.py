@@ -273,7 +273,7 @@ try:
         bpy.types.Scene.roadway_texture_full_cloud = bpy.props.BoolProperty(
             name="Texture From Full Cloud",
             description="Bake the texture from the original unfiltered point cloud (full colour detail) while the surface geometry still uses the filtered points",
-            default=False,
+            default=True,
         )
         bpy.types.Scene.roadway_color_height_tol = FloatProperty(
             name="Color Height Tolerance",

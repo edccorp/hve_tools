@@ -352,9 +352,10 @@ PLY Point Cloud**.)
    To keep a filtered cloud without surfacing, click **Apply Filters Only** —
    by default it creates a new, filtered point-cloud object (with colours and
    the point display) and leaves the original untouched; tick **Filter In
-   Place** to instead replace the selected cloud's points. Because the texture
-   is baked from the filtered points, filtering also affects the texture — see
-   **Texture From Full Cloud** below to opt out of that.
+   Place** to instead replace the selected cloud's points. By default the
+   texture keeps its full colour detail regardless of filtering (**Texture From
+   Full Cloud**, below); turn that off if you want the filters to affect the
+   texture too.
 3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
 4. Set **Ground Percentile** — how the height of each grid cell is chosen from
@@ -374,10 +375,10 @@ PLY Point Cloud**.)
      **Texture Resolution** (longest side, in pixels): the texture is sampled
      **directly from the point cloud**, so it can be far sharper than the surface
      grid — a dense cloud keeps its colour detail even on a coarse mesh. 0
-     matches the grid resolution. When pre-filters are enabled, the texture
-     normally bakes from the *filtered* points; enable **Texture From Full
-     Cloud** to bake it from the original unfiltered cloud (full colour detail)
-     while the geometry still uses the filtered points. If the `.blend` isn't
+     matches the grid resolution. When pre-filters are enabled, **Texture From
+     Full Cloud** (default) bakes the texture from the original unfiltered cloud
+     for full colour detail while the geometry uses the filtered points; turn it
+     off to bake from the filtered points instead. If the `.blend` isn't
      saved yet, the image is packed into the file — save the `.blend` and
      re-create the surface to write the JPG needed for H3D export.
    - Turn baking off to instead build a simpler material driven directly by the
