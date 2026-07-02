@@ -1,14 +1,21 @@
 import bpy
 import logging
+import subprocess
+import sys
 from bpy.types import Operator
 from bpy.props import StringProperty, FloatProperty
 from bpy_extras.io_utils import ImportHelper
 
-from .loaders import import_point_cloud
+from .loaders import import_point_cloud, missing_optional_deps, OPTIONAL_DEPS
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IMPORT_OT_ply_pointcloud_geonodes", "register", "unregister"]
+__all__ = [
+    "IMPORT_OT_ply_pointcloud_geonodes",
+    "IMPORT_OT_install_pointcloud_deps",
+    "register",
+    "unregister",
+]
 
 class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
     bl_idname = "import_scene.ply_pointcloud_geonodes"
@@ -51,11 +58,59 @@ class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
         return {'FINISHED'}
 
 
+class IMPORT_OT_install_pointcloud_deps(Operator):
+    bl_idname = "import_scene.install_pointcloud_deps"
+    bl_label = "Install E57 / LAZ Support"
+    bl_description = (
+        "Install the optional pye57 and laspy[lazrs] Python packages into "
+        "Blender's Python so E57 and compressed LAZ point clouds can be imported. "
+        "Requires an internet connection; Blender may need to be run as "
+        "administrator on Windows"
+    )
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        py = sys.executable
+        # Make sure pip is available in Blender's bundled Python.
+        try:
+            subprocess.run([py, "-m", "ensurepip"], check=False)
+        except Exception as exc:  # noqa: BLE001 - ensurepip is best-effort
+            logger.warning("ensurepip failed (continuing): %s", exc)
+
+        specs = [spec for _name, spec, _fmt in OPTIONAL_DEPS]
+        try:
+            subprocess.check_call([py, "-m", "pip", "install", "--upgrade"] + specs)
+        except Exception as exc:  # noqa: BLE001 - surface any pip failure to the user
+            self.report(
+                {'ERROR'},
+                f"Install failed: {exc}. Check your internet connection, or run "
+                f"Blender as administrator and try again, or install manually: "
+                f"pip install {' '.join(specs)}",
+            )
+            return {'CANCELLED'}
+
+        still_missing = missing_optional_deps()
+        if still_missing:
+            names = ", ".join(spec for _n, spec, _f in still_missing)
+            self.report(
+                {'WARNING'},
+                f"Installed, but still can't import: {names}. Restart Blender and "
+                "try the import again.",
+            )
+        else:
+            self.report(
+                {'INFO'},
+                "Installed E57 / LAZ support. Restart Blender if the import still "
+                "reports a missing package.",
+            )
+        return {'FINISHED'}
+
+
 def menu_func_import(self, context):
     self.layout.operator(IMPORT_OT_ply_pointcloud_geonodes.bl_idname, text="Point Cloud (PLY / PTX / E57 / LAS)")
 
 
-classes = (IMPORT_OT_ply_pointcloud_geonodes,)
+classes = (IMPORT_OT_ply_pointcloud_geonodes, IMPORT_OT_install_pointcloud_deps)
 
 
 def register():

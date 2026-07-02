@@ -24,10 +24,26 @@ __all__ = [
     "load_las_vertices",
     "load_point_cloud_vertices",
     "import_point_cloud",
+    "missing_optional_deps",
+    "OPTIONAL_DEPS",
     "SUPPORTED_EXTENSIONS",
 ]
 
 SUPPORTED_EXTENSIONS = (".ply", ".ptx", ".e57", ".las", ".laz")
+
+# Optional Python packages that unlock extra formats: (import name, pip spec,
+# what it enables). PLY, PTX and uncompressed LAS need none of these.
+OPTIONAL_DEPS = (
+    ("pye57", "pye57", "E57"),
+    ("laspy", "laspy[lazrs]", "compressed LAZ"),
+)
+
+
+def missing_optional_deps():
+    """Return the OPTIONAL_DEPS entries whose package isn't importable."""
+    import importlib.util
+
+    return [dep for dep in OPTIONAL_DEPS if importlib.util.find_spec(dep[0]) is None]
 
 
 def _read_floats(line):
@@ -111,9 +127,10 @@ def load_e57_vertices(filepath):
         import pye57
     except ImportError as exc:
         raise RuntimeError(
-            "E57 import needs the 'pye57' Python package, which is not "
-            "installed in Blender's Python. Install it (e.g. `pip install "
-            "pye57`) or convert the file to PLY/PTX first."
+            "E57 import needs the 'pye57' package, which is not installed in "
+            "Blender's Python. Click 'Install E57 / LAZ Support' in the Point "
+            "Cloud Tools panel (or run `pip install pye57`), or convert the "
+            "file to PLY/PTX first."
         ) from exc
 
     verts_parts = []
@@ -237,8 +254,9 @@ def load_las_vertices(filepath):
             except ImportError as exc:
                 raise RuntimeError(
                     "LAZ (compressed LAS) import needs the 'laspy' package with "
-                    "LAZ support (e.g. `pip install laspy[lazrs]`), or decompress "
-                    "the file to .las first."
+                    "LAZ support. Click 'Install E57 / LAZ Support' in the Point "
+                    "Cloud Tools panel (or run `pip install laspy[lazrs]`), or "
+                    "decompress the file to .las first."
                 ) from exc
 
         f.seek(offset_to_points)

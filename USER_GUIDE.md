@@ -340,9 +340,13 @@ clouds to keep the viewport responsive. (The importer is also available from
 
 A few formats need an extra Python package installed in Blender's Python:
 **E57** requires `pye57`, and compressed **LAZ** requires `laspy` with LAZ
-support (`pip install laspy[lazrs]`). Uncompressed `.las`, `.ply` and `.ptx`
-are read natively with no extra packages. If a package is missing, the importer
-reports exactly what to install; convert to PLY/PTX as a fallback.
+support. Uncompressed `.las`, `.ply` and `.ptx` are read natively with no extra
+packages. When either package is missing, an **Install E57 / LAZ Support**
+button appears under the import button — click it to install both into Blender's
+Python (needs an internet connection; on Windows you may need to run Blender as
+administrator), then restart Blender if prompted. The button disappears once the
+packages are present. You can also install them yourself with `pip install
+pye57 laspy[lazrs]`, or convert to PLY/PTX as a fallback.
 
 **Surface it:**
 

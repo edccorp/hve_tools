@@ -16,9 +16,9 @@ module_ast = ast.parse(module_path.read_text())
 
 WANTED_FUNCS = {
     "_read_floats", "_parse_ptx_block", "load_ptx_vertices",
-    "_normalize_rgb", "load_las_vertices",
+    "_normalize_rgb", "load_las_vertices", "missing_optional_deps",
 }
-WANTED_ASSIGN = {"_LAS_COLOR_OFFSET"}
+WANTED_ASSIGN = {"_LAS_COLOR_OFFSET", "OPTIONAL_DEPS"}
 
 ns = {"os": os, "struct": struct, "np": np}
 for node in module_ast.body:
@@ -31,6 +31,8 @@ for node in module_ast.body:
 
 load_ptx_vertices = ns["load_ptx_vertices"]
 load_las_vertices = ns["load_las_vertices"]
+missing_optional_deps = ns["missing_optional_deps"]
+OPTIONAL_DEPS = ns["OPTIONAL_DEPS"]
 
 
 def _write(tmp, name, data, binary=False):
@@ -154,3 +156,31 @@ def test_las_rejects_non_las():
         path = _write(tmp, "c.bin", b"NOPE" + bytes(400), binary=True)
         with pytest.raises(RuntimeError):
             load_las_vertices(path)
+
+
+# --- Optional dependency detection -------------------------------------------
+
+def test_optional_deps_shape():
+    # Each entry is (import_name, pip_spec, format_label); PLY/PTX/LAS need none.
+    names = {dep[0] for dep in OPTIONAL_DEPS}
+    assert names == {"pye57", "laspy"}
+    for import_name, pip_spec, fmt in OPTIONAL_DEPS:
+        assert isinstance(import_name, str) and import_name
+        assert isinstance(pip_spec, str) and pip_spec
+        assert isinstance(fmt, str) and fmt
+
+
+def test_missing_optional_deps_reports_absent_package():
+    # A guaranteed-absent import name must be reported as missing; a present one
+    # (the stdlib 'os') must not. Patch OPTIONAL_DEPS in the extracted namespace.
+    ns["OPTIONAL_DEPS"] = (
+        ("definitely_not_a_real_pkg_xyz", "definitely_not_a_real_pkg_xyz", "FOO"),
+        ("os", "os", "BAR"),
+    )
+    try:
+        missing = ns["missing_optional_deps"]()
+    finally:
+        ns["OPTIONAL_DEPS"] = OPTIONAL_DEPS
+    reported = {dep[0] for dep in missing}
+    assert "definitely_not_a_real_pkg_xyz" in reported
+    assert "os" not in reported

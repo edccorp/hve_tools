@@ -988,6 +988,17 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         # --- Import a point cloud ---
         c.label(text="Import a point cloud (PLY / PTX / E57 / LAS)", icon='IMPORT')
         c.operator("import_scene.ply_pointcloud_geonodes", text="Import Point Cloud", icon='IMPORT')
+        # Offer a one-click install for the optional E57 / LAZ packages, but only
+        # when they're actually missing (keeps the panel clean once installed).
+        try:
+            from .ply_pointcloud import missing_optional_deps
+            missing = missing_optional_deps()
+        except Exception:
+            missing = []
+        if missing:
+            fmts = ", ".join(fmt for _n, _s, fmt in missing)
+            c.label(text=f"{fmts} need an extra package", icon='INFO')
+            c.operator("import_scene.install_pointcloud_deps", text="Install E57 / LAZ Support", icon='PACKAGE')
         c.separator()
 
         # --- Build a ground surface ---
