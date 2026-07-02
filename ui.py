@@ -1168,7 +1168,9 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
         elif scene.roadway_recon_method == 'ALPHA':
             c.prop(scene, "roadway_recon_alpha")
         c.prop(scene, "roadway_recon_normals_k")
+        c.prop(scene, "roadway_texture_size")
         c.label(text="Subsample / SOR from Filter also run here", icon='INFO')
+        c.label(text="Colour texture is baked automatically on create", icon='TEXTURE')
 
         if pc_obj is None:
             c.label(text="Select a point cloud first", icon='ERROR')
@@ -1185,15 +1187,12 @@ class HVE_PT_surface_reconstruct(HVE_PT_mechanist_base):
             c.label(text="Open3D installs on first run (large; may need Blender restart)", icon='PACKAGE')
         c.label(text="For drivable ground, use Create Ground Surface instead", icon='INFO')
 
-        # Bake the reconstructed surface's colour to a texture (unwraps + bakes),
-        # so the colour exports to HVE. Shown when a coloured 3D surface is active.
+        # Rebake the texture at a new Texture Resolution without re-reconstructing.
         active = context.active_object
         if active is not None and active.get("surface_3d"):
             c.separator()
-            c.label(text="Texture bake", icon='TEXTURE')
-            c.prop(scene, "roadway_texture_size")
-            c.operator("object.bake_surface_texture", text="Bake Texture (Selected 3D Surface)", icon='TEXTURE')
-            c.label(text="Unwraps + bakes cloud colour to a JPG", icon='INFO')
+            c.operator("object.bake_surface_texture", text="Rebake Texture (Selected 3D Surface)", icon='TEXTURE')
+            c.label(text="Rebake to change resolution (samples the cloud)", icon='INFO')
 
 
 class HVE_PT_race_render_exporter(HVE_PT_mechanist_base):

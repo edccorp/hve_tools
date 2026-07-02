@@ -500,16 +500,18 @@ material driven by that attribute is assigned so the surface shows coloured in
 **Create Ground Surface** — a 3D reconstruction of the road is noisier and
 harder for HVE to use.
 
-**Bake Texture (Selected 3D Surface).** Vertex colour shows in Blender but does
-not export to HVE. To get an exportable texture, select the reconstructed surface
-and click **Bake Texture (Selected 3D Surface)**: it auto-unwraps the mesh (Smart
-UV Project), bakes the colours into a JPG at **Texture Resolution**, saves it next
-to the `.blend`, and assigns an image-texture material. The bake **samples the
-original point cloud directly** — each cloud point is placed at its position on
-the surface and its colour written to the matching texel — so, like the roadway
-texture, the detail comes from the *cloud*, not the mesh resolution: a dense cloud
-gives a sharp texture even on a coarse mesh. (It keeps a link to the source cloud
-for this; if that cloud has been deleted it falls back to baking the mesh's vertex
+**Texture (baked automatically).** So the colour exports to HVE, the reconstruct
+step **bakes a colour texture automatically** right after building the mesh
+(baking is quick next to reconstruction): it auto-unwraps the mesh (Smart UV
+Project), bakes a JPG at **Texture Resolution**, saves it next to the `.blend`,
+and assigns an image-texture material. The bake **samples the original point
+cloud directly** — each cloud point is placed at its position on the surface and
+its colour written to the matching texel — so, like the roadway texture, the
+detail comes from the *cloud*, not the mesh resolution: a dense cloud gives a
+sharp texture even on a coarse mesh. Set **Texture Resolution** before creating
+the surface, or change it afterwards and click **Rebake Texture (Selected 3D
+Surface)** to re-bake without re-reconstructing. (It keeps a link to the source
+cloud for this; if that cloud has been deleted it falls back to the mesh's vertex
 colours, which are limited by mesh resolution.)
 
 ---
