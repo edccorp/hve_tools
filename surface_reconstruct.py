@@ -488,9 +488,7 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
         if obj is None or obj.type != 'MESH':
             self.report({'ERROR'}, "Select a 3D surface mesh with colour to bake.")
             return {'CANCELLED'}
-        mesh = obj.data
-        ca = self._color_attr(mesh)
-        if ca is None:
+        if len(obj.data.color_attributes) == 0:
             self.report({'ERROR'}, "This mesh has no colour attribute to bake.")
             return {'CANCELLED'}
 
@@ -500,8 +498,12 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
         if window is not None:
             window.cursor_set('WAIT')
         try:
-            # Make sure the mesh has UVs (auto-unwrap if not).
-            if not mesh.uv_layers:
+            # Make sure the mesh has UVs (auto-unwrap if not). Do this BEFORE
+            # grabbing any mesh-data references: the Edit-mode round trip in
+            # Smart UV Project reallocates attribute storage, so a colour
+            # attribute fetched earlier would become a dangling pointer and crash
+            # Blender on foreach_get.
+            if not obj.data.uv_layers:
                 _log(f"Unwrapping '{obj.name}' (Smart UV Project)...")
                 prev_active = context.view_layer.objects.active
                 prev_selected = list(context.selected_objects)
@@ -518,8 +520,15 @@ class HVE_OT_BakeSurfaceTexture(bpy.types.Operator):
                 bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02)
                 bpy.ops.object.mode_set(mode='OBJECT')
                 context.view_layer.objects.active = prev_active or obj
+
+            # Re-fetch all mesh-data references now that unwrapping is done.
+            mesh = obj.data
             if not mesh.uv_layers:
                 self.report({'ERROR'}, "Couldn't create UVs for the mesh.")
+                return {'CANCELLED'}
+            ca = self._color_attr(mesh)
+            if ca is None:
+                self.report({'ERROR'}, "This mesh has no colour attribute to bake.")
                 return {'CANCELLED'}
 
             wm.progress_update(40)
