@@ -381,9 +381,16 @@ PLY Point Cloud**.)
      matches the grid resolution. When pre-filters are enabled, **Texture From
      Full Cloud** (default) bakes the texture from the original unfiltered cloud
      for full colour detail while the geometry uses the filtered points; turn it
-     off to bake from the filtered points instead. If the `.blend` isn't
-     saved yet, the image is packed into the file — save the `.blend` and
-     re-create the surface to write the JPG needed for H3D export.
+     off to bake from the filtered points instead.
+   - **Texture Color Source** *(optional)* samples the texture's colour from a
+     different object than the geometry. This is the fix for "I pre-filtered the
+     cloud into a new object and now the texture lost detail": set **Point Cloud**
+     to your filtered/decimated cloud (for a light mesh) and **Texture Color
+     Source** to the original full-resolution cloud (for a crisp texture). The
+     two must share the same coordinate space (they will if one was filtered from
+     the other). If the `.blend` isn't saved yet, the image is packed into the
+     file — save the `.blend` and re-create the surface to write the JPG needed
+     for H3D export.
    - Turn baking off to instead build a simpler material driven directly by the
      `Col` color attribute (shows in Blender's material/rendered view, but does
      not carry into HVE).

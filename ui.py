@@ -1003,6 +1003,7 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
                 c.prop(scene, "roadway_texture_size")
                 if scene.roadway_subsample or scene.roadway_sor:
                     c.prop(scene, "roadway_texture_full_cloud")
+                c.prop(scene, "roadway_texture_source_object")
                 if not bpy.data.filepath:
                     c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
             else:

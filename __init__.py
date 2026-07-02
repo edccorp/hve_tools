@@ -275,6 +275,12 @@ try:
             description="Bake the texture from the original unfiltered point cloud (full colour detail) while the surface geometry still uses the filtered points",
             default=True,
         )
+        bpy.types.Scene.roadway_texture_source_object = PointerProperty(
+            name="Texture Color Source",
+            description="Optional: sample the baked texture's colour from this object (e.g. the original full-resolution cloud) instead of the surface's point cloud. Use it when the geometry cloud is a filtered copy",
+            type=bpy.types.Object,
+            poll=_roadway_source_poll,
+        )
         bpy.types.Scene.roadway_color_height_tol = FloatProperty(
             name="Color Height Tolerance",
             description="Only points within this distance of the sampled ground height contribute colour to the surface and texture, so vehicles and foliage above the road cannot tint it; 0 = use all points",
@@ -386,6 +392,7 @@ try:
         del bpy.types.Scene.roadway_sor_ratio
         del bpy.types.Scene.roadway_filter_in_place
         del bpy.types.Scene.roadway_texture_full_cloud
+        del bpy.types.Scene.roadway_texture_source_object
         del bpy.types.Scene.roadway_color_height_tol
         del bpy.types.Scene.roadway_cell_size
         del bpy.types.Scene.roadway_fill_distance

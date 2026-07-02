@@ -575,6 +575,16 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             points_full = points
             colors_full = colors
 
+            # Optional dedicated colour source for the texture (e.g. the original
+            # full-resolution cloud when the geometry source is a filtered copy).
+            tex_src = getattr(scene, "roadway_texture_source_object", None)
+            if tex_src is not None and tex_src.type == 'MESH' and tex_src is not source:
+                t_local, t_colors, _t_attr = _read_point_cloud(tex_src, True)
+                if len(t_local) and t_colors is not None:
+                    t_matrix = np.array(tex_src.matrix_world, dtype=np.float64)
+                    points_full = t_local @ t_matrix[:3, :3].T + t_matrix[:3, 3]
+                    colors_full = t_colors
+
             # Optional pre-filters: voxel subsample, then statistical outlier
             # removal, before any surfacing.
             filtered_note = ""
@@ -623,9 +633,10 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 if bool(scene.roadway_bake_texture):
                     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
                     tex_points, tex_colors = points, colors
-                    if bool(scene.roadway_texture_full_cloud) and colors_full is not None:
-                        # Bake from the original unfiltered cloud, restricted to
-                        # the surface's XY extent so removed far-away outliers
+                    has_tex_src = tex_src is not None and tex_src.type == 'MESH' and tex_src is not source
+                    if (bool(scene.roadway_texture_full_cloud) or has_tex_src) and colors_full is not None:
+                        # Bake from the unfiltered / dedicated colour cloud,
+                        # restricted to the surface's XY extent so far-away points
                         # cannot smear into the border texels.
                         max_x = result["min_x"] + (result["nx"] - 1) * result["cell_size"]
                         max_y = result["min_y"] + (result["ny"] - 1) * result["cell_size"]
