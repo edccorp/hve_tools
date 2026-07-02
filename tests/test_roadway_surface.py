@@ -19,6 +19,7 @@ WANTED = {
     "cell_mean_grid",
     "_shift",
     "fill_holes_grid",
+    "despike_below_grade_grid",
     "build_mesh_arrays",
     "_color_grid",
     "generate_surface",
@@ -44,6 +45,7 @@ cell_percentile_grid = ns["cell_percentile_grid"]
 cell_mean_grid = ns["cell_mean_grid"]
 cell_indices = ns["cell_indices"]
 fill_holes_grid = ns["fill_holes_grid"]
+despike_below_grade_grid = ns["despike_below_grade_grid"]
 build_mesh_arrays = ns["build_mesh_arrays"]
 generate_surface = ns["generate_surface"]
 bake_point_color_texture = ns["bake_point_color_texture"]
@@ -394,3 +396,46 @@ def test_reconstruct_z_grid_without_valid_uses_all_verts():
     verts, _faces = build_mesh_arrays(0.0, 0.0, 1.0, z)
     grid = reconstruct_z_grid(verts, 0.0, 0.0, 1.0, 3, 2)
     assert np.allclose(grid, z)
+
+
+# --- Below-grade despike (stop a lone low return spiking the road) -----------
+
+def test_despike_blanks_below_grade_cell():
+    # Flat ground at z=0 with one cell dragged to -3 by a stray low point.
+    grid = np.zeros((3, 3))
+    grid[1, 1] = -3.0
+    out = despike_below_grade_grid(grid, tol=0.5)
+    assert np.isnan(out[1, 1])           # the spike is blanked for hole-filling
+    assert np.count_nonzero(np.isnan(out)) == 1  # only that cell
+
+
+def test_despike_keeps_genuinely_low_region():
+    # A large low block: an interior low cell has all-low neighbours, so it is
+    # kept (only an isolated dip is a spike, not a real low area).
+    grid = np.zeros((5, 5))
+    grid[:, 2:] = -2.0
+    out = despike_below_grade_grid(grid, tol=0.5)
+    assert not np.isnan(out[2, 3])   # deep inside the low block -> kept
+
+
+def test_despike_keeps_smooth_ramp():
+    # A monotonic ramp has no cell far below its neighbours' median, so nothing
+    # is flagged (real grade changes are preserved).
+    grid = np.tile(np.arange(5.0), (5, 1))  # ramp in x
+    out = despike_below_grade_grid(grid, tol=0.5)
+    assert not np.isnan(out).any()
+
+
+def test_despike_noop_when_tol_zero():
+    grid = np.zeros((3, 3))
+    grid[1, 1] = -5.0
+    out = despike_below_grade_grid(grid, tol=0.0)
+    assert out[1, 1] == -5.0
+
+
+def test_despike_respects_tolerance_band():
+    # A dip within the tolerance is left alone; only larger dips are blanked.
+    grid = np.zeros((3, 3))
+    grid[1, 1] = -0.3
+    assert despike_below_grade_grid(grid, tol=0.5)[1, 1] == -0.3
+    assert np.isnan(despike_below_grade_grid(grid, tol=0.1)[1, 1])

@@ -319,6 +319,14 @@ try:
             min=0.0,
             max=100.0,
         )
+        bpy.types.Scene.roadway_below_grade_tol = FloatProperty(
+            name="Below-Grade Reject",
+            description="Blank any cell that sits more than this far below its neighbours' median (a stray below-ground return) and fill it from the surrounding ground; 0 disables",
+            default=0.5,
+            min=0.0,
+            soft_max=10.0,
+            unit='LENGTH',
+        )
         bpy.types.Scene.roadway_fill_holes = bpy.props.BoolProperty(
             name="Fill Holes",
             description="Interpolate empty grid cells from their neighbours so sparse spots do not leave gaps",
@@ -434,6 +442,7 @@ try:
         del bpy.types.Scene.roadway_cell_size
         del bpy.types.Scene.roadway_fill_distance
         del bpy.types.Scene.roadway_ground_percentile
+        del bpy.types.Scene.roadway_below_grade_tol
         del bpy.types.Scene.roadway_fill_holes
         del bpy.types.Scene.roadway_texture_size
         del bpy.types.Scene.roadway_recon_method

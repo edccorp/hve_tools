@@ -127,6 +127,38 @@ def fill_holes_grid(grid, max_passes):
     return filled
 
 
+def despike_below_grade_grid(grid, tol):
+    """Blank cells that sit more than ``tol`` below *every* neighbour (a pit).
+
+    A single below-grade return (sensor noise, multipath, scan misregistration)
+    can drag one grid cell far below the true surface, leaving a downward spike
+    the low percentile latches onto. Such a stray cell is an isolated pit — lower
+    than all eight of its neighbours. This blanks any cell more than ``tol`` below
+    its lowest neighbour (setting it to NaN so hole-filling replaces it from the
+    surrounding ground). Because it compares against the *minimum* neighbour, real
+    grade — ramps, curbs, embankments, a whole low region — is preserved (those
+    always have a neighbour at a similar level). ``tol`` <= 0 is a no-op. Returns
+    a new grid.
+    """
+    g = np.asarray(grid, dtype=np.float64)
+    if tol is None or tol <= 0:
+        return g
+    neigh = np.stack(
+        [
+            _shift(g, 1, 0), _shift(g, -1, 0), _shift(g, 0, 1), _shift(g, 0, -1),
+            _shift(g, 1, 1), _shift(g, 1, -1), _shift(g, -1, 1), _shift(g, -1, -1),
+        ],
+        axis=0,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        ref = np.nanmin(neigh, axis=0)  # lowest neighbour
+    spike = (~np.isnan(g)) & (~np.isnan(ref)) & (g < ref - float(tol))
+    out = g.copy()
+    out[spike] = np.nan
+    return out
+
+
 def build_mesh_arrays(min_x, min_y, cell_size, z_grid):
     """Turn a height grid into ``(verts, faces)`` numpy arrays.
 
@@ -351,14 +383,16 @@ def reconstruct_z_grid(verts_xyz, min_x, min_y, cell_size, nx, ny, valid=None):
 
 
 def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_holes=True, colors=None,
-                     color_height_tol=0.0):
+                     color_height_tol=0.0, below_grade_tol=0.0):
     """End-to-end: point cloud -> ``dict`` with verts, faces, grid size, counts.
 
     When ``colors`` (an (N, C) array of per-point colour) is given, the result
     also includes a per-vertex ``colors`` array aligned with ``verts``. When
     ``color_height_tol`` > 0, only points within that height of the sampled
-    ground contribute colour (overhead objects are excluded). Returns None when
-    fewer than three points are supplied.
+    ground contribute colour (overhead objects are excluded). When
+    ``below_grade_tol`` > 0, cells that dip more than that below their
+    neighbourhood are treated as below-grade spikes and filled from neighbours.
+    Returns None when fewer than three points are supplied.
     """
     pts = np.asarray(points, dtype=np.float64)
     if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 3:
@@ -366,6 +400,10 @@ def generate_surface(points, cell_size, fill_distance, ground_percentile, fill_h
 
     min_x, min_y, nx, ny = build_grid_spec(pts, cell_size)
     grid = cell_percentile_grid(pts, min_x, min_y, nx, ny, cell_size, ground_percentile)
+    # Reject below-grade spikes (a lone low return dragging one cell down) before
+    # counting samples or filling, so they get interpolated from the real ground.
+    if below_grade_tol and below_grade_tol > 0:
+        grid = despike_below_grade_grid(grid, below_grade_tol)
     sampled = int(np.count_nonzero(~np.isnan(grid)))
 
     if fill_holes:
@@ -814,6 +852,7 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             result = generate_surface(
                 points, cell_size, fill_distance, ground_percentile, fill_holes, colors=colors,
                 color_height_tol=float(scene.roadway_color_height_tol),
+                below_grade_tol=float(getattr(scene, "roadway_below_grade_tol", 0.0)),
             )
             if result is None or len(result["faces"]) == 0:
                 self.report(

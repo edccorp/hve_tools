@@ -452,6 +452,16 @@ the cell has enough points. Denser clouds reject outliers
 better, since a percentile only skips outliers when there are several points per
 cell.
 
+**Below-Grade Reject.** The low percentile grabs the ground, but in a sparse cell
+a single stray return *below* the true grade (sensor noise, multipath, or two
+scans slightly misregistered) can drag that one cell into a downward spike. The
+**Below-Grade Reject** distance (default 0.5, in scene units) is a safety net:
+any cell that sits more than that far below **all** of its neighbours is treated
+as a below-grade pit — it's blanked and re-filled from the surrounding ground.
+Because it only blanks cells lower than *every* neighbour, real grade — ramps,
+curbs, embankments, whole low areas — is preserved. Set it to `0` to disable, or
+raise it if a deliberately deep feature is being flattened.
+
 > This is a first version that uses the cloud's rectangular (bounding-box)
 > extent. Cells with no points become holes (or are filled from neighbours);
 > very isolated cells may leave a flat spot at Z 0.

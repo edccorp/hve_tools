@@ -1055,6 +1055,7 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
 
         c.prop(scene, "roadway_cell_size")
         c.prop(scene, "roadway_ground_percentile")
+        c.prop(scene, "roadway_below_grade_tol")
         c.prop(scene, "roadway_fill_holes")
         if scene.roadway_fill_holes:
             c.prop(scene, "roadway_fill_distance")
