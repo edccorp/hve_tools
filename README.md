@@ -234,7 +234,7 @@ The importer creates point markers, labels, descriptions, and a polyline in the 
 ### 11. Point Cloud Tools (import, filter, surface)
 
 1. Open **Other Tools → Point Cloud Tools** and click **Import PLY Point Cloud** to load a `.ply` (or use an existing mesh point cloud). Select it, or set it as the **Point Cloud**.
-2. *(Optional)* Under **Pre-filter**, enable **Subsample (Voxel)** and/or **Remove Outliers (SOR)** to clean the cloud before surfacing.
+2. *(Optional)* Under **Pre-filter**, enable **Subsample (Voxel)** and/or **Remove Outliers (SOR)** to clean the cloud before surfacing. Filters run per-click and never modify the source; **Apply Filters Only** saves a filtered copy (or replaces the points with **Filter In Place**) without surfacing, and **Texture From Full Cloud** lets the texture keep the unfiltered colour detail.
 3. Set the **Resolution (Cell Size)** (in scene units) and **Ground Percentile** (low = "from below"; rejects overhead noise), leave **Fill Holes** on (with a **Max Fill Distance**) for sparse clouds, and leave **Transfer Point Color** on. With **Bake Color to Texture** (default), save the `.blend` first so the JPG texture can be written next to it.
 4. Click **Create Roadway Surface**. The draped surface mesh is created and classified as an **Environment** object for H3D environment export; with baking on it carries a texture that exports to HVE.
 

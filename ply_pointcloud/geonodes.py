@@ -38,8 +38,13 @@ def _set_group_radius_default_4x(ng, radius: float) -> None:
             pass
 
 
-def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None):
-    """Create a Geometry Nodes group for displaying point clouds (3.6 & 4.x safe)."""
+def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None, subsample_percent=100.0):
+    """Create a Geometry Nodes group for displaying point clouds (3.6 & 4.x safe).
+
+    ``subsample_percent`` sets the default of the display-only "Subsample
+    Percent" input: the percentage of points shown in the viewport. It never
+    removes points from the mesh data.
+    """
     ng = bpy.data.node_groups.new(name, 'GeometryNodeTree')
     is_4 = bpy.app.version >= (4, 0, 0)
 
@@ -70,9 +75,9 @@ def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None):
             pass
         try:
             if hasattr(subsample_in, "default_value"):
-                subsample_in.default_value = 30.0
+                subsample_in.default_value = subsample_percent
             elif hasattr(subsample_in, "socket") and hasattr(subsample_in.socket, "default_value"):
-                subsample_in.socket.default_value = 30.0
+                subsample_in.socket.default_value = subsample_percent
         except Exception:
             pass
 
@@ -87,7 +92,7 @@ def make_geonodes_group(name="PCD_View_Geo", radius=0.01, material=None):
         gi_rad = ng.inputs.new('NodeSocketFloat', 'Point Radius')
         gi_subsample = ng.inputs.new('NodeSocketFloat', 'Subsample Percent')
         gi_rad.default_value = radius
-        gi_subsample.default_value = 30.0
+        gi_subsample.default_value = subsample_percent
         go_geo = ng.outputs.new('NodeSocketGeometry', 'Geometry')
 
     # --- Nodes ---

@@ -326,8 +326,12 @@ geometry in vehicle simulations.
 
 **Import.** Click **Import PLY Point Cloud** to load a `.ply` (ASCII or binary).
 It comes in as a mesh of vertices with a `Col` colour attribute and a Geometry
-Nodes display so you can see the points. (The importer is also available from
-**File → Import → PLY Point Cloud**.)
+Nodes display so you can see the points. The import dialog's **Display
+Subsample %** (default 100) sets what fraction of points the *viewport display*
+shows — it is display-only and never removes points from the data, so it has no
+effect on surfacing or textures; lower it for very dense clouds to keep the
+viewport responsive. (The importer is also available from **File → Import →
+PLY Point Cloud**.)
 
 **Surface it:**
 
@@ -342,6 +346,15 @@ Nodes display so you can see the points. (The importer is also available from
      neighbours are averaged; **SOR Std Ratio** sets how aggressive it is (lower
      removes more). SOR does a neighbour search per point, so subsample first on
      large clouds.
+
+   The filters are **not persistent**: they run on an in-memory copy each time
+   you click **Create Roadway Surface**, and the source cloud is never modified.
+   To keep a filtered cloud without surfacing, click **Apply Filters Only** —
+   by default it creates a new, filtered point-cloud object (with colours and
+   the point display) and leaves the original untouched; tick **Filter In
+   Place** to instead replace the selected cloud's points. Because the texture
+   is baked from the filtered points, filtering also affects the texture — see
+   **Texture From Full Cloud** below to opt out of that.
 3. Set **Resolution (Cell Size)** — the grid spacing, in the scene's units
    (metres or feet, matching your unit setup). Smaller is finer and slower.
 4. Set **Ground Percentile** — how the height of each grid cell is chosen from
@@ -358,8 +371,12 @@ Nodes display so you can see the points. (The importer is also available from
      **Texture Resolution** (longest side, in pixels): the texture is sampled
      **directly from the point cloud**, so it can be far sharper than the surface
      grid — a dense cloud keeps its colour detail even on a coarse mesh. 0
-     matches the grid resolution. *You must save the `.blend` first* so the JPG
-     has somewhere to go.
+     matches the grid resolution. When pre-filters are enabled, the texture
+     normally bakes from the *filtered* points; enable **Texture From Full
+     Cloud** to bake it from the original unfiltered cloud (full colour detail)
+     while the geometry still uses the filtered points. If the `.blend` isn't
+     saved yet, the image is packed into the file — save the `.blend` and
+     re-create the surface to write the JPG needed for H3D export.
    - Turn baking off to instead build a simpler material driven directly by the
      `Col` color attribute (shows in Blender's material/rendered view, but does
      not carry into HVE).

@@ -265,6 +265,16 @@ try:
             min=0.0,
             soft_max=10.0,
         )
+        bpy.types.Scene.roadway_filter_in_place = bpy.props.BoolProperty(
+            name="Filter In Place",
+            description="Apply Filters Only replaces the selected cloud's points instead of creating a new filtered copy",
+            default=False,
+        )
+        bpy.types.Scene.roadway_texture_full_cloud = bpy.props.BoolProperty(
+            name="Texture From Full Cloud",
+            description="Bake the texture from the original unfiltered point cloud (full colour detail) while the surface geometry still uses the filtered points",
+            default=False,
+        )
         bpy.types.Scene.roadway_cell_size = FloatProperty(
             name="Resolution (Cell Size)",
             description="Spacing of the generated surface grid, in the scene's units; smaller is finer and slower",
@@ -366,6 +376,8 @@ try:
         del bpy.types.Scene.roadway_sor
         del bpy.types.Scene.roadway_sor_neighbors
         del bpy.types.Scene.roadway_sor_ratio
+        del bpy.types.Scene.roadway_filter_in_place
+        del bpy.types.Scene.roadway_texture_full_cloud
         del bpy.types.Scene.roadway_cell_size
         del bpy.types.Scene.roadway_fill_distance
         del bpy.types.Scene.roadway_ground_percentile

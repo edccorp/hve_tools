@@ -145,7 +145,8 @@ def load_ply_vertices(filepath):
         )
 
 
-def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribute="Col"):
+def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribute="Col",
+               display_subsample=100.0):
     """Import a PLY point cloud and optionally set up Geometry Nodes.
 
     Args:
@@ -157,6 +158,8 @@ def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribut
             enabled. Defaults to ``0.01``.
         color_attribute: Name of the vertex color attribute used by the
             material when ``setup_geonodes`` is enabled. Defaults to ``"Col"``.
+        display_subsample: Percentage of points shown by the viewport display
+            (display only; every point stays in the mesh data). Default 100.
 
     Returns:
         The newly created ``bpy.types.Object``.
@@ -193,7 +196,7 @@ def import_ply(filepath, setup_geonodes=False, point_radius=0.01, color_attribut
 
         mat_name = f"PointCloud_Color_{color_attribute}"
         mat = bpy.data.materials.get(mat_name) or make_point_material(mat_name, color_attribute)
-        ng = make_geonodes_group("PCD_View_Geo", point_radius, mat)
+        ng = make_geonodes_group("PCD_View_Geo", point_radius, mat, display_subsample)
         assign_geonodes_modifier(obj, ng, point_radius)
         if mat.name not in [m.name for m in obj.data.materials]:
             obj.data.materials.append(mat)

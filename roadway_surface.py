@@ -465,6 +465,48 @@ def _find_point_color_attribute(mesh):
     return None
 
 
+def _read_point_cloud(source, want_colors):
+    """Bulk-read a mesh object's raw vertices (local space) and point colours.
+
+    Returns ``(local_points, colors, color_attr_name)``; ``colors`` is None when
+    the mesh has no usable POINT-domain colour attribute.
+    """
+    mesh = source.data
+    count = len(mesh.vertices)
+    local = np.empty(count * 3, dtype=np.float64)
+    mesh.vertices.foreach_get("co", local)
+    local = local.reshape(count, 3)
+
+    colors = None
+    attr_name = "Col"
+    if want_colors:
+        color_attr = _find_point_color_attribute(mesh)
+        if color_attr is not None and len(color_attr.data) == count:
+            attr_name = color_attr.name
+            raw = np.empty(count * 4, dtype=np.float64)
+            color_attr.data.foreach_get("color", raw)
+            colors = raw.reshape(count, 4)
+    return local, colors, attr_name
+
+
+def _run_prefilters(scene, points, colors):
+    """Apply the enabled pre-filters (voxel subsample, then SOR).
+
+    Returns ``(points, colors, count_before)``. The inputs are never modified;
+    filtering produces new arrays.
+    """
+    n_before = len(points)
+    if bool(scene.roadway_subsample) and float(scene.roadway_voxel_size) > 0:
+        points, colors = voxel_downsample(points, colors, float(scene.roadway_voxel_size))
+    if bool(scene.roadway_sor) and len(points) > int(scene.roadway_sor_neighbors) + 1:
+        means = _sor_neighbor_mean_distances(points, int(scene.roadway_sor_neighbors))
+        keep = statistical_outlier_mask(means, float(scene.roadway_sor_ratio))
+        points = points[keep]
+        if colors is not None:
+            colors = colors[keep]
+    return points, colors, n_before
+
+
 class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
     """Build a draped ground surface from a selected point-cloud object (e.g. a PLY)"""
     bl_idname = "object.create_roadway_surface"
@@ -490,23 +532,10 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             # Read the raw base-mesh vertices, not the evaluated mesh: a point
             # cloud imported with a GeoNodes display modifier would otherwise
             # yield the display geometry instead of the original points.
-            mesh = source.data
-            count = len(mesh.vertices)
-            if count < 3:
+            local, colors, _attr_name = _read_point_cloud(source, bool(scene.roadway_transfer_color))
+            if len(local) < 3:
                 self.report({'ERROR'}, "Source object has too few vertices for a surface.")
                 return {'CANCELLED'}
-            # Bulk-read coordinates (fast even for millions of vertices).
-            local = np.empty(count * 3, dtype=np.float64)
-            mesh.vertices.foreach_get("co", local)
-            local = local.reshape(count, 3)
-
-            colors = None
-            if bool(scene.roadway_transfer_color):
-                color_attr = _find_point_color_attribute(mesh)
-                if color_attr is not None and len(color_attr.data) == count:
-                    raw = np.empty(count * 4, dtype=np.float64)
-                    color_attr.data.foreach_get("color", raw)
-                    colors = raw.reshape(count, 4)
 
             wm.progress_update(20)
 
@@ -514,18 +543,14 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
             matrix = np.array(source.matrix_world, dtype=np.float64)
             points = local @ matrix[:3, :3].T + matrix[:3, 3]
 
+            # Keep the unfiltered cloud so the texture can optionally sample it.
+            points_full = points
+            colors_full = colors
+
             # Optional pre-filters: voxel subsample, then statistical outlier
             # removal, before any surfacing.
             filtered_note = ""
-            n_before = len(points)
-            if bool(scene.roadway_subsample) and float(scene.roadway_voxel_size) > 0:
-                points, colors = voxel_downsample(points, colors, float(scene.roadway_voxel_size))
-            if bool(scene.roadway_sor) and len(points) > int(scene.roadway_sor_neighbors) + 1:
-                means = _sor_neighbor_mean_distances(points, int(scene.roadway_sor_neighbors))
-                keep = statistical_outlier_mask(means, float(scene.roadway_sor_ratio))
-                points = points[keep]
-                if colors is not None:
-                    colors = colors[keep]
+            points, colors, n_before = _run_prefilters(scene, points, colors)
             if len(points) != n_before:
                 filtered_note = f" Filtered {n_before}->{len(points)} points."
             if len(points) < 3:
@@ -568,8 +593,21 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
 
                 if bool(scene.roadway_bake_texture):
                     blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+                    tex_points, tex_colors = points, colors
+                    if bool(scene.roadway_texture_full_cloud) and colors_full is not None:
+                        # Bake from the original unfiltered cloud, restricted to
+                        # the surface's XY extent so removed far-away outliers
+                        # cannot smear into the border texels.
+                        max_x = result["min_x"] + (result["nx"] - 1) * result["cell_size"]
+                        max_y = result["min_y"] + (result["ny"] - 1) * result["cell_size"]
+                        inside = (
+                            (points_full[:, 0] >= result["min_x"]) & (points_full[:, 0] <= max_x)
+                            & (points_full[:, 1] >= result["min_y"]) & (points_full[:, 1] <= max_y)
+                        )
+                        if inside.any():
+                            tex_points, tex_colors = points_full[inside], colors_full[inside]
                     baked_texture_path = _apply_baked_texture(
-                        source.name, new_mesh, points, colors, result,
+                        source.name, new_mesh, tex_points, tex_colors, result,
                         int(scene.roadway_texture_size),
                         float(scene.roadway_fill_distance),
                         blend_dir,
@@ -615,6 +653,115 @@ class HVE_OT_CreateRoadwaySurface(bpy.types.Operator):
                 window.cursor_set('DEFAULT')
 
 
+class HVE_OT_FilterPointCloud(bpy.types.Operator):
+    """Apply the Subsample / SOR pre-filters to the point cloud without building a surface"""
+    bl_idname = "object.filter_point_cloud"
+    bl_label = "Filter Point Cloud"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scene = context.scene
+        source = getattr(scene, "roadway_source_object", None) or context.object
+
+        if source is None or source.type != 'MESH':
+            self.report({'ERROR'}, "Select a mesh point-cloud object (e.g. an imported PLY).")
+            return {'CANCELLED'}
+        if not (bool(scene.roadway_subsample) or bool(scene.roadway_sor)):
+            self.report({'WARNING'}, "Enable Subsample and/or Remove Outliers first.")
+            return {'CANCELLED'}
+
+        wm = context.window_manager
+        window = context.window
+        wm.progress_begin(0, 100)
+        if window is not None:
+            window.cursor_set('WAIT')
+
+        try:
+            local, colors, attr_name = _read_point_cloud(source, True)
+            if len(local) < 1:
+                self.report({'ERROR'}, "Source object has no vertices.")
+                return {'CANCELLED'}
+
+            wm.progress_update(15)
+            matrix = np.array(source.matrix_world, dtype=np.float64)
+            points = local @ matrix[:3, :3].T + matrix[:3, 3]
+
+            points, colors, n_before = _run_prefilters(scene, points, colors)
+            if len(points) < 1:
+                self.report({'WARNING'}, "Pre-filter removed every point; relax the filters.")
+                return {'CANCELLED'}
+
+            wm.progress_update(70)
+            verts32 = np.ascontiguousarray
+
+            if bool(scene.roadway_filter_in_place):
+                # Write the filtered points back into the same object, converting
+                # from world space through the object's inverse transform so the
+                # cloud stays visually in place.
+                inv = np.linalg.inv(matrix)
+                local_new = points @ inv[:3, :3].T + inv[:3, 3]
+                mesh = source.data
+                mesh.clear_geometry()
+                mesh.vertices.add(len(local_new))
+                mesh.vertices.foreach_set("co", verts32(local_new, dtype=np.float32).ravel())
+                mesh.update()
+                if colors is not None:
+                    layer = mesh.color_attributes.new(name=attr_name, type='FLOAT_COLOR', domain='POINT')
+                    layer.data.foreach_set("color", colors.astype(np.float32).ravel())
+                target = source
+            else:
+                # Build a new point-cloud object from the filtered result,
+                # leaving the original untouched.
+                mesh = bpy.data.meshes.new(f"{source.name} Filtered")
+                mesh.vertices.add(len(points))
+                mesh.vertices.foreach_set("co", verts32(points, dtype=np.float32).ravel())
+                mesh.update()
+                if colors is not None:
+                    layer = mesh.color_attributes.new(name=attr_name, type='FLOAT_COLOR', domain='POINT')
+                    layer.data.foreach_set("color", colors.astype(np.float32).ravel())
+
+                target = bpy.data.objects.new(mesh.name, mesh)
+                context.collection.objects.link(target)
+
+                # Give the copy the same GeoNodes point display as the importer.
+                try:
+                    from .ply_pointcloud.materials import make_point_material
+                    from .ply_pointcloud.geonodes import make_geonodes_group, assign_geonodes_modifier
+
+                    mat = None
+                    if colors is not None:
+                        mat_name = f"PointCloud_Color_{attr_name}"
+                        mat = bpy.data.materials.get(mat_name) or make_point_material(mat_name, attr_name)
+                    ng = make_geonodes_group("PCD_View_Geo", 0.01, mat)
+                    assign_geonodes_modifier(target, ng, 0.01)
+                    if mat is not None and mat.name not in [m.name for m in mesh.materials]:
+                        mesh.materials.append(mat)
+                except Exception as exc:  # noqa: BLE001 - display setup is best-effort
+                    print(f"Point display setup skipped: {exc}")
+
+                for obj in list(context.selected_objects):
+                    obj.select_set(False)
+                target.select_set(True)
+                context.view_layer.objects.active = target
+
+                # If the panel pointed at the original explicitly, follow the copy
+                # so Create Roadway Surface uses the filtered cloud.
+                if getattr(scene, "roadway_source_object", None) == source:
+                    scene.roadway_source_object = target
+
+            wm.progress_update(100)
+            self.report(
+                {'INFO'},
+                f"Filtered point cloud: {n_before} -> {len(points)} points ('{target.name}').",
+            )
+            return {'FINISHED'}
+        finally:
+            wm.progress_end()
+            if window is not None:
+                window.cursor_set('DEFAULT')
+
+
 classes = [
     HVE_OT_CreateRoadwaySurface,
+    HVE_OT_FilterPointCloud,
 ]

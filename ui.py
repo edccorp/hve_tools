@@ -985,6 +985,10 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
         if scene.roadway_sor:
             filt.prop(scene, "roadway_sor_neighbors")
             filt.prop(scene, "roadway_sor_ratio")
+        if scene.roadway_subsample or scene.roadway_sor:
+            filt.prop(scene, "roadway_filter_in_place")
+            filt.operator("object.filter_point_cloud", text="Apply Filters Only", icon='CHECKMARK')
+            filt.label(text="Filters also run when creating the surface", icon='INFO')
 
         c.prop(scene, "roadway_cell_size")
         c.prop(scene, "roadway_ground_percentile")
@@ -996,8 +1000,10 @@ class HVE_PT_point_cloud_tools(HVE_PT_mechanist_base):
             c.prop(scene, "roadway_bake_texture")
             if scene.roadway_bake_texture:
                 c.prop(scene, "roadway_texture_size")
+                if scene.roadway_subsample or scene.roadway_sor:
+                    c.prop(scene, "roadway_texture_full_cloud")
                 if not bpy.data.filepath:
-                    c.label(text="Save the .blend to bake the texture", icon='ERROR')
+                    c.label(text="Save the .blend to write the texture JPG", icon='ERROR')
             else:
                 c.prop(scene, "roadway_create_material")
 

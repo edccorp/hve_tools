@@ -19,6 +19,11 @@ class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
     filter_glob: StringProperty(default="*.ply", options={'HIDDEN'})
     point_radius: FloatProperty(name="Point Radius", default=0.1, min=0.000001, soft_max=0.1)
     color_attribute: StringProperty(name="Color Attribute", default="Col")
+    display_subsample: FloatProperty(
+        name="Display Subsample %",
+        description="Percentage of points shown by the viewport display; display only, all points are kept in the data",
+        default=100.0, min=0.0, max=100.0, subtype='PERCENTAGE',
+    )
 
     def execute(self, context):
         obj = import_ply(
@@ -26,6 +31,7 @@ class IMPORT_OT_ply_pointcloud_geonodes(Operator, ImportHelper):
             setup_geonodes=True,
             point_radius=self.point_radius,
             color_attribute=self.color_attribute,
+            display_subsample=self.display_subsample,
         )
         try:
             for area in context.screen.areas:
